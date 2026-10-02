@@ -323,9 +323,10 @@ void TeslaBLEVehicle::run_infotainment_sequence_step_() {
         if (!infotainment_sequence_active_) return;
 
         if (!result.is_success()) {
+          const TeslaBLE::CommandError *error = result.error();
           ESP_LOGW(TAG, "Background %u failed: %s",
                    static_cast<unsigned>(step + 1),
-                   result.error().has_value() ? result.error()->message().c_str() : "unknown error");
+                   error != nullptr ? error->message().c_str() : "unknown error");
         }
 
         infotainment_sequence_step_ = static_cast<uint8_t>(step + 1);
