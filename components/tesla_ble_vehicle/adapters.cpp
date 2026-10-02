@@ -10,6 +10,8 @@ namespace tesla_ble_vehicle {
 
 static const char *ADAPTER_TAG = "tesla_ble_adapters";
 
+BleAdapterImpl *BleAdapterImpl::global_write_owner_ = nullptr;
+
 // --- BleAdapterImpl ---
 
 BleAdapterImpl::BleAdapterImpl(TeslaBLEVehicle* parent) : parent_(parent) {}
@@ -44,6 +46,7 @@ void BleAdapterImpl::process_write_queue() {
     if (write_queue_.empty()) return;
     if (!parent_->is_connected()) return;
     if (write_in_flight_) return;
+    if (global_write_owner_ != nullptr && global_write_owner_ != this) return;
 
     // Back off a failing chunk instead of retrying every loop() iteration,
     // and drop it after repeated failures so it cannot block newer traffic.
@@ -83,6 +86,7 @@ void BleAdapterImpl::process_write_queue() {
         // The call only queues the write in ESP-IDF. Do not discard this
         // fragment until ESP_GATTC_WRITE_CHAR_EVT confirms completion.
         write_in_flight_ = true;
+        global_write_owner_ = this;
     } else {
         write_retry_policy_.on_failure(millis());
         ESP_LOGW(ADAPTER_TAG, "BLE write submit failed: %s", esp_err_to_name(err));
@@ -92,6 +96,7 @@ void BleAdapterImpl::process_write_queue() {
 void BleAdapterImpl::on_write_complete(esp_gatt_status_t status) {
     if (!write_in_flight_) return;
     write_in_flight_ = false;
+    if (global_write_owner_ == this) global_write_owner_ = nullptr;
 
     if (status == ESP_GATT_OK) {
         if (!write_queue_.empty()) write_queue_.pop();
@@ -110,6 +115,7 @@ void BleAdapterImpl::clear_queues() {
     std::queue<BLETXChunk> empty;
     write_queue_.swap(empty);
     write_in_flight_ = false;
+    if (global_write_owner_ == this) global_write_owner_ = nullptr;
     write_retry_policy_.reset();
 }
 
