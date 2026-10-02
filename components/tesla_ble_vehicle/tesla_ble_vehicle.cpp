@@ -259,7 +259,7 @@ void TeslaBLEVehicle::update() {
              decision.wake_policy == WakePolicy::NO_WAKE_SKIP
                  ? "sleeping - NO_WAKE_SKIP"
                  : "active - WAKE_IF_NEEDED");
-    start_infotainment_sequence_(policy);
+    enqueue_poll_batch_(policy);
     poll_policy_.on_poll(now);
   }
 }
@@ -315,105 +315,54 @@ void TeslaBLEVehicle::cancel_queued_infotainment_work_() {
   }
 }
 
-void TeslaBLEVehicle::start_infotainment_sequence_(TeslaBLE::WakePolicy policy, uint32_t delay_ms) {
-  if (!vehicle_ || !vehicle_->is_connected()) return;
-  if (infotainment_sequence_active_) {
-    ESP_LOGD(TAG, "Infotainment poll sequence already active - skipping duplicate request");
-    return;
-  }
-
-  infotainment_sequence_active_ = true;
-  infotainment_sequence_step_ = 0;
-  infotainment_sequence_policy_ = policy;
-
-  this->set_timeout("infotainment-sequence", delay_ms, [this]() {
-    run_infotainment_sequence_step_();
-  });
-}
-
-void TeslaBLEVehicle::finish_infotainment_sequence_() {
-  infotainment_sequence_active_ = false;
-  infotainment_sequence_step_ = 0;
-}
-
-void TeslaBLEVehicle::run_infotainment_sequence_step_() {
-  if (!infotainment_sequence_active_ || !vehicle_ || !vehicle_->is_connected()) {
-    finish_infotainment_sequence_();
-    return;
-  }
-
-  // Do not queue another background step while this vehicle has an
-  // interactive command pending/in flight.
-  if (user_commands_in_flight_ > 0) {
-    this->set_timeout("infotainment-sequence", USER_COMMAND_QUIET_MS, [this]() {
-      run_infotainment_sequence_step_();
-    });
-    return;
-  }
-
-  struct PollSpec {
-    const char *name;
-    int32_t data_type;
-  };
-  static const PollSpec polls[] = {
-      {"Charge State Poll", CarServer_GetVehicleData_getChargeState_tag},
-      {"Climate State Poll", CarServer_GetVehicleData_getClimateState_tag},
-      {"Drive State Poll", CarServer_GetVehicleData_getDriveState_tag},
-      {"Closures State Poll", CarServer_GetVehicleData_getClosuresState_tag},
-      {"Tire Pressure Poll", CarServer_GetVehicleData_getTirePressureState_tag},
-  };
-  static constexpr uint8_t POLL_COUNT = sizeof(polls) / sizeof(polls[0]);
-
-  if (infotainment_sequence_step_ >= POLL_COUNT) {
-    finish_infotainment_sequence_();
-    return;
-  }
-
-  const uint8_t step = infotainment_sequence_step_;
-  const PollSpec spec = polls[step];
-  ESP_LOGD(TAG, "Infotainment sequence %u/%u: %s",
-           static_cast<unsigned>(step + 1), static_cast<unsigned>(POLL_COUNT), spec.name);
-
+void TeslaBLEVehicle::enqueue_poll_job_(const char *name, int32_t data_type,
+                                             TeslaBLE::WakePolicy policy) {
   enqueue_infotainment_work_(
-      [this, step, spec]() {
-        if (!infotainment_sequence_active_ || !vehicle_ || !vehicle_->is_connected()) {
+      [this, name = std::string(name), data_type, policy]() {
+        if (!vehicle_ || !vehicle_->is_connected()) {
           release_infotainment_slot_();
-          finish_infotainment_sequence_();
           return;
         }
 
         vehicle_->send_command_result(
             UniversalMessage_Domain_DOMAIN_INFOTAINMENT,
-            spec.name,
-            [data_type = spec.data_type](TeslaBLE::Client *client, uint8_t *buff, size_t *len) {
+            name,
+            [data_type](TeslaBLE::Client *client, uint8_t *buff, size_t *len) {
               return client->build_car_server_get_vehicle_data_message(buff, len, data_type);
             },
-            [this, step](TeslaBLE::OperationResult result) {
+            [this, name](TeslaBLE::OperationResult result) {
               if (!result.is_success()) {
                 const TeslaBLE::CommandError *error = result.error();
-                ESP_LOGW(TAG, "Background %u failed: %s",
-                         static_cast<unsigned>(step + 1),
+                ESP_LOGW(TAG, "%s failed: %s", name.c_str(),
                          error != nullptr ? error->message().c_str() : "unknown error");
               }
-
-              // Release after every logical request. The next queued vehicle
-              // now gets the slot before this sequence schedules its next step.
               release_infotainment_slot_();
-
-              if (!infotainment_sequence_active_) return;
-              infotainment_sequence_step_ = static_cast<uint8_t>(step + 1);
-              if (infotainment_sequence_step_ >= 5) {
-                finish_infotainment_sequence_();
-                return;
-              }
-
-              this->set_timeout("infotainment-sequence", INFOTAINMENT_STEP_GAP_MS, [this]() {
-                run_infotainment_sequence_step_();
-              });
             },
-            infotainment_sequence_policy_);
+            policy);
       },
       false);
+}
+
+void TeslaBLEVehicle::enqueue_poll_batch_(TeslaBLE::WakePolicy policy, uint32_t delay_ms) {
+  if (!vehicle_ || !vehicle_->is_connected()) return;
+
+  auto enqueue_all = [this, policy]() {
+    if (!vehicle_ || !vehicle_->is_connected()) return;
+
+    enqueue_poll_job_("Charge State Poll", CarServer_GetVehicleData_getChargeState_tag, policy);
+    enqueue_poll_job_("Climate State Poll", CarServer_GetVehicleData_getClimateState_tag, policy);
+    enqueue_poll_job_("Drive State Poll", CarServer_GetVehicleData_getDriveState_tag, policy);
+    enqueue_poll_job_("Closures State Poll", CarServer_GetVehicleData_getClosuresState_tag, policy);
+    enqueue_poll_job_("Tire Pressure Poll", CarServer_GetVehicleData_getTirePressureState_tag, policy);
+  };
+
+  if (delay_ms == 0) {
+    enqueue_all();
+  } else {
+    this->set_timeout("infotainment-batch", delay_ms, [enqueue_all]() mutable {
+      enqueue_all();
+    });
+  }
 }
 
 void TeslaBLEVehicle::dump_config() {
@@ -884,7 +833,7 @@ void TeslaBLEVehicle::force_update() {
 
   if (vehicle_) {
     vehicle_->vcsec_poll();
-    start_infotainment_sequence_(TeslaBLE::WakePolicy::WAKE_IF_NEEDED, 500);
+    enqueue_poll_batch_(TeslaBLE::WakePolicy::WAKE_IF_NEEDED, 500);
   }
 }
 
@@ -1361,7 +1310,7 @@ void TeslaBLEVehicle::handle_connection_established() {
     vehicle_->set_connected(true);
     ESP_LOGI(TAG, "Connection established - triggering initial polls");
     vehicle_->vcsec_poll();
-    start_infotainment_sequence_(TeslaBLE::WakePolicy::WAKE_IF_NEEDED, 750);
+    enqueue_poll_batch_(TeslaBLE::WakePolicy::WAKE_IF_NEEDED, 750);
     last_vcsec_poll_ = millis();
     poll_policy_.on_poll(millis());
     poll_policy_.reset();
@@ -1380,11 +1329,9 @@ void TeslaBLEVehicle::handle_connection_lost() {
     this->cancel_timeout(COMMAND_WARNING_TIMEOUT);
   });
 
-  this->cancel_timeout("infotainment-sequence");
+  this->cancel_timeout("infotainment-batch");
   cancel_queued_infotainment_work_();
   release_infotainment_slot_();
-  infotainment_sequence_active_ = false;
-  infotainment_sequence_step_ = 0;
   user_commands_in_flight_ = 0;
   latest_ble_rssi_ = -127;
   poll_policy_.on_poll(0);
