@@ -35,12 +35,48 @@ jobs:
           test -n "$VERSION"
           TAG="v$VERSION"
 
-          if gh release view "$TAG" >/dev/null 2>&1; then
-            echo "Release $TAG already exists"
-            exit 0
-          fi
+          cat > /tmp/release-notes.md <<'EOF'
+          ## First working multi-car version
 
-          gh release create "$TAG" \
-            --target "$GITHUB_SHA" \
-            --title "ESPHome Tesla BLE multi-car $TAG" \
-            --notes "Multi-car release from multicar-v2: multiple Teslas per ESP32, per-VIN keys and sessions, Home Assistant sub-devices, independent pairing, CLOUD_KEY enrolment, and serialized BLE GATT writes."
+          This is the first version I consider properly usable with more than one Tesla on a single ESP32.
+
+          The starting point was yoziru/esphome-tesla-ble, which is a solid single-car implementation, but its architecture and BLE transport assumptions were still centered around one vehicle. Making a second Tesla work reliably exposed several things that were not obvious from simply duplicating the component.
+
+          The first part was isolation. Each car now has its own BLE client, private key, Tesla session storage and Home Assistant sub-device. Keys and sessions are stored per VIN, so pairing or regenerating the key for one vehicle no longer affects the other.
+
+          The next problem was pairing. During testing I found that software-generated keys need to be enrolled as CLOUD_KEY, while the NFC card is only the approving key. Treating the software key as NFC_CARD prevented pairing on current cars. This is not really a multi-car issue; it is a general compatibility fix that also matters for single-car use, and the upstream project has not yet caught up with this Tesla behavior.
+
+          Pairing also competed with normal background polling, so this branch temporarily quiets polling during the critical pairing window and ignores repeated Pair presses while a request is already active. On some cars the approval prompt does not appear until the physical NFC card is placed on the reader, which can otherwise make pairing look as if it failed.
+
+          The largest runtime issue was BLE transport. Tesla commands are fragmented into multiple GATT writes. With two cars active at once, both clients could advance fragments independently and overload the ESP32 GATT stack. The result was intermittent error 143 responses, failed commands and hard-to-reproduce congestion. The transport now waits for GATT write completion before advancing and uses one ESP32-wide write lock so only one Tesla fragment is in flight at a time.
+
+          This release therefore includes:
+
+          - multiple Teslas from one ESP32
+          - separate BLE client, key and session storage per VIN
+          - Home Assistant sub-device per car
+          - independent Pair and Regenerate Key controls
+          - CLOUD_KEY enrolment for software keys
+          - pairing quiet window and duplicate-pair protection
+          - serialized Tesla BLE fragment writes across all cars
+          - GATT completion tracking and retry/backoff
+          - slower multi-car polling defaults to reduce BLE congestion
+          - parent BLE radio and restart controls for recovery/testing
+
+          It is tested with ESPHome 2026.9.x and Tesla BLE library v5.2.0.
+
+          There can still be occasional ESP-IDF GATT congestion under aggressive polling, but with the global write serialization and slower polling this is the first version that has been working reliably with two real Teslas.
+
+          The main branch remains reserved for tracking upstream yoziru/esphome-tesla-ble changes. Multi-car development and releases come from multicar-v2.
+          EOF
+
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release edit "$TAG" \
+              --title "ESPHome Tesla BLE multi-car $TAG" \
+              --notes-file /tmp/release-notes.md
+          else
+            gh release create "$TAG" \
+              --target "$GITHUB_SHA" \
+              --title "ESPHome Tesla BLE multi-car $TAG" \
+              --notes-file /tmp/release-notes.md
+          fi
