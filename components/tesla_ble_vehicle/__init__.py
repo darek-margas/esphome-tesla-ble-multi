@@ -148,6 +148,7 @@ BINARY_SENSORS = [
 ]
 
 SENSORS = [
+    {"id": "ble_rssi", "name": "BLE RSSI", "icon": "mdi:signal", "unit": "dBm", "accuracy_decimals": 0, "entity_category": "diagnostic"},
     # Charge state sensors
     {"id": "battery_level", "name": "Battery", "icon": "mdi:battery", "unit": "%"},
     {"id": "range", "name": "Range", "icon": "mdi:map-marker-distance", "device_class": "distance", "unit": "mi"},
