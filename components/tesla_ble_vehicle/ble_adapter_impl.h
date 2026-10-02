@@ -48,7 +48,10 @@ private:
     // ESP32's GATT client path is shared across all Tesla BLE links. Only one
     // Tesla fragment may be outstanding globally, not merely per vehicle.
     static BleAdapterImpl *global_write_owner_;
+    static uint32_t global_next_write_ms_;
     
+    static constexpr uint32_t SUCCESS_GAP_MS = 20;
+    static constexpr uint32_t CONGESTION_GAP_MS = 100;
     static const size_t BLOCK_LENGTH = 18; // Safe BLE MTU chunk size
 };
 
