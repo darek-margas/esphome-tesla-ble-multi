@@ -33,6 +33,9 @@ public:
     // Custom method to be called by TeslaBLEVehicle loop
     void process_write_queue();
     
+    // Called from the owning GATT client when ESP-IDF reports completion.
+    void on_write_complete(esp_gatt_status_t status);
+
     // Clear queues (on disconnect)
     void clear_queues();
 
@@ -40,6 +43,7 @@ private:
     TeslaBLEVehicle* parent_;
     std::queue<BLETXChunk> write_queue_;
     WriteRetryPolicy write_retry_policy_;
+    bool write_in_flight_{false};
     
     static const size_t BLOCK_LENGTH = 18; // Safe BLE MTU chunk size
 };
