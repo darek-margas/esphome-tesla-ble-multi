@@ -78,6 +78,7 @@ public:
     // Configuration setters
     // ==========================================================================
     void set_vin(const char *vin);
+    void set_debug_name(const std::string &name) { debug_name_ = name; }
     void set_role(const std::string &role);
     void set_charging_amps_max(int amps_max);
     
@@ -198,6 +199,7 @@ private:
 
     // Configuration
     std::string vin_;
+    std::string debug_name_;
     std::string role_;
     
     // Polling intervals
