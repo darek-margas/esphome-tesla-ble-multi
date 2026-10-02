@@ -235,7 +235,7 @@ void TeslaBLEVehicle::update() {
   // VCSEC Polling
   if (now - last_vcsec_poll_ >= vcsec_poll_interval_) {
     ESP_LOGI(TAG, "Polling VCSEC");
-    enqueue_vcsec_poll_();
+    vehicle_->vcsec_poll();
     last_vcsec_poll_ = now;
   }
 
@@ -310,7 +310,7 @@ void TeslaBLEVehicle::enqueue_infotainment_work_(std::function<void()> start, bo
 }
 
 void TeslaBLEVehicle::defer_release_infotainment_slot_() {
-  this->set_timeout("release-infotainment-slot", 0, [this]() {
+  this->set_timeout("release-infotainment-slot", LOGICAL_HANDOFF_GAP_MS, [this]() {
     release_infotainment_slot_();
   });
 }
@@ -348,32 +348,13 @@ void TeslaBLEVehicle::cancel_queued_infotainment_work_() {
   }
 }
 
-void TeslaBLEVehicle::enqueue_vcsec_poll_(bool interactive) {
-  enqueue_infotainment_work_(
-      [this]() {
-        if (!vehicle_ || !vehicle_->is_connected() || !notify_ready_) {
-          release_infotainment_slot_();
-          return;
-        }
-
-        vehicle_->send_command_result(
-            UniversalMessage_Domain_DOMAIN_VEHICLE_SECURITY,
-            "VCSEC Poll",
-            [](TeslaBLE::Client *client, uint8_t *buff, size_t *len) {
-              return client->build_vcsec_information_request_message(
-                  VCSEC_InformationRequestType_INFORMATION_REQUEST_TYPE_GET_STATUS, buff, len);
-            },
-            [this](TeslaBLE::OperationResult result) {
-              if (!result.is_success() && !result.is_skipped()) {
-                const TeslaBLE::CommandError *error = result.error();
-                ESP_LOGW(TAG, "VCSEC Poll failed: %s",
-                         error != nullptr ? error->message().c_str() : "unknown error");
-              }
-              defer_release_infotainment_slot_();
-            },
-            TeslaBLE::WakePolicy::WAKE_IF_NEEDED);
-      },
-      interactive);
+void TeslaBLEVehicle::complete_poll_batch_job_() {
+  if (!poll_batch_in_progress_) return;
+  if (poll_batch_remaining_ > 0) --poll_batch_remaining_;
+  if (poll_batch_remaining_ == 0) {
+    poll_batch_in_progress_ = false;
+    ESP_LOGD(TAG, "Infotainment batch complete");
+  }
 }
 
 void TeslaBLEVehicle::enqueue_poll_job_(const char *name, int32_t data_type,
@@ -381,6 +362,7 @@ void TeslaBLEVehicle::enqueue_poll_job_(const char *name, int32_t data_type,
   enqueue_infotainment_work_(
       [this, name = std::string(name), data_type, policy]() {
         if (!vehicle_ || !vehicle_->is_connected() || !notify_ready_) {
+          complete_poll_batch_job_();
           release_infotainment_slot_();
           return;
         }
@@ -397,6 +379,7 @@ void TeslaBLEVehicle::enqueue_poll_job_(const char *name, int32_t data_type,
                 ESP_LOGW(TAG, "%s failed: %s", name.c_str(),
                          error != nullptr ? error->message().c_str() : "unknown error");
               }
+              complete_poll_batch_job_();
               defer_release_infotainment_slot_();
             },
             policy);
@@ -405,10 +388,21 @@ void TeslaBLEVehicle::enqueue_poll_job_(const char *name, int32_t data_type,
 }
 
 void TeslaBLEVehicle::enqueue_poll_batch_(TeslaBLE::WakePolicy policy, uint32_t delay_ms) {
-  if (!vehicle_ || !vehicle_->is_connected()) return;
+  if (!vehicle_ || !vehicle_->is_connected() || !notify_ready_) return;
+  if (poll_batch_in_progress_) {
+    ESP_LOGD(TAG, "Infotainment batch already in progress - skipping new batch");
+    return;
+  }
+
+  poll_batch_in_progress_ = true;
+  poll_batch_remaining_ = 5;
 
   auto enqueue_all = [this, policy]() {
-    if (!vehicle_ || !vehicle_->is_connected() || !notify_ready_) return;
+    if (!vehicle_ || !vehicle_->is_connected() || !notify_ready_) {
+      poll_batch_in_progress_ = false;
+      poll_batch_remaining_ = 0;
+      return;
+    }
 
     struct PollSpec {
       const char *name;
@@ -909,7 +903,7 @@ void TeslaBLEVehicle::force_update() {
   poll_policy_.on_poll(now);
 
   if (vehicle_) {
-    enqueue_vcsec_poll_();
+    vehicle_->vcsec_poll();
     enqueue_poll_batch_(TeslaBLE::WakePolicy::WAKE_IF_NEEDED, 500);
   }
 }
@@ -1414,7 +1408,7 @@ void TeslaBLEVehicle::handle_connection_established() {
   if (vehicle_ && !vehicle_->is_connected()) {
     vehicle_->set_connected(true);
     ESP_LOGI(TAG, "Connection established - triggering initial polls");
-    enqueue_vcsec_poll_();
+    vehicle_->vcsec_poll();
     enqueue_poll_batch_(TeslaBLE::WakePolicy::WAKE_IF_NEEDED, 750);
     last_vcsec_poll_ = millis();
     poll_policy_.on_poll(millis());
@@ -1439,6 +1433,8 @@ void TeslaBLEVehicle::handle_connection_lost() {
   this->cancel_timeout("release-infotainment-slot");
   notify_ready_ = false;
   notify_registration_pending_ = false;
+  poll_batch_in_progress_ = false;
+  poll_batch_remaining_ = 0;
   cancel_queued_infotainment_work_();
   release_infotainment_slot_();
   user_commands_in_flight_ = 0;
