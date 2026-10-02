@@ -197,6 +197,9 @@ private:
     
     // Polling state
     uint32_t last_vcsec_poll_{0};
+    bool pairing_in_progress_{false};
+    uint32_t pairing_started_ms_{0};
+    static constexpr uint32_t PAIRING_POLL_PAUSE_MS = 35000;
     InfotainmentPollPolicy poll_policy_;
     ConnectionResetPolicy connection_reset_policy_;
 
