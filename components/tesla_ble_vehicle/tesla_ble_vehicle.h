@@ -200,6 +200,7 @@ private:
     bool pairing_in_progress_{false};
     uint32_t pairing_started_ms_{0};
     static constexpr uint32_t PAIRING_POLL_PAUSE_MS = 35000;
+    static constexpr uint32_t PAIRING_REQUEST_GUARD_MS = 180000;
     InfotainmentPollPolicy poll_policy_;
     ConnectionResetPolicy connection_reset_policy_;
 
