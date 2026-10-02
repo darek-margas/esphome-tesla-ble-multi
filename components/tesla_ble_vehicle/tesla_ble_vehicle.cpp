@@ -1230,8 +1230,7 @@ void TeslaBLEVehicle::close_windows() {
 
 void TeslaBLEVehicle::update_ble_rssi(int8_t rssi) {
   latest_ble_rssi_ = rssi;
-  if (state_manager_ != nullptr && state_manager_->get_sensor("ble_rssi") != nullptr)
-    state_manager_->get_sensor("ble_rssi")->publish_state(static_cast<float>(rssi));
+  if (state_manager_ != nullptr) state_manager_->update_ble_rssi(static_cast<float>(rssi));
 }
 
 uint32_t TeslaBLEVehicle::ble_write_gap_ms() const {
