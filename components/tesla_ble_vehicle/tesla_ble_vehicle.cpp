@@ -1229,8 +1229,19 @@ void TeslaBLEVehicle::close_windows() {
 }
 
 void TeslaBLEVehicle::update_ble_rssi(int8_t rssi) {
+  latest_ble_rssi_ = rssi;
   if (state_manager_ != nullptr && state_manager_->get_sensor("ble_rssi") != nullptr)
     state_manager_->get_sensor("ble_rssi")->publish_state(static_cast<float>(rssi));
+}
+
+uint32_t TeslaBLEVehicle::ble_write_gap_ms() const {
+  // Unknown RSSI: keep the conservative middle setting until the first
+  // connected-link RSSI sample arrives.
+  if (latest_ble_rssi_ == -127) return 60;
+  if (latest_ble_rssi_ > -70) return 20;
+  if (latest_ble_rssi_ > -80) return 35;
+  if (latest_ble_rssi_ > -87) return 60;
+  return 100;
 }
 
 bool TeslaBLEVehicle::is_connected() const {
@@ -1376,6 +1387,7 @@ void TeslaBLEVehicle::handle_connection_lost() {
   infotainment_sequence_active_ = false;
   infotainment_sequence_step_ = 0;
   user_commands_in_flight_ = 0;
+  latest_ble_rssi_ = -127;
   poll_policy_.on_poll(0);
   last_vcsec_poll_ = 0;
   poll_policy_.reset();
