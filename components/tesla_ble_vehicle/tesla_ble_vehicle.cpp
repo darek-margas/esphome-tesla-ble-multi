@@ -208,6 +208,15 @@ void TeslaBLEVehicle::update() {
 
   uint32_t now = millis();
 
+  // Pairing is an unauthenticated VCSEC exchange and needs a quiet link.
+  // Do not add background polls while it is waiting for the card approval
+  // response. Existing commands are left untouched; no BLE reset is done.
+  if (pairing_in_progress_) {
+    if (static_cast<uint32_t>(now - pairing_started_ms_) < PAIRING_POLL_PAUSE_MS)
+      return;
+    pairing_in_progress_ = false;
+  }
+
   // VCSEC Polling
   if (now - last_vcsec_poll_ >= vcsec_poll_interval_) {
     ESP_LOGI(TAG, "Polling VCSEC");
@@ -626,6 +635,9 @@ int TeslaBLEVehicle::start_pairing() {
     ESP_LOGI(TAG, "No private key stored for this vehicle - generating one");
     vehicle_->regenerate_key();
   }
+
+  pairing_in_progress_ = true;
+  pairing_started_ms_ = millis();
 
   vehicle_->send_command(
       UniversalMessage_Domain_DOMAIN_VEHICLE_SECURITY, "Whitelist Add Key",
