@@ -613,7 +613,27 @@ int TeslaBLEVehicle::start_pairing() {
     role_enum = Keys_Role_ROLE_CHARGING_MANAGER;
   }
 
-  vehicle_->pair(role_enum);
+  // tesla-ble v5.2.0 (and current upstream) hardcodes NFC_CARD in
+  // Vehicle::pair(). That represents the approving physical key, not the
+  // software key being enrolled. Tesla's current BLE pairing flow enrolls
+  // software clients as CLOUD_KEY and uses the NFC card/keyfob for approval.
+  //
+  // Keep the upstream Vehicle implementation for everything else, but build
+  // the whitelist request here with the correct form factor.
+  std::vector<uint8_t> private_key;
+  if (!storage_adapter_ || !storage_adapter_->load("private_key", private_key) ||
+      private_key.empty()) {
+    ESP_LOGI(TAG, "No private key stored for this vehicle - generating one");
+    vehicle_->regenerate_key();
+  }
+
+  vehicle_->send_command(
+      UniversalMessage_Domain_DOMAIN_VEHICLE_SECURITY, "Whitelist Add Key",
+      [role_enum](TeslaBLE::Client *client, uint8_t *buf, size_t *len) {
+        return client->build_white_list_message(
+            role_enum, VCSEC_KeyFormFactor_KEY_FORM_FACTOR_CLOUD_KEY, buf, len);
+      });
+
   return 0;
 }
 
