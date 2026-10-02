@@ -176,6 +176,7 @@ public:
     TeslaBLEClient *ble_client() const { return ble_client_; }
     uint16_t get_read_handle() const { return read_handle_; }
     uint16_t get_write_handle() const { return write_handle_; }
+    void update_ble_rssi(int8_t rssi);
 
 private:
     // Initialization helpers
@@ -245,6 +246,8 @@ private:
     espbt::ESPBTUUID write_uuid_;
     uint16_t read_handle_{0};
     uint16_t write_handle_{0};
+    uint32_t last_rssi_request_{0};
+    static constexpr uint32_t RSSI_POLL_INTERVAL_MS = 10000;
 
     // ==========================================================================
     // Pending sensors (stored before state manager is initialized)
@@ -307,6 +310,7 @@ class TeslaBLEClient : public esp32_ble_client::BLEClientBase {
 
   bool gattc_event_handler(esp_gattc_cb_event_t event, esp_gatt_if_t gattc_if,
                            esp_ble_gattc_cb_param_t *param) override;
+  void gap_event_handler(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param_t *param) override;
 
  protected:
   TeslaBLEVehicle *vehicle_{nullptr};
