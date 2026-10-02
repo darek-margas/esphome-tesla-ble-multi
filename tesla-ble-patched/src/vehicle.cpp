@@ -928,15 +928,17 @@ void TeslaBLE::Vehicle::handle_vcsec_message_(const UniversalMessage_RoutableMes
 
 void TeslaBLE::Vehicle::handle_carserver_message_(const UniversalMessage_RoutableMessage &msg) {
   LOG_DEBUG("Processing CarServer message");
+  bool request_uuid_matches = true;
   if (msg.request_uuid.size > 0) {
     pb_byte_t expected_uuid[16] = {0};
     size_t expected_uuid_length = sizeof(expected_uuid);
-    if (!client_->get_last_request_uuid(UniversalMessage_Domain_DOMAIN_INFOTAINMENT, expected_uuid,
-                                        &expected_uuid_length) ||
-        msg.request_uuid.size != expected_uuid_length ||
-        !std::equal(msg.request_uuid.bytes, msg.request_uuid.bytes + msg.request_uuid.size, expected_uuid)) {
-      LOG_WARNING("Ignoring CarServer response for a different request");
-      return;
+    request_uuid_matches =
+        client_->get_last_request_uuid(UniversalMessage_Domain_DOMAIN_INFOTAINMENT, expected_uuid,
+                                       &expected_uuid_length) &&
+        msg.request_uuid.size == expected_uuid_length &&
+        std::equal(msg.request_uuid.bytes, msg.request_uuid.bytes + msg.request_uuid.size, expected_uuid);
+    if (!request_uuid_matches) {
+      LOG_WARNING("CarServer response is for an earlier request; accepting vehicleData telemetry only");
     }
   }
   const Signatures_SignatureData *sig_data = nullptr;
@@ -979,7 +981,7 @@ void TeslaBLE::Vehicle::handle_carserver_message_(const UniversalMessage_Routabl
     emit_if(vd.has_closures_state, closures_state_callback_, vd.closures_state);
   }
   auto cmd = peek_command_();
-  if (cmd && cmd->domain == UniversalMessage_Domain_DOMAIN_INFOTAINMENT &&
+  if (request_uuid_matches && cmd && cmd->domain == UniversalMessage_Domain_DOMAIN_INFOTAINMENT &&
       cmd->state == CommandState::WAITING_FOR_RESPONSE) {
     if (response.has_actionStatus) {
       bool already_set = response.actionStatus.has_result_reason &&
