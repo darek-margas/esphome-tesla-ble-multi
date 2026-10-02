@@ -11,6 +11,8 @@
 namespace esphome {
 namespace tesla_ble_vehicle {
 
+TeslaBLEVehicle *TeslaBLEVehicle::global_infotainment_owner_ = nullptr;
+
 void tesla_ble_log_callback(TeslaBLE::LogLevel level, const char *tag, int line,
                             const char *format, va_list args) {
   if (tag == nullptr)
