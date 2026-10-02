@@ -231,6 +231,7 @@ private:
     // Pending numbers
     number::Number *pending_charging_amps_number_{nullptr};
     number::Number *pending_charging_limit_number_{nullptr};
+    select::Select *pending_cabin_overheat_select_{nullptr};
     
     // Pending locks
     lock::Lock *pending_doors_lock_{nullptr};
