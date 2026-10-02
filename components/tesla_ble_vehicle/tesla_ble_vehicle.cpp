@@ -156,6 +156,8 @@ void TeslaBLEVehicle::configure_pending_sensors() {
     state_manager_->set_charging_amps_number(pending_charging_amps_number_);
   if (pending_charging_limit_number_)
     state_manager_->set_charging_limit_number(pending_charging_limit_number_);
+  if (pending_cabin_overheat_select_)
+    state_manager_->set_cabin_overheat_select(pending_cabin_overheat_select_);
   if (pending_doors_lock_)
     state_manager_->set_doors_lock(pending_doors_lock_);
   if (pending_charge_port_latch_lock_)
@@ -412,6 +414,12 @@ void TeslaBLEVehicle::set_charging_limit_number(number::Number *number) {
   pending_charging_limit_number_ = number;
   if (state_manager_)
     state_manager_->set_charging_limit_number(number);
+}
+
+void TeslaBLEVehicle::set_cabin_overheat_select(select::Select *sel) {
+  pending_cabin_overheat_select_ = sel;
+  if (state_manager_)
+    state_manager_->set_cabin_overheat_select(sel);
 }
 
 // =============================================================================
@@ -922,6 +930,33 @@ void TeslaBLEVehicle::set_preconditioning_max(bool enable) {
       [enable](TeslaBLE::Client *client, uint8_t *buff, size_t *len) {
         return client->build_car_server_vehicle_action_message(
             buff, len, CarServer_VehicleAction_hvacSetPreconditioningMaxAction_tag, &enable);
+      });
+}
+
+void TeslaBLEVehicle::set_cabin_overheat_protection(int mode) {
+  if (mode < 0 || mode > 2) {
+    ESP_LOGW(TAG, "Invalid cabin overheat protection mode: %d", mode);
+    return;
+  }
+
+  CarServer_SetCabinOverheatProtectionAction action =
+      CarServer_SetCabinOverheatProtectionAction_init_default;
+  action.on = mode != 0;
+  action.fan_only = mode == 2;
+
+  const char *mode_name = mode == 0 ? "Off" : (mode == 1 ? "On" : "Fan Only");
+  ESP_LOGI(TAG, "Cabin overheat protection %s requested", mode_name);
+
+  send_command_with_tracking(
+      UniversalMessage_Domain_DOMAIN_INFOTAINMENT,
+      std::string("Cabin Overheat ") + mode_name,
+      [action](TeslaBLE::Client *client, uint8_t *buff, size_t *len) {
+        return client->build_car_server_vehicle_action_message(
+            buff, len, CarServer_VehicleAction_setCabinOverheatProtectionAction_tag, &action);
+      },
+      TeslaBLE::WakePolicy::WAKE_IF_NEEDED,
+      [this](bool succeeded) {
+        if (succeeded) schedule_state_refresh_(ControlStateRefresh::CLIMATE_STATE);
       });
 }
 
