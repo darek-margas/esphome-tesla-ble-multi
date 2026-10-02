@@ -11,6 +11,7 @@ namespace tesla_ble_vehicle {
 static const char *ADAPTER_TAG = "tesla_ble_adapters";
 
 BleAdapterImpl *BleAdapterImpl::global_write_owner_ = nullptr;
+uint32_t BleAdapterImpl::global_next_write_ms_ = 0;
 
 // --- BleAdapterImpl ---
 
@@ -47,6 +48,8 @@ void BleAdapterImpl::process_write_queue() {
     if (!parent_->is_connected()) return;
     if (write_in_flight_) return;
     if (global_write_owner_ != nullptr && global_write_owner_ != this) return;
+    const uint32_t now = millis();
+    if (static_cast<int32_t>(now - global_next_write_ms_) < 0) return;
 
     // Back off a failing chunk instead of retrying every loop() iteration,
     // and drop it after repeated failures so it cannot block newer traffic.
@@ -89,6 +92,7 @@ void BleAdapterImpl::process_write_queue() {
         global_write_owner_ = this;
     } else {
         write_retry_policy_.on_failure(millis());
+        global_next_write_ms_ = millis() + CONGESTION_GAP_MS;
         ESP_LOGW(ADAPTER_TAG, "BLE write submit failed: %s", esp_err_to_name(err));
     }
 }
@@ -101,6 +105,7 @@ void BleAdapterImpl::on_write_complete(esp_gatt_status_t status) {
     if (status == ESP_GATT_OK) {
         if (!write_queue_.empty()) write_queue_.pop();
         write_retry_policy_.on_success(millis());
+        global_next_write_ms_ = millis() + SUCCESS_GAP_MS;
         return;
     }
 
@@ -108,6 +113,7 @@ void BleAdapterImpl::on_write_complete(esp_gatt_status_t status) {
     // especially important for ESP_GATT_CONGESTED: dropping a Tesla frame
     // fragment corrupts the complete protobuf message.
     write_retry_policy_.on_failure(millis());
+    global_next_write_ms_ = millis() + CONGESTION_GAP_MS;
     ESP_LOGW(ADAPTER_TAG, "BLE write completion failed: %d", status);
 }
 
