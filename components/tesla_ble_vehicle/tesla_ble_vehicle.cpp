@@ -337,10 +337,11 @@ void TeslaBLEVehicle::cancel_queued_infotainment_work_() {
 }
 
 void TeslaBLEVehicle::enqueue_poll_job_(const char *name, int32_t data_type,
-                                             TeslaBLE::WakePolicy policy) {
+                                             TeslaBLE::WakePolicy policy,
+                                             uint8_t retry_attempt) {
   enqueue_infotainment_work_(
-      [this, name = std::string(name), data_type, policy]() {
-        if (!vehicle_ || !vehicle_->is_connected()) {
+      [this, name = std::string(name), data_type, policy, retry_attempt]() {
+        if (!vehicle_ || !vehicle_->is_connected() || !notify_ready_) {
           release_infotainment_slot_();
           return;
         }
@@ -351,13 +352,30 @@ void TeslaBLEVehicle::enqueue_poll_job_(const char *name, int32_t data_type,
             [data_type](TeslaBLE::Client *client, uint8_t *buff, size_t *len) {
               return client->build_car_server_get_vehicle_data_message(buff, len, data_type);
             },
-            [this, name](TeslaBLE::OperationResult result) {
-              if (!result.is_success()) {
+            [this, name, data_type, policy, retry_attempt](TeslaBLE::OperationResult result) {
+              const bool failed = !result.is_success() && !result.is_skipped();
+              if (failed) {
                 const TeslaBLE::CommandError *error = result.error();
                 ESP_LOGW(TAG, "%s failed: %s", name.c_str(),
                          error != nullptr ? error->message().c_str() : "unknown error");
               }
+
               release_infotainment_slot_();
+
+              if (failed && retry_attempt < POLL_JOB_MAX_RETRIES) {
+                const std::string retry_timer =
+                    "poll-retry-" + std::to_string(static_cast<long long>(data_type));
+                this->set_timeout(retry_timer.c_str(), POLL_JOB_RETRY_DELAY_MS,
+                    [this, name, data_type, policy, retry_attempt]() {
+                      if (vehicle_ && vehicle_->is_connected() && notify_ready_) {
+                        ESP_LOGI(TAG, "Retrying %s (%u/%u)", name.c_str(),
+                                 static_cast<unsigned>(retry_attempt + 1),
+                                 static_cast<unsigned>(POLL_JOB_MAX_RETRIES));
+                        enqueue_poll_job_(name.c_str(), data_type, policy,
+                                          static_cast<uint8_t>(retry_attempt + 1));
+                      }
+                    });
+              }
             },
             policy);
       },
@@ -368,13 +386,29 @@ void TeslaBLEVehicle::enqueue_poll_batch_(TeslaBLE::WakePolicy policy, uint32_t 
   if (!vehicle_ || !vehicle_->is_connected()) return;
 
   auto enqueue_all = [this, policy]() {
-    if (!vehicle_ || !vehicle_->is_connected()) return;
+    if (!vehicle_ || !vehicle_->is_connected() || !notify_ready_) return;
 
-    enqueue_poll_job_("Charge State Poll", CarServer_GetVehicleData_getChargeState_tag, policy);
-    enqueue_poll_job_("Climate State Poll", CarServer_GetVehicleData_getClimateState_tag, policy);
-    enqueue_poll_job_("Drive State Poll", CarServer_GetVehicleData_getDriveState_tag, policy);
-    enqueue_poll_job_("Closures State Poll", CarServer_GetVehicleData_getClosuresState_tag, policy);
-    enqueue_poll_job_("Tire Pressure Poll", CarServer_GetVehicleData_getTirePressureState_tag, policy);
+    struct PollSpec {
+      const char *name;
+      int32_t data_type;
+    };
+    static const PollSpec polls[] = {
+        {"Charge State Poll", CarServer_GetVehicleData_getChargeState_tag},
+        {"Climate State Poll", CarServer_GetVehicleData_getClimateState_tag},
+        {"Drive State Poll", CarServer_GetVehicleData_getDriveState_tag},
+        {"Closures State Poll", CarServer_GetVehicleData_getClosuresState_tag},
+        {"Tire Pressure Poll", CarServer_GetVehicleData_getTirePressureState_tag},
+    };
+    static constexpr uint8_t POLL_COUNT = sizeof(polls) / sizeof(polls[0]);
+
+    const uint8_t start = poll_batch_start_ % POLL_COUNT;
+    poll_batch_start_ = static_cast<uint8_t>((start + 1) % POLL_COUNT);
+    ESP_LOGI(TAG, "Infotainment batch starts with %s", polls[start].name);
+
+    for (uint8_t offset = 0; offset < POLL_COUNT; ++offset) {
+      const PollSpec &poll = polls[(start + offset) % POLL_COUNT];
+      enqueue_poll_job_(poll.name, poll.data_type, policy);
+    }
   };
 
   if (delay_ms == 0) {
