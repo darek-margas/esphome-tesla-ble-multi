@@ -693,6 +693,10 @@ void VehicleStateManager::update_estimated_power() {
     publish_sensor("charger_power_estimated", power_kw);
 }
 
+void VehicleStateManager::update_ble_rssi(float rssi) {
+    publish_sensor("ble_rssi", rssi);
+}
+
 // =============================================================================
 // Connection state management
 // =============================================================================
