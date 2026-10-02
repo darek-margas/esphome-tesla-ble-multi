@@ -1229,10 +1229,8 @@ void TeslaBLEVehicle::close_windows() {
 }
 
 void TeslaBLEVehicle::update_ble_rssi(int8_t rssi) {
-  if (state_manager_ != nullptr) {
-    auto *sensor = state_manager_->get_sensor("ble_rssi");
-    if (sensor != nullptr) sensor->publish_state(static_cast<float>(rssi));
-  }
+  if (state_manager_ != nullptr && state_manager_->get_sensor("ble_rssi") != nullptr)
+    state_manager_->get_sensor("ble_rssi")->publish_state(static_cast<float>(rssi));
 }
 
 bool TeslaBLEVehicle::is_connected() const {
