@@ -43,6 +43,7 @@ bool BleAdapterImpl::write(const std::vector<uint8_t>& data) {
 void BleAdapterImpl::process_write_queue() {
     if (write_queue_.empty()) return;
     if (!parent_->is_connected()) return;
+    if (write_in_flight_) return;
 
     // Back off a failing chunk instead of retrying every loop() iteration,
     // and drop it after repeated failures so it cannot block newer traffic.
@@ -79,17 +80,36 @@ void BleAdapterImpl::process_write_queue() {
     );
 
     if (err == ESP_OK) {
-        write_retry_policy_.on_success(millis());
-        write_queue_.pop();
+        // The call only queues the write in ESP-IDF. Do not discard this
+        // fragment until ESP_GATTC_WRITE_CHAR_EVT confirms completion.
+        write_in_flight_ = true;
     } else {
         write_retry_policy_.on_failure(millis());
-        ESP_LOGW(ADAPTER_TAG, "BLE write failed: %s", esp_err_to_name(err));
+        ESP_LOGW(ADAPTER_TAG, "BLE write submit failed: %s", esp_err_to_name(err));
     }
+}
+
+void BleAdapterImpl::on_write_complete(esp_gatt_status_t status) {
+    if (!write_in_flight_) return;
+    write_in_flight_ = false;
+
+    if (status == ESP_GATT_OK) {
+        if (!write_queue_.empty()) write_queue_.pop();
+        write_retry_policy_.on_success(millis());
+        return;
+    }
+
+    // Keep the same fragment at the front and retry it with backoff. This is
+    // especially important for ESP_GATT_CONGESTED: dropping a Tesla frame
+    // fragment corrupts the complete protobuf message.
+    write_retry_policy_.on_failure(millis());
+    ESP_LOGW(ADAPTER_TAG, "BLE write completion failed: %d", status);
 }
 
 void BleAdapterImpl::clear_queues() {
     std::queue<BLETXChunk> empty;
     write_queue_.swap(empty);
+    write_in_flight_ = false;
     write_retry_policy_.reset();
 }
 
