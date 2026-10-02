@@ -275,7 +275,28 @@ void TeslaBLEVehicle::enqueue_infotainment_work_(std::function<void()> start, bo
     while (pos != global_infotainment_queue_.end() && pos->interactive) ++pos;
     global_infotainment_queue_.insert(pos, std::move(item));
   } else {
-    global_infotainment_queue_.push_back(std::move(item));
+    // Interleave background work by vehicle. Insert this job after the last
+    // queued job belonging to a different vehicle, rather than blindly
+    // appending an entire five-poll batch behind one car.
+    auto pos = global_infotainment_queue_.begin();
+    while (pos != global_infotainment_queue_.end() && pos->interactive) ++pos;
+
+    auto insert_at = global_infotainment_queue_.end();
+    TeslaBLEVehicle *last_vehicle = nullptr;
+    for (auto it = pos; it != global_infotainment_queue_.end(); ++it) {
+      if (last_vehicle != this && it->vehicle == this) {
+        // keep scanning; we want this vehicle's next job after another car
+      }
+      if (it->vehicle != this) {
+        insert_at = std::next(it);
+      }
+      last_vehicle = it->vehicle;
+    }
+
+    if (insert_at == global_infotainment_queue_.end())
+      global_infotainment_queue_.push_back(std::move(item));
+    else
+      global_infotainment_queue_.insert(insert_at, std::move(item));
   }
 
   if (global_infotainment_owner_ == nullptr && !global_infotainment_queue_.empty()) {
