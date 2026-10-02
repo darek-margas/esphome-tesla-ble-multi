@@ -929,6 +929,10 @@ void TeslaBLE::Vehicle::handle_vcsec_message_(const UniversalMessage_RoutableMes
 void TeslaBLE::Vehicle::handle_carserver_message_(const UniversalMessage_RoutableMessage &msg) {
   LOG_DEBUG("Processing CarServer message");
   bool request_uuid_matches = true;
+  pb_byte_t response_request_hash[33] = {0};
+  size_t response_request_hash_length = sizeof(response_request_hash);
+  const pb_byte_t *request_hash_override = nullptr;
+
   if (msg.request_uuid.size > 0) {
     pb_byte_t expected_uuid[16] = {0};
     size_t expected_uuid_length = sizeof(expected_uuid);
@@ -938,7 +942,14 @@ void TeslaBLE::Vehicle::handle_carserver_message_(const UniversalMessage_Routabl
         msg.request_uuid.size == expected_uuid_length &&
         std::equal(msg.request_uuid.bytes, msg.request_uuid.bytes + msg.request_uuid.size, expected_uuid);
     if (!request_uuid_matches) {
-      LOG_WARNING("CarServer response is for an earlier request; accepting vehicleData telemetry only");
+      if (!client_->get_request_hash_for_uuid(UniversalMessage_Domain_DOMAIN_INFOTAINMENT, msg.request_uuid.bytes,
+                                              msg.request_uuid.size, response_request_hash,
+                                              &response_request_hash_length)) {
+        LOG_WARNING("CarServer response is for an unknown/expired earlier request; ignoring it");
+        return;
+      }
+      request_hash_override = response_request_hash;
+      LOG_WARNING("CarServer response is for an earlier request; publishing vehicleData telemetry only");
     }
   }
   const Signatures_SignatureData *sig_data = nullptr;
@@ -955,7 +966,7 @@ void TeslaBLE::Vehicle::handle_carserver_message_(const UniversalMessage_Routabl
       const_cast<UniversalMessage_RoutableMessage_protobuf_message_as_bytes_t *>(
           &msg.payload.protobuf_message_as_bytes),
       const_cast<Signatures_SignatureData *>(sig_data), msg.which_sub_sigData, fault, msg.flags, &response,
-      &response_counter);
+      &response_counter, request_hash_override, request_hash_override ? response_request_hash_length : 0);
   if (result != 0) {
     LOG_ERROR("Failed to parse CarServer response: %d", result);
     return;
