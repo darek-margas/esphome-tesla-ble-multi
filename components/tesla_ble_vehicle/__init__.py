@@ -1,6 +1,6 @@
 import esphome.codegen as cg
 import esphome.config_validation as cv
-from esphome.components import esp32_ble, esp32_ble_client, esp32_ble_tracker, binary_sensor, button, switch, number, sensor, text_sensor, lock, cover, climate
+from esphome.components import esp32_ble, esp32_ble_client, esp32_ble_tracker, binary_sensor, button, switch, number, sensor, text_sensor, lock, cover, climate, select
 from esphome.components.esp32_ble import BTLoggers
 from esphome.const import (
     CONF_ACCURACY_DECIMALS,
@@ -23,7 +23,7 @@ from esphome import automation
 
 CODEOWNERS = ["@yoziru"]
 DEPENDENCIES = ["esp32_ble_tracker"]
-AUTO_LOAD = ["esp32_ble_client", "binary_sensor", "button", "switch", "number", "sensor", "text_sensor", "lock", "cover", "climate"]
+AUTO_LOAD = ["esp32_ble_client", "binary_sensor", "button", "switch", "number", "sensor", "text_sensor", "lock", "cover", "climate", "select"]
 MULTI_CONF = True
 
 tesla_ble_vehicle_ns = cg.esphome_ns.namespace("tesla_ble_vehicle")
@@ -43,6 +43,7 @@ TeslaForceUpdateButton = tesla_ble_vehicle_ns.class_("TeslaForceUpdateButton", b
 TeslaFlashLightsButton = tesla_ble_vehicle_ns.class_("TeslaFlashLightsButton", button.Button)
 TeslaHonkHornButton = tesla_ble_vehicle_ns.class_("TeslaHonkHornButton", button.Button)
 TeslaUnlatchDriverDoorButton = tesla_ble_vehicle_ns.class_("TeslaUnlatchDriverDoorButton", button.Button)
+TeslaReleaseChargeCableButton = tesla_ble_vehicle_ns.class_("TeslaReleaseChargeCableButton", button.Button)
 
 # Custom switch classes - generated via macro in C++, just reference here
 TeslaChargingSwitch = tesla_ble_vehicle_ns.class_("TeslaChargingSwitch", switch.Switch)
@@ -61,6 +62,9 @@ TeslaChargePortDoorCover = tesla_ble_vehicle_ns.class_("TeslaChargePortDoorCover
 
 # Custom climate class
 TeslaClimate = tesla_ble_vehicle_ns.class_("TeslaClimate", climate.Climate)
+
+# Custom select classes
+TeslaCabinOverheatSelect = tesla_ble_vehicle_ns.class_("TeslaCabinOverheatSelect", select.Select)
 
 # Custom number classes
 TeslaChargingAmpsNumber = tesla_ble_vehicle_ns.class_("TeslaChargingAmpsNumber", number.Number)
@@ -125,6 +129,7 @@ BINARY_SENSORS = [
     {"id": "asleep", "name": "Asleep", "icon": "mdi:sleep"},
     {"id": "user_present", "name": "User Present", "icon": "mdi:account-check", "device_class": "occupancy"},
     {"id": "charger", "name": "Charger", "icon": "mdi:power-plug", "device_class": "plug"},
+    {"id": "cabin_overheat_active", "name": "Cabin Overheat Active", "icon": "mdi:car-defrost-rear"},
     
     # Drive sensors
     {"id": "parking_brake", "name": "Parking Brake", "icon": "mdi:car-brake-parking"},
@@ -186,6 +191,7 @@ BUTTONS = [
     {"id": "force_update", "name": "Force data update", "class": TeslaForceUpdateButton, "setter": "set_force_update_button", "icon": "mdi:database-sync", "entity_category": "diagnostic"},
     # Unique actions (not part of combined entities)
     {"id": "unlatch_driver_door", "name": "Unlatch Driver Door", "class": TeslaUnlatchDriverDoorButton, "setter": None, "icon": "mdi:car-door", "disabled_by_default": True},
+    {"id": "release_charge_cable", "name": "Release Charge Cable", "class": TeslaReleaseChargeCableButton, "setter": None, "icon": "mdi:ev-plug-tesla"},
     # Vehicle controls
     {"id": "flash_lights", "name": "Flash Lights", "class": TeslaFlashLightsButton, "setter": None, "icon": "mdi:car-light-high"},
     {"id": "honk_horn", "name": "Sound Horn", "class": TeslaHonkHornButton, "setter": None, "icon": "mdi:bullhorn"},
@@ -195,6 +201,17 @@ SWITCHES = [
     {"id": "charging", "name": "Charger", "class": TeslaChargingSwitch, "setter": "set_charging_switch", "icon": "mdi:ev-station"},
     {"id": "steering_wheel_heat", "name": "Heated Steering", "class": TeslaSteeringWheelHeatSwitch, "setter": "set_steering_wheel_heat_switch", "icon": "mdi:steering"},
     {"id": "sentry_mode", "name": "Sentry Mode", "class": TeslaSentryModeSwitch, "setter": "set_sentry_mode_switch", "icon": "mdi:shield-car"},
+]
+
+SELECTS = [
+    {
+        "id": "cabin_overheat_protection",
+        "name": "Cabin Overheat Protection",
+        "class": TeslaCabinOverheatSelect,
+        "setter": "set_cabin_overheat_select",
+        "icon": "mdi:car-defrost-front",
+        "options": ["Off", "On", "Fan Only"],
+    },
 ]
 
 # Lock entities (combined sensor + control)
@@ -379,6 +396,14 @@ async def create_number(var, definition, config, vehicle_id, vehicle_name, devic
     return _attach(var, num, definition)
 
 
+async def create_select(var, definition, vehicle_id, vehicle_name, device_id=None):
+    """Create a select and register with TeslaBLEVehicle."""
+    config = _base_config(definition, definition["class"], "select", vehicle_id, vehicle_name, device_id)
+    sel = cg.new_Pvariable(config[CONF_ID])
+    await select.register_select(sel, config, options=definition["options"])
+    return _attach(var, sel, definition)
+
+
 async def create_lock(var, definition, vehicle_id, vehicle_name, device_id=None):
     """Create a lock and register with TeslaBLEVehicle."""
     config = _base_config(definition, definition["class"], "lock", vehicle_id, vehicle_name, device_id)
@@ -462,6 +487,7 @@ async def to_code(config):
         (TEXT_SENSORS, create_text_sensor),
         (BUTTONS, create_button),
         (SWITCHES, create_switch),
+        (SELECTS, create_select),
         (LOCKS, create_lock),
         (COVERS, create_cover),
     ):
