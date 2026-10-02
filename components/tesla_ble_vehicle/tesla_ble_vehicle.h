@@ -187,6 +187,8 @@ private:
     // Connection handlers
     void handle_connection_established();
     void handle_connection_lost();
+    void register_notify_();
+    void schedule_notify_retry_();
 
     // Adapters & Managers
     std::shared_ptr<BleAdapterImpl> ble_adapter_;
@@ -242,6 +244,9 @@ private:
     espbt::ESPBTUUID write_uuid_;
     uint16_t read_handle_{0};
     uint16_t write_handle_{0};
+    bool notify_ready_{false};
+    bool notify_registration_pending_{false};
+    static constexpr uint32_t NOTIFY_RETRY_MS = 500;
     uint32_t last_rssi_request_{0};
     int8_t latest_ble_rssi_{-127};
     static constexpr uint32_t RSSI_POLL_INTERVAL_MS = 10000;
