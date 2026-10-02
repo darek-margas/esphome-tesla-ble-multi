@@ -212,9 +212,11 @@ void TeslaBLEVehicle::update() {
   // Do not add background polls while it is waiting for the card approval
   // response. Existing commands are left untouched; no BLE reset is done.
   if (pairing_in_progress_) {
-    if (static_cast<uint32_t>(now - pairing_started_ms_) < PAIRING_POLL_PAUSE_MS)
+    const uint32_t pairing_age = static_cast<uint32_t>(now - pairing_started_ms_);
+    if (pairing_age < PAIRING_POLL_PAUSE_MS)
       return;
-    pairing_in_progress_ = false;
+    if (pairing_age >= PAIRING_REQUEST_GUARD_MS)
+      pairing_in_progress_ = false;
   }
 
   // VCSEC Polling
@@ -615,6 +617,16 @@ int TeslaBLEVehicle::start_pairing() {
     return -1;
   }
 
+  const uint32_t now = millis();
+  if (pairing_in_progress_) {
+    const uint32_t pairing_age = static_cast<uint32_t>(now - pairing_started_ms_);
+    if (pairing_age < PAIRING_REQUEST_GUARD_MS) {
+      ESP_LOGI(TAG, "Pairing already requested - present NFC card on reader");
+      return 0;
+    }
+    pairing_in_progress_ = false;
+  }
+
   Keys_Role role_enum = Keys_Role_ROLE_OWNER;
   if (role_ == "DRIVER") {
     role_enum = Keys_Role_ROLE_DRIVER;
@@ -637,7 +649,7 @@ int TeslaBLEVehicle::start_pairing() {
   }
 
   pairing_in_progress_ = true;
-  pairing_started_ms_ = millis();
+  pairing_started_ms_ = now;
 
   vehicle_->send_command(
       UniversalMessage_Domain_DOMAIN_VEHICLE_SECURITY, "Whitelist Add Key",
