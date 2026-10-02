@@ -658,17 +658,21 @@ void TeslaBLEVehicle::send_command_with_tracking(
     return;
   }
 
-  if (domain == UniversalMessage_Domain_DOMAIN_INFOTAINMENT &&
-      !try_acquire_infotainment_slot_()) {
-    auto deferred_builder = std::make_shared<
-        std::function<int(TeslaBLE::Client *, uint8_t *, size_t *)>>(std::move(builder));
-    auto deferred_result = std::make_shared<std::function<void(bool)>>(std::move(on_result));
-    this->set_timeout(("interactive-" + name).c_str(), USER_COMMAND_QUIET_MS,
-      [this, domain, name, deferred_builder, wake_policy, deferred_result]() mutable {
-        send_command_with_tracking(domain, name, std::move(*deferred_builder), wake_policy,
-                                   std::move(*deferred_result));
-      });
-    return;
+  if (domain == UniversalMessage_Domain_DOMAIN_INFOTAINMENT) {
+    // Interactive infotainment actions must not overlap any existing logical
+    // infotainment transaction, including this vehicle's own background poll.
+    if (global_infotainment_owner_ != nullptr) {
+      auto deferred_builder = std::make_shared<
+          std::function<int(TeslaBLE::Client *, uint8_t *, size_t *)>>(std::move(builder));
+      auto deferred_result = std::make_shared<std::function<void(bool)>>(std::move(on_result));
+      this->set_timeout(("interactive-" + name).c_str(), USER_COMMAND_QUIET_MS,
+        [this, domain, name, deferred_builder, wake_policy, deferred_result]() mutable {
+          send_command_with_tracking(domain, name, std::move(*deferred_builder), wake_policy,
+                                     std::move(*deferred_result));
+        });
+      return;
+    }
+    global_infotainment_owner_ = this;
   }
 
   if (user_commands_in_flight_ < 255) ++user_commands_in_flight_;
