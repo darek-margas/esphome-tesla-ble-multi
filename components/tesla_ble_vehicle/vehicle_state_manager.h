@@ -123,6 +123,7 @@ public:
     void republish_charging_amps();
     void republish_charging_limit();
     void update_charger_connected(bool connected);
+    void update_ble_rssi(float rssi);
     
     // ==========================================================================
     // Connection state management
