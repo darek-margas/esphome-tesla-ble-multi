@@ -4,6 +4,7 @@
 #include <map>
 #include <string>
 #include <functional>
+#include <deque>
 #include <esphome/components/esp32_ble_client/ble_client_base.h>
 #include <esphome/components/esp32_ble_tracker/esp32_ble_tracker.h>
 #include <esphome/components/binary_sensor/binary_sensor.h>
@@ -211,10 +212,17 @@ private:
     // starts five logical commands at once; on ESP32 that can congest GATT,
     // especially with two cars. Keep only one background infotainment command
     // active per vehicle and leave room for user commands.
-    // One logical infotainment transaction owner across all TeslaBLEVehicle
-    // instances. This sits above the global fragment writer: authentication,
-    // polling and actions from two cars must not overlap either.
+    struct InfotainmentWorkItem {
+      TeslaBLEVehicle *vehicle;
+      std::function<void()> start;
+      bool interactive;
+    };
+
+    // One logical infotainment transaction globally. Pending work is queued,
+    // which prevents the first-created BLE client from repeatedly winning a
+    // free-slot race. Interactive work is ordered ahead of background polls.
     static TeslaBLEVehicle *global_infotainment_owner_;
+    static std::deque<InfotainmentWorkItem> global_infotainment_queue_;
 
     bool infotainment_sequence_active_{false};
     uint8_t infotainment_sequence_step_{0};
@@ -225,8 +233,9 @@ private:
     void start_infotainment_sequence_(TeslaBLE::WakePolicy policy, uint32_t delay_ms = 0);
     void run_infotainment_sequence_step_();
     void finish_infotainment_sequence_();
-    bool try_acquire_infotainment_slot_();
+    void enqueue_infotainment_work_(std::function<void()> start, bool interactive);
     void release_infotainment_slot_();
+    void cancel_queued_infotainment_work_();
 
     TeslaBLEClient *ble_client_{nullptr};
 
