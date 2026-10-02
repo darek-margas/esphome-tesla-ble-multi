@@ -254,6 +254,20 @@ void TeslaBLEVehicle::update() {
 }
 
 
+bool TeslaBLEVehicle::try_acquire_infotainment_slot_() {
+  if (global_infotainment_owner_ == nullptr || global_infotainment_owner_ == this) {
+    global_infotainment_owner_ = this;
+    return true;
+  }
+  return false;
+}
+
+void TeslaBLEVehicle::release_infotainment_slot_() {
+  if (global_infotainment_owner_ == this) {
+    global_infotainment_owner_ = nullptr;
+  }
+}
+
 void TeslaBLEVehicle::start_infotainment_sequence_(TeslaBLE::WakePolicy policy, uint32_t delay_ms) {
   if (!vehicle_ || !vehicle_->is_connected()) return;
   if (infotainment_sequence_active_) {
@@ -266,6 +280,12 @@ void TeslaBLEVehicle::start_infotainment_sequence_(TeslaBLE::WakePolicy policy, 
   infotainment_sequence_policy_ = policy;
 
   this->set_timeout("infotainment-sequence", delay_ms, [this]() {
+    if (!try_acquire_infotainment_slot_()) {
+      this->set_timeout("infotainment-sequence", USER_COMMAND_QUIET_MS, [this]() {
+        run_infotainment_sequence_step_();
+      });
+      return;
+    }
     run_infotainment_sequence_step_();
   });
 }
@@ -273,11 +293,19 @@ void TeslaBLEVehicle::start_infotainment_sequence_(TeslaBLE::WakePolicy policy, 
 void TeslaBLEVehicle::finish_infotainment_sequence_() {
   infotainment_sequence_active_ = false;
   infotainment_sequence_step_ = 0;
+  release_infotainment_slot_();
 }
 
 void TeslaBLEVehicle::run_infotainment_sequence_step_() {
   if (!infotainment_sequence_active_ || !vehicle_ || !vehicle_->is_connected()) {
     finish_infotainment_sequence_();
+    return;
+  }
+
+  if (!try_acquire_infotainment_slot_()) {
+    this->set_timeout("infotainment-sequence", USER_COMMAND_QUIET_MS, [this]() {
+      run_infotainment_sequence_step_();
+    });
     return;
   }
 
@@ -628,11 +656,26 @@ void TeslaBLEVehicle::send_command_with_tracking(
     return;
   }
 
+  if (domain == UniversalMessage_Domain_DOMAIN_INFOTAINMENT &&
+      !try_acquire_infotainment_slot_()) {
+    auto deferred_builder = std::make_shared<
+        std::function<int(TeslaBLE::Client *, uint8_t *, size_t *)>>(std::move(builder));
+    auto deferred_result = std::make_shared<std::function<void(bool)>>(std::move(on_result));
+    this->set_timeout(("interactive-" + name).c_str(), USER_COMMAND_QUIET_MS,
+      [this, domain, name, deferred_builder, wake_policy, deferred_result]() mutable {
+        send_command_with_tracking(domain, name, std::move(*deferred_builder), wake_policy,
+                                   std::move(*deferred_result));
+      });
+    return;
+  }
+
   if (user_commands_in_flight_ < 255) ++user_commands_in_flight_;
   vehicle_->send_command_result(
       domain, name, std::move(builder),
-      [this, name, on_result = std::move(on_result)](TeslaBLE::OperationResult result) {
+      [this, domain, name, on_result = std::move(on_result)](TeslaBLE::OperationResult result) {
         if (user_commands_in_flight_ > 0) --user_commands_in_flight_;
+        if (domain == UniversalMessage_Domain_DOMAIN_INFOTAINMENT)
+          release_infotainment_slot_();
         const bool succeeded = result.is_success();
         handle_command_result(name, std::move(result));
         if (on_result) on_result(succeeded);
@@ -1257,6 +1300,7 @@ void TeslaBLEVehicle::handle_connection_lost() {
   });
 
   this->cancel_timeout("infotainment-sequence");
+  release_infotainment_slot_();
   infotainment_sequence_active_ = false;
   infotainment_sequence_step_ = 0;
   user_commands_in_flight_ = 0;
