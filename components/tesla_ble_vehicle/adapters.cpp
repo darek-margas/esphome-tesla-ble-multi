@@ -92,7 +92,7 @@ void BleAdapterImpl::process_write_queue() {
         global_write_owner_ = this;
     } else {
         write_retry_policy_.on_failure(millis());
-        global_next_write_ms_ = millis() + CONGESTION_GAP_MS;
+        global_next_write_ms_ = millis() + std::max<uint32_t>(CONGESTION_GAP_MS, parent_->ble_write_gap_ms());
         ESP_LOGW(ADAPTER_TAG, "BLE write submit failed: %s", esp_err_to_name(err));
     }
 }
@@ -105,7 +105,7 @@ void BleAdapterImpl::on_write_complete(esp_gatt_status_t status) {
     if (status == ESP_GATT_OK) {
         if (!write_queue_.empty()) write_queue_.pop();
         write_retry_policy_.on_success(millis());
-        global_next_write_ms_ = millis() + SUCCESS_GAP_MS;
+        global_next_write_ms_ = millis() + parent_->ble_write_gap_ms();
         return;
     }
 
@@ -113,7 +113,7 @@ void BleAdapterImpl::on_write_complete(esp_gatt_status_t status) {
     // especially important for ESP_GATT_CONGESTED: dropping a Tesla frame
     // fragment corrupts the complete protobuf message.
     write_retry_policy_.on_failure(millis());
-    global_next_write_ms_ = millis() + CONGESTION_GAP_MS;
+    global_next_write_ms_ = millis() + std::max<uint32_t>(CONGESTION_GAP_MS, parent_->ble_write_gap_ms());
     ESP_LOGW(ADAPTER_TAG, "BLE write completion failed: %d", status);
 }
 
