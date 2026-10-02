@@ -187,6 +187,14 @@ void TeslaBLEVehicle::loop() {
   if (ble_adapter_)
     ble_adapter_->process_write_queue();
 
+  if (is_connected() && ble_client_ != nullptr) {
+    const uint32_t now = millis();
+    if (now - last_rssi_request_ >= RSSI_POLL_INTERVAL_MS) {
+      last_rssi_request_ = now;
+      esp_ble_gap_read_rssi(ble_client_->get_remote_bda());
+    }
+  }
+
   // Detect wedged links. Two flavours:
   //  - GATT established but the Vehicle reports disconnected (e.g. after the
   //    library's auth-stuck watchdog reset session state)
@@ -1220,6 +1228,13 @@ void TeslaBLEVehicle::close_windows() {
       });
 }
 
+void TeslaBLEVehicle::update_ble_rssi(int8_t rssi) {
+  if (state_manager_ != nullptr) {
+    auto *sensor = state_manager_->get_sensor("ble_rssi");
+    if (sensor != nullptr) sensor->publish_state(static_cast<float>(rssi));
+  }
+}
+
 bool TeslaBLEVehicle::is_connected() const {
   return ble_client_ != nullptr && ble_client_->state() == espbt::ClientState::ESTABLISHED;
 }
@@ -1232,6 +1247,16 @@ bool TeslaBLEClient::gattc_event_handler(esp_gattc_cb_event_t event,
   if (vehicle_ != nullptr)
     vehicle_->gattc_event_handler(event, gattc_if, param);
   return true;
+}
+
+void TeslaBLEClient::gap_event_handler(esp_gap_ble_cb_event_t event,
+                                        esp_ble_gap_cb_param_t *param) {
+  esp32_ble_client::BLEClientBase::gap_event_handler(event, param);
+  if (vehicle_ == nullptr || event != ESP_GAP_BLE_READ_RSSI_COMPLETE_EVT) return;
+  if (!this->check_addr(param->read_rssi_cmpl.remote_addr)) return;
+  if (param->read_rssi_cmpl.status == ESP_BT_STATUS_SUCCESS) {
+    vehicle_->update_ble_rssi(param->read_rssi_cmpl.rssi);
+  }
 }
 
 // =============================================================================
