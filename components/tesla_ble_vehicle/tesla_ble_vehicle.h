@@ -207,6 +207,20 @@ private:
     InfotainmentPollPolicy poll_policy_;
     ConnectionResetPolicy connection_reset_policy_;
 
+    // Sequential infotainment polling. TeslaBLE::Vehicle::infotainment_poll()
+    // starts five logical commands at once; on ESP32 that can congest GATT,
+    // especially with two cars. Keep only one background infotainment command
+    // active per vehicle and leave room for user commands.
+    bool infotainment_sequence_active_{false};
+    uint8_t infotainment_sequence_step_{0};
+    TeslaBLE::WakePolicy infotainment_sequence_policy_{TeslaBLE::WakePolicy::NO_WAKE_SKIP};
+    uint8_t user_commands_in_flight_{0};
+    static constexpr uint32_t INFOTAINMENT_STEP_GAP_MS = 150;
+    static constexpr uint32_t USER_COMMAND_QUIET_MS = 250;
+    void start_infotainment_sequence_(TeslaBLE::WakePolicy policy, uint32_t delay_ms = 0);
+    void run_infotainment_sequence_step_();
+    void finish_infotainment_sequence_();
+
     TeslaBLEClient *ble_client_{nullptr};
 
     // BLE state
