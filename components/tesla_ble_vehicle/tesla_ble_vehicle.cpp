@@ -309,6 +309,12 @@ void TeslaBLEVehicle::enqueue_infotainment_work_(std::function<void()> start, bo
   }
 }
 
+void TeslaBLEVehicle::defer_release_infotainment_slot_() {
+  this->set_timeout("release-infotainment-slot", 0, [this]() {
+    release_infotainment_slot_();
+  });
+}
+
 void TeslaBLEVehicle::release_infotainment_slot_() {
   if (global_infotainment_owner_ == this) {
     global_infotainment_owner_ = nullptr;
@@ -374,7 +380,6 @@ void TeslaBLEVehicle::enqueue_poll_job_(const char *name, int32_t data_type,
               }
 
               const bool poisoned = failed && is_poisoned_infotainment_error_(error);
-              release_infotainment_slot_();
 
               if (poisoned && retry_attempt < POLL_JOB_MAX_RETRIES) {
                 pending_poll_recovery_ = true;
@@ -388,6 +393,8 @@ void TeslaBLEVehicle::enqueue_poll_job_(const char *name, int32_t data_type,
                 if (ble_client_ != nullptr) ble_client_->disconnect();
                 return;
               }
+
+              defer_release_infotainment_slot_();
 
               if (failed && retry_attempt < POLL_JOB_MAX_RETRIES) {
                 const std::string retry_timer =
@@ -745,7 +752,7 @@ void TeslaBLEVehicle::send_command_with_tracking(
               domain, name, std::move(*queued_builder),
               [this, name, queued_result](TeslaBLE::OperationResult result) mutable {
                 if (user_commands_in_flight_ > 0) --user_commands_in_flight_;
-                release_infotainment_slot_();
+                defer_release_infotainment_slot_();
                 const bool succeeded = result.is_success();
                 handle_command_result(name, std::move(result));
                 if (*queued_result) (*queued_result)(succeeded);
@@ -1456,6 +1463,7 @@ void TeslaBLEVehicle::handle_connection_lost() {
 
   this->cancel_timeout("infotainment-batch");
   this->cancel_timeout("tesla-notify-retry");
+  this->cancel_timeout("release-infotainment-slot");
   notify_ready_ = false;
   notify_registration_pending_ = false;
   cancel_queued_infotainment_work_();
