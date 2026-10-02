@@ -336,6 +336,17 @@ void TeslaBLEVehicle::cancel_queued_infotainment_work_() {
   }
 }
 
+bool TeslaBLEVehicle::is_poisoned_infotainment_error_(const TeslaBLE::CommandError *error) const {
+  if (error == nullptr) return false;
+  const std::string &msg = error->message();
+  return msg.find("authentication failed") != std::string::npos ||
+         msg.find("session stale") != std::string::npos ||
+         msg.find("session expired") != std::string::npos ||
+         msg.find("invalid signature") != std::string::npos ||
+         msg.find("Command step timeout") != std::string::npos ||
+         msg.find("auth response timeout") != std::string::npos;
+}
+
 void TeslaBLEVehicle::enqueue_poll_job_(const char *name, int32_t data_type,
                                              TeslaBLE::WakePolicy policy,
                                              uint8_t retry_attempt) {
@@ -354,13 +365,27 @@ void TeslaBLEVehicle::enqueue_poll_job_(const char *name, int32_t data_type,
             },
             [this, name, data_type, policy, retry_attempt](TeslaBLE::OperationResult result) {
               const bool failed = !result.is_success() && !result.is_skipped();
+              const TeslaBLE::CommandError *error = failed ? result.error() : nullptr;
               if (failed) {
-                const TeslaBLE::CommandError *error = result.error();
                 ESP_LOGW(TAG, "%s failed: %s", name.c_str(),
                          error != nullptr ? error->message().c_str() : "unknown error");
               }
 
+              const bool poisoned = failed && is_poisoned_infotainment_error_(error);
               release_infotainment_slot_();
+
+              if (poisoned && retry_attempt < POLL_JOB_MAX_RETRIES) {
+                pending_poll_recovery_ = true;
+                pending_poll_recovery_name_ = name;
+                pending_poll_recovery_data_type_ = data_type;
+                pending_poll_recovery_policy_ = policy;
+                pending_poll_recovery_attempt_ = static_cast<uint8_t>(retry_attempt + 1);
+                ESP_LOGW(TAG, "%s poisoned infotainment session - reconnecting before retry",
+                         name.c_str());
+                cancel_queued_infotainment_work_();
+                if (ble_client_ != nullptr) ble_client_->disconnect();
+                return;
+              }
 
               if (failed && retry_attempt < POLL_JOB_MAX_RETRIES) {
                 const std::string retry_timer =
@@ -1393,7 +1418,22 @@ void TeslaBLEVehicle::handle_connection_established() {
     vehicle_->set_connected(true);
     ESP_LOGI(TAG, "Connection established - triggering initial polls");
     vehicle_->vcsec_poll();
-    enqueue_poll_batch_(TeslaBLE::WakePolicy::WAKE_IF_NEEDED, 750);
+
+    if (pending_poll_recovery_) {
+      const std::string recovery_name = pending_poll_recovery_name_;
+      const int32_t recovery_data_type = pending_poll_recovery_data_type_;
+      const TeslaBLE::WakePolicy recovery_policy = pending_poll_recovery_policy_;
+      const uint8_t recovery_attempt = pending_poll_recovery_attempt_;
+      pending_poll_recovery_ = false;
+      ESP_LOGI(TAG, "Retrying %s after fresh reconnect (%u/%u)",
+               recovery_name.c_str(), static_cast<unsigned>(recovery_attempt),
+               static_cast<unsigned>(POLL_JOB_MAX_RETRIES));
+      enqueue_poll_job_(recovery_name.c_str(), recovery_data_type, recovery_policy,
+                        recovery_attempt);
+      enqueue_poll_batch_(TeslaBLE::WakePolicy::WAKE_IF_NEEDED, 2500);
+    } else {
+      enqueue_poll_batch_(TeslaBLE::WakePolicy::WAKE_IF_NEEDED, 750);
+    }
     last_vcsec_poll_ = millis();
     poll_policy_.on_poll(millis());
     poll_policy_.reset();
