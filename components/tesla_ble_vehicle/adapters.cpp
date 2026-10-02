@@ -20,7 +20,7 @@ void BleAdapterImpl::connect(const std::string& address) {
 
 void BleAdapterImpl::disconnect() {
     if (parent_) {
-        parent_->parent()->disconnect();
+        if (parent_->ble_client() != nullptr) parent_->ble_client()->disconnect();
     }
 }
 
@@ -62,7 +62,7 @@ void BleAdapterImpl::process_write_queue() {
 
     BLETXChunk& chunk = write_queue_.front();
 
-    auto* client = parent_->parent();
+    auto* client = parent_->ble_client();
     int gattc_if = client->get_gattc_if();
     uint16_t conn_id = client->get_conn_id();
     uint16_t handle = parent_->get_write_handle(); // Need public getter on Vehicle
@@ -95,11 +95,16 @@ void BleAdapterImpl::clear_queues() {
 
 // --- StorageAdapterImpl ---
 
-StorageAdapterImpl::StorageAdapterImpl() : storage_handle_(0), initialized_(false) {}
+StorageAdapterImpl::StorageAdapterImpl(const std::string& storage_namespace)
+    : global_handle_(0), session_handle_(0), initialized_(false),
+      storage_namespace_(storage_namespace) {}
 
 StorageAdapterImpl::~StorageAdapterImpl() {
-    if (storage_handle_ != 0) {
-        nvs_close(storage_handle_);
+    if (global_handle_ != 0) {
+        nvs_close(global_handle_);
+    }
+    if (session_handle_ != 0) {
+        nvs_close(session_handle_);
     }
 }
 
@@ -130,17 +135,30 @@ bool StorageAdapterImpl::initialize() {
         return false;
     }
     
-    err = nvs_open("storage", NVS_READWRITE, &storage_handle_);
+    // Keep the Tesla private key in the legacy global namespace so one ESP
+    // identity can be paired with multiple vehicles and existing keys migrate
+    // without regeneration.
+    err = nvs_open("storage", NVS_READWRITE, &global_handle_);
     if (err != ESP_OK) return false;
-    
+
+    // Session blobs are vehicle-specific and must never be shared across VINs.
+    err = nvs_open(storage_namespace_.c_str(), NVS_READWRITE, &session_handle_);
+    if (err != ESP_OK) {
+        nvs_close(global_handle_);
+        global_handle_ = 0;
+        return false;
+    }
+
     initialized_ = true;
     return true;
 }
 
 const char* StorageAdapterImpl::map_key(const std::string& key) {
+    // The private key stays global so one ESP identity can be paired to
+    // multiple vehicles. Session state is per vehicle via the NVS namespace.
     if (key == "session_vcsec") return "tk_vcsec";
-    if (key == "session_infotainment") return "tk_infotainment";
-    if (key == "private_key") return "private_key"; // Unchanged
+    if (key == "session_infotainment") return "tk_info";
+    if (key == "private_key") return "private_key";
     return nullptr;
 }
 
@@ -150,12 +168,13 @@ bool StorageAdapterImpl::load(const std::string& key, std::vector<uint8_t>& buff
     const char* nvs_key = map_key(key);
     if (!nvs_key) return false;
     
+    nvs_handle_t handle = key == "private_key" ? global_handle_ : session_handle_;
     size_t required_size = 0;
-    esp_err_t err = nvs_get_blob(storage_handle_, nvs_key, nullptr, &required_size);
+    esp_err_t err = nvs_get_blob(handle, nvs_key, nullptr, &required_size);
     if (err != ESP_OK || required_size == 0) return false;
     
     buffer.resize(required_size);
-    err = nvs_get_blob(storage_handle_, nvs_key, buffer.data(), &required_size);
+    err = nvs_get_blob(handle, nvs_key, buffer.data(), &required_size);
     return err == ESP_OK;
 }
 
@@ -165,10 +184,11 @@ bool StorageAdapterImpl::save(const std::string& key, const std::vector<uint8_t>
     const char* nvs_key = map_key(key);
     if (!nvs_key) return false;
     
-    esp_err_t err = nvs_set_blob(storage_handle_, nvs_key, buffer.data(), buffer.size());
+    nvs_handle_t handle = key == "private_key" ? global_handle_ : session_handle_;
+    esp_err_t err = nvs_set_blob(handle, nvs_key, buffer.data(), buffer.size());
     if (err != ESP_OK) return false;
-    
-    return nvs_commit(storage_handle_) == ESP_OK;
+
+    return nvs_commit(handle) == ESP_OK;
 }
 
 bool StorageAdapterImpl::remove(const std::string& key) {
@@ -177,8 +197,9 @@ bool StorageAdapterImpl::remove(const std::string& key) {
     const char* nvs_key = map_key(key);
     if (!nvs_key) return false;
     
-    esp_err_t err = nvs_erase_key(storage_handle_, nvs_key);
-    return (err == ESP_OK) && (nvs_commit(storage_handle_) == ESP_OK);
+    nvs_handle_t handle = key == "private_key" ? global_handle_ : session_handle_;
+    esp_err_t err = nvs_erase_key(handle, nvs_key);
+    return (err == ESP_OK) && (nvs_commit(handle) == ESP_OK);
 }
 
 } // namespace tesla_ble_vehicle

@@ -1,6 +1,7 @@
 import esphome.codegen as cg
 import esphome.config_validation as cv
-from esphome.components import ble_client, binary_sensor, button, switch, number, sensor, text_sensor, lock, cover, climate
+from esphome.components import esp32_ble, esp32_ble_client, esp32_ble_tracker, binary_sensor, button, switch, number, sensor, text_sensor, lock, cover, climate
+from esphome.components.esp32_ble import BTLoggers
 from esphome.const import (
     CONF_ACCURACY_DECIMALS,
     CONF_DEVICE_CLASS,
@@ -9,6 +10,7 @@ from esphome.const import (
     CONF_FORCE_UPDATE,
     CONF_ICON,
     CONF_ID,
+    CONF_MAC_ADDRESS,
     CONF_MODE,
     CONF_NAME,
     CONF_RESTORE_MODE,
@@ -19,12 +21,16 @@ from esphome import automation
 
 
 CODEOWNERS = ["@yoziru"]
-DEPENDENCIES = ["ble_client"]
-AUTO_LOAD = ["binary_sensor", "button", "switch", "number", "sensor", "text_sensor", "lock", "cover", "climate"]
+DEPENDENCIES = ["esp32_ble_tracker"]
+AUTO_LOAD = ["esp32_ble_client", "binary_sensor", "button", "switch", "number", "sensor", "text_sensor", "lock", "cover", "climate"]
+MULTI_CONF = True
 
 tesla_ble_vehicle_ns = cg.esphome_ns.namespace("tesla_ble_vehicle")
+TeslaBLEClient = tesla_ble_vehicle_ns.class_(
+    "TeslaBLEClient", esp32_ble_client.BLEClientBase
+)
 TeslaBLEVehicle = tesla_ble_vehicle_ns.class_(
-    "TeslaBLEVehicle", cg.PollingComponent, ble_client.BLEClientNode
+    "TeslaBLEVehicle", cg.PollingComponent
 )
 
 # Custom button classes - generated via macro in C++, just reference here
@@ -70,6 +76,8 @@ SetChargingLimitAction = tesla_ble_vehicle_ns.class_("SetChargingLimitAction", a
 
 # Configuration constants
 CONF_VIN = "vin"
+CONF_BLE_MAC_ADDRESS = "ble_mac_address"
+CONF_INTERNAL_BLE_CLIENT_ID = "internal_ble_client_id"
 CONF_CHARGING_AMPS_MAX = "charging_amps_max"
 DEFAULT_CHARGING_AMPS_MAX = 32
 CONF_ROLE = "role"
@@ -243,7 +251,10 @@ CONFIG_SCHEMA = (
     cv.Schema(
         {
             cv.GenerateID(CONF_ID): cv.declare_id(TeslaBLEVehicle),
+            cv.GenerateID(CONF_INTERNAL_BLE_CLIENT_ID): cv.declare_id(TeslaBLEClient),
+            cv.Required(CONF_NAME): cv.string,
             cv.Required(CONF_VIN): cv.string,
+            cv.Required(CONF_BLE_MAC_ADDRESS): cv.mac_address,
             cv.Optional(CONF_CHARGING_AMPS_MAX, default=DEFAULT_CHARGING_AMPS_MAX): cv.int_range(min=1, max=48),
             cv.Optional(CONF_ROLE, default="DRIVER"): cv.enum(TESLA_ROLES, upper=True),
             # Polling intervals (in seconds)
@@ -254,7 +265,7 @@ CONFIG_SCHEMA = (
         },
     )
     .extend(cv.polling_component_schema("10s"))
-    .extend(ble_client.BLE_CLIENT_SCHEMA)
+    .extend(esp32_ble_tracker.ESP_BLE_DEVICE_SCHEMA)
 )
 
 
@@ -269,10 +280,10 @@ def get_device_class_const(component_module, device_class_str):
     return getattr(component_module, f"DEVICE_CLASS_{device_class_str.upper()}", None)
 
 
-def _base_config(definition, id_type, suffix):
+def _base_config(definition, id_type, suffix, vehicle_id, vehicle_name):
     config = {
-        CONF_ID: cv.declare_id(id_type)(f"tesla_{definition['id']}_{suffix}"),
-        CONF_NAME: definition["name"],
+        CONF_ID: cv.declare_id(id_type)(f"{vehicle_id}_{definition['id']}_{suffix}"),
+        CONF_NAME: f"{vehicle_name} {definition['name']}",
         CONF_DISABLED_BY_DEFAULT: definition.get("disabled_by_default", False),
     }
     if "icon" in definition:
@@ -297,19 +308,19 @@ def _attach(var, entity, definition):
     return entity
 
 
-async def create_binary_sensor(var, definition):
+async def create_binary_sensor(var, definition, vehicle_id, vehicle_name):
     """Create a binary sensor and register with TeslaBLEVehicle using generic setter."""
     config = _with_device_class(
-        _base_config(definition, binary_sensor.BinarySensor, "sensor"),
+        _base_config(definition, binary_sensor.BinarySensor, "sensor", vehicle_id, vehicle_name),
         binary_sensor, definition)
     sens = await binary_sensor.new_binary_sensor(config)
     cg.add(var.set_binary_sensor(definition["id"], sens))
     return sens
 
 
-async def create_sensor(var, definition):
+async def create_sensor(var, definition, vehicle_id, vehicle_name):
     """Create a sensor and register with TeslaBLEVehicle using generic setter."""
-    config = _base_config(definition, sensor.Sensor, "sensor")
+    config = _base_config(definition, sensor.Sensor, "sensor", vehicle_id, vehicle_name)
     config[CONF_FORCE_UPDATE] = False
     if "unit" in definition:
         config[CONF_UNIT_OF_MEASUREMENT] = definition["unit"]
@@ -321,9 +332,9 @@ async def create_sensor(var, definition):
     return sens
 
 
-async def create_text_sensor(var, definition):
+async def create_text_sensor(var, definition, vehicle_id, vehicle_name):
     """Create a text sensor and register with TeslaBLEVehicle using generic setter."""
-    config = _base_config(definition, text_sensor.TextSensor, "sensor")
+    config = _base_config(definition, text_sensor.TextSensor, "sensor", vehicle_id, vehicle_name)
     config[CONF_FORCE_UPDATE] = False
     sens = await text_sensor.new_text_sensor(config)
     if definition.get("setter"):
@@ -333,25 +344,25 @@ async def create_text_sensor(var, definition):
     return sens
 
 
-async def create_button(var, definition):
+async def create_button(var, definition, vehicle_id, vehicle_name):
     """Create a button and register with TeslaBLEVehicle."""
     return _attach(var, await button.new_button(
-        _base_config(definition, definition["class"], "button")), definition)
+        _base_config(definition, definition["class"], "button", vehicle_id, vehicle_name)), definition)
 
 
-async def create_switch(var, definition):
+async def create_switch(var, definition, vehicle_id, vehicle_name):
     """Create a switch and register with TeslaBLEVehicle."""
-    config = _base_config(definition, definition["class"], "switch")
+    config = _base_config(definition, definition["class"], "switch", vehicle_id, vehicle_name)
     config[CONF_RESTORE_MODE] = switch.RESTORE_MODES['RESTORE_DEFAULT_OFF']
     return _attach(var, await switch.new_switch(config), definition)
 
 
-async def create_number(var, definition, config):
+async def create_number(var, definition, config, vehicle_id, vehicle_name):
     """Create a number and register with TeslaBLEVehicle."""
     max_val = definition["max"]
     if max_val == "config":
         max_val = config.get(CONF_CHARGING_AMPS_MAX, DEFAULT_CHARGING_AMPS_MAX)
-    num_config = _base_config(definition, definition["class"], "number")
+    num_config = _base_config(definition, definition["class"], "number", vehicle_id, vehicle_name)
     num_config[CONF_MODE] = number.NUMBER_MODES['AUTO']
     if "unit" in definition:
         num_config[CONF_UNIT_OF_MEASUREMENT] = definition["unit"]
@@ -364,17 +375,17 @@ async def create_number(var, definition, config):
     return _attach(var, num, definition)
 
 
-async def create_lock(var, definition):
+async def create_lock(var, definition, vehicle_id, vehicle_name):
     """Create a lock and register with TeslaBLEVehicle."""
-    config = _base_config(definition, definition["class"], "lock")
+    config = _base_config(definition, definition["class"], "lock", vehicle_id, vehicle_name)
     lck = cg.new_Pvariable(config[CONF_ID])
     await lock.register_lock(lck, config)
     return _attach(var, lck, definition)
 
 
-async def create_cover(var, definition):
+async def create_cover(var, definition, vehicle_id, vehicle_name):
     """Create a cover and register with TeslaBLEVehicle."""
-    config = _base_config(definition, definition["class"], "cover")
+    config = _base_config(definition, definition["class"], "cover", vehicle_id, vehicle_name)
     if "device_class" in definition:
         config[CONF_DEVICE_CLASS] = definition["device_class"]
     cvr = cg.new_Pvariable(config[CONF_ID])
@@ -382,10 +393,10 @@ async def create_cover(var, definition):
     return _attach(var, cvr, definition)
 
 
-async def create_climate_entity(var, definition):
+async def create_climate_entity(var, definition, vehicle_id, vehicle_name):
     """Create a climate entity and register with TeslaBLEVehicle."""
     from esphome.components.climate import CONF_VISUAL
-    config = _base_config(definition, definition["class"], "climate")
+    config = _base_config(definition, definition["class"], "climate", vehicle_id, vehicle_name)
     config.update({CONF_VISUAL: {}, CONF_ACCURACY_DECIMALS: 1})
     clm = cg.new_Pvariable(config[CONF_ID])
     await climate.register_climate(clm, config)
@@ -397,12 +408,33 @@ async def create_climate_entity(var, definition):
 # =============================================================================
 
 async def to_code(config):
+    # Tesla owns a private low-level BLE client. Using esp32_ble_client directly
+    # avoids requiring a user-visible top-level ble_client: entry.
+    esp32_ble.register_bt_logger(BTLoggers.GATT, BTLoggers.SMP)
+    cg.add_define("USE_ESP32_BLE_UUID")
+
     var = cg.new_Pvariable(config[CONF_ID])
     await cg.register_component(var, config)
-    await ble_client.register_ble_node(var, config)
+
+    ble_component_config = {
+        CONF_ID: config[CONF_INTERNAL_BLE_CLIENT_ID],
+    }
+    ble_tracker_config = {
+        esp32_ble_tracker.CONF_ESP32_BLE_ID: config[esp32_ble_tracker.CONF_ESP32_BLE_ID],
+    }
+
+    ble_var = cg.new_Pvariable(config[CONF_INTERNAL_BLE_CLIENT_ID])
+    await cg.register_component(ble_var, ble_component_config)
+    await esp32_ble_tracker.register_client(ble_var, ble_tracker_config)
+    cg.add(ble_var.set_address(config[CONF_BLE_MAC_ADDRESS].as_hex))
+    cg.add(ble_var.set_auto_connect(True))
+    cg.add(ble_var.set_vehicle(var))
+    cg.add(var.set_ble_client(ble_var))
 
     cg.add(var.set_vin(config[CONF_VIN]))
     
+    vehicle_id = str(config[CONF_ID])
+    vehicle_name = config[CONF_NAME]
     role = config[CONF_ROLE]
     charging_amps_max = config[CONF_CHARGING_AMPS_MAX]
     vcsec_interval_seconds = config[CONF_VCSEC_POLL_INTERVAL]
@@ -429,12 +461,12 @@ async def to_code(config):
         (COVERS, create_cover),
     ):
         for definition in creators[0]:
-            await creators[1](var, definition)
+            await creators[1](var, definition, vehicle_id, vehicle_name)
 
     for definition in NUMBERS:
-        await create_number(var, definition, config)
+        await create_number(var, definition, config, vehicle_id, vehicle_name)
 
-    await create_climate_entity(var, CLIMATE)
+    await create_climate_entity(var, CLIMATE, vehicle_id, vehicle_name)
 
 
 # =============================================================================

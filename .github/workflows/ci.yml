@@ -26,6 +26,8 @@ jobs:
           - tesla-ble-esp32-generic.yml
           - tesla-ble-m5stack-atoms3.yml
           - tesla-ble-m5stack-nanoc6.yml
+          - multicar-test.yml
+          - listener-test.yml
     steps:
       - uses: actions/checkout@9f698171ed81b15d1823a05fc7211befd50c8ae0 # v6.0.3
       - name: Mock secrets.yaml from example

@@ -1,0 +1,40 @@
+substitutions:
+  board: esp32dev
+  variant: esp32
+  flash_size: 4MB
+
+esphome:
+  name: tesla-ble-multicar-test
+  friendly_name: Tesla BLE Multicar Test
+
+esp32:
+  board: $board
+  variant: $variant
+  flash_size: $flash_size
+  framework:
+    components:
+      - name: tesla-ble
+        source: https://github.com/yoziru/tesla-ble.git
+        ref: v5.2.0
+
+logger:
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+
+esp32_ble_tracker:
+
+external_components:
+  - source: components
+    components: [tesla_ble_vehicle, tesla_ble_listener]
+
+tesla_ble_vehicle:
+  - id: car_one
+    name: Car One
+    vin: "5YJ30123456789ABC"
+    ble_mac_address: "A0:B1:C2:D3:E4:F5"
+  - id: car_two
+    name: Car Two
+    vin: "5YJ30123456789ABD"
+    ble_mac_address: "A0:B1:C2:D3:E4:F6"

@@ -2,7 +2,7 @@
 
 #include "adapters.h"
 #include "write_retry_policy.h"
-#include <esphome/components/ble_client/ble_client.h>
+#include <esphome/components/esp32_ble_client/ble_client_base.h>
 #include <esphome/core/log.h>
 #include <vector>
 #include <queue>

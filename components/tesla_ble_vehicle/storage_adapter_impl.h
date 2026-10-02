@@ -11,7 +11,7 @@ namespace tesla_ble_vehicle {
 
 class StorageAdapterImpl : public ::TeslaBLE::StorageAdapter {
 public:
-    StorageAdapterImpl();
+    explicit StorageAdapterImpl(const std::string& storage_namespace);
     ~StorageAdapterImpl();
     
     bool load(const std::string& key, std::vector<uint8_t>& buffer) override;
@@ -22,8 +22,10 @@ public:
     bool initialize();
 
 private:
-    nvs_handle_t storage_handle_;
+    nvs_handle_t global_handle_;
+    nvs_handle_t session_handle_;
     bool initialized_;
+    std::string storage_namespace_;
     
     // Helper to map string keys to consistent NVS keys (since NVS keys are max 15 chars)
     // Actually SessionManager used fixed keys "tk_vcsec", "tk_infotainment".

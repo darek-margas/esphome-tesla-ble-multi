@@ -4,7 +4,7 @@
 #include <map>
 #include <string>
 #include <functional>
-#include <esphome/components/ble_client/ble_client.h>
+#include <esphome/components/esp32_ble_client/ble_client_base.h>
 #include <esphome/components/esp32_ble_tracker/esp32_ble_tracker.h>
 #include <esphome/components/binary_sensor/binary_sensor.h>
 #include <esphome/components/sensor/sensor.h>
@@ -55,7 +55,9 @@ static const char *const WRITE_UUID = "00000212-b2d1-43f0-9b88-960cebf8b91e";
  * 
  * This allows adding new sensors purely in Python without C++ changes.
  */
-class TeslaBLEVehicle : public PollingComponent, public ble_client::BLEClientNode {
+class TeslaBLEClient;
+
+class TeslaBLEVehicle : public PollingComponent {
 public:
     TeslaBLEVehicle();
     ~TeslaBLEVehicle() = default;
@@ -68,7 +70,7 @@ public:
 
     // BLE event handling
     void gattc_event_handler(esp_gattc_cb_event_t event, esp_gatt_if_t gattc_if,
-                           esp_ble_gattc_cb_param_t *param) override;
+                           esp_ble_gattc_cb_param_t *param);
 
     // ==========================================================================
     // Configuration setters
@@ -165,7 +167,9 @@ public:
     VehicleStateManager* get_state_manager() const { return state_manager_.get(); }
     
     // BLE connection state
-    bool is_connected() const { return node_state == espbt::ClientState::ESTABLISHED; }
+    bool is_connected() const;
+    void set_ble_client(TeslaBLEClient *client) { ble_client_ = client; }
+    TeslaBLEClient *ble_client() const { return ble_client_; }
     uint16_t get_read_handle() const { return read_handle_; }
     uint16_t get_write_handle() const { return write_handle_; }
 
@@ -195,6 +199,8 @@ private:
     uint32_t last_vcsec_poll_{0};
     InfotainmentPollPolicy poll_policy_;
     ConnectionResetPolicy connection_reset_policy_;
+
+    TeslaBLEClient *ble_client_{nullptr};
 
     // BLE state
     espbt::ESPBTUUID service_uuid_;
@@ -255,6 +261,17 @@ private:
 
     // Friends
     friend class VehicleStateManager;
+};
+
+class TeslaBLEClient : public esp32_ble_client::BLEClientBase {
+ public:
+  void set_vehicle(TeslaBLEVehicle *vehicle) { vehicle_ = vehicle; }
+
+  bool gattc_event_handler(esp_gattc_cb_event_t event, esp_gatt_if_t gattc_if,
+                           esp_ble_gattc_cb_param_t *param) override;
+
+ protected:
+  TeslaBLEVehicle *vehicle_{nullptr};
 };
 
 // =============================================================================

@@ -7,6 +7,7 @@ substitutions:
   variant: esp32
   flash_size: 4MB
   tesla_ble_ref: main
+  tesla_vehicle_name: "Tesla"
   ble_mac_address: "A0:B1:C2:D3:E4:F5" # vehicle BLE MAC address
   tesla_vin: "5YJ30123456789ABC" # vehicle VIN
 
@@ -26,3 +27,16 @@ packages:
 
 dashboard_import:
   package_import_url: github://yoziru/esphome-tesla-ble/tesla-ble.example.yml@main
+
+
+# Multi-car users should define vehicles directly instead of using packages/client.yml:
+#
+# tesla_ble_vehicle:
+#   - id: orka
+#     name: Orka
+#     vin: !secret tesla_vin_orka
+#     ble_mac_address: !secret ble_mac_address_orka
+#   - id: bluey
+#     name: Bluey
+#     vin: !secret tesla_vin_bluey
+#     ble_mac_address: !secret ble_mac_address_bluey

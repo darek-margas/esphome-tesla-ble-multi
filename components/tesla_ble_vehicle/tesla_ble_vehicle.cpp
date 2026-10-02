@@ -67,7 +67,16 @@ void TeslaBLEVehicle::initialize_managers() {
   ESP_LOGD(TAG, "Initializing components...");
 
   ble_adapter_ = std::make_shared<BleAdapterImpl>(this);
-  storage_adapter_ = std::make_shared<StorageAdapterImpl>();
+  // NVS namespace is per vehicle for sessions. Keep it <= 15 chars.
+  // FNV-1a over the VIN gives a stable compact namespace.
+  uint32_t vin_hash = 2166136261u;
+  for (char ch : vin_) {
+    vin_hash ^= static_cast<uint8_t>(ch);
+    vin_hash *= 16777619u;
+  }
+  char storage_namespace[16];
+  snprintf(storage_namespace, sizeof(storage_namespace), "ts%08x", (unsigned) vin_hash);
+  storage_adapter_ = std::make_shared<StorageAdapterImpl>(storage_namespace);
 
   if (!storage_adapter_->initialize()) {
     ESP_LOGE(TAG, "Failed to initialize storage adapter");
@@ -182,13 +191,14 @@ void TeslaBLEVehicle::loop() {
   // Only a fresh connect cycle re-runs discovery / notify registration, so
   // force one instead of waiting for a reboot.
   const bool gatt_established = is_connected();
-  const bool stalled_setup = this->node_state == espbt::ClientState::CONNECTED;
+  const bool stalled_setup = ble_client_ != nullptr &&
+                             ble_client_->state() == espbt::ClientState::CONNECTED;
   const bool vehicle_connected = vehicle_ != nullptr && vehicle_->is_connected();
   if (connection_reset_policy_.should_force_reconnect(millis(), gatt_established || stalled_setup,
                                                       vehicle_connected)) {
     ESP_LOGW(TAG, "GATT connection up but vehicle is disconnected - forcing reconnect");
     connection_reset_policy_.on_force_reconnect(millis());
-    this->parent()->disconnect();
+    if (ble_client_ != nullptr) ble_client_->disconnect();
   }
 }
 
@@ -949,6 +959,20 @@ void TeslaBLEVehicle::close_windows() {
       });
 }
 
+bool TeslaBLEVehicle::is_connected() const {
+  return ble_client_ != nullptr && ble_client_->state() == espbt::ClientState::ESTABLISHED;
+}
+
+bool TeslaBLEClient::gattc_event_handler(esp_gattc_cb_event_t event,
+                                         esp_gatt_if_t gattc_if,
+                                         esp_ble_gattc_cb_param_t *param) {
+  if (!esp32_ble_client::BLEClientBase::gattc_event_handler(event, gattc_if, param))
+    return false;
+  if (vehicle_ != nullptr)
+    vehicle_->gattc_event_handler(event, gattc_if, param);
+  return true;
+}
+
 // =============================================================================
 // BLE event handling
 // =============================================================================
@@ -974,11 +998,11 @@ void TeslaBLEVehicle::gattc_event_handler(esp_gattc_cb_event_t event,
     ESP_LOGW(TAG, "BLE disconnected");
     this->read_handle_ = 0;
     this->write_handle_ = 0;
-    this->node_state = espbt::ClientState::DISCONNECTING;
+    // Low-level client owns the connection state transition.
     break;
 
   case ESP_GATTC_SEARCH_CMPL_EVT: {
-    auto *readChar = this->parent()->get_characteristic(this->service_uuid_,
+    auto *readChar = this->ble_client_->get_characteristic(this->service_uuid_,
                                                         this->read_uuid_);
     if (readChar == nullptr) {
       ESP_LOGE(TAG, "Read characteristic not found");
@@ -987,13 +1011,13 @@ void TeslaBLEVehicle::gattc_event_handler(esp_gattc_cb_event_t event,
     this->read_handle_ = readChar->handle;
 
     auto reg_status = esp_ble_gattc_register_for_notify(
-        this->parent()->get_gattc_if(), this->parent()->get_remote_bda(),
+        this->ble_client_->get_gattc_if(), this->ble_client_->get_remote_bda(),
         readChar->handle);
     if (reg_status) {
       ESP_LOGE(TAG, "Failed to register for notifications: %d", reg_status);
     }
 
-    auto *writeChar = this->parent()->get_characteristic(this->service_uuid_,
+    auto *writeChar = this->ble_client_->get_characteristic(this->service_uuid_,
                                                          this->write_uuid_);
     if (writeChar == nullptr) {
       ESP_LOGE(TAG, "Write characteristic not found");
@@ -1009,13 +1033,12 @@ void TeslaBLEVehicle::gattc_event_handler(esp_gattc_cb_event_t event,
       break;
     }
 
-    this->node_state = espbt::ClientState::ESTABLISHED;
     ESP_LOGI(TAG, "BLE connection fully established");
     handle_connection_established();
     break;
 
   case ESP_GATTC_NOTIFY_EVT: {
-    if (param->notify.conn_id != this->parent()->get_conn_id())
+    if (param->notify.conn_id != this->ble_client_->get_conn_id())
       break;
 
     std::vector<unsigned char> data(

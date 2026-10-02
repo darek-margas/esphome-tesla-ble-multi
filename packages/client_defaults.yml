@@ -1,8 +1,8 @@
 substitutions:
+  tesla_vehicle_name: "Tesla"
   ble_mac_address: !secret ble_mac_address
   tesla_vin: !secret tesla_vin
-  # Polling interval defaults (can be overridden in the main config).
   vcsec_poll_interval: "10"
   infotainment_poll_interval_awake: "30"
   infotainment_poll_interval_active: "10"
-  infotainment_sleep_timeout: "660"  # 11 minutes
+  infotainment_sleep_timeout: "660"
