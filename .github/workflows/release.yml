@@ -1,21 +1,12 @@
-name: Release
+name: Release multi-car
 
 on:
+  push:
+    branches:
+      - multicar-v2
+    paths:
+      - VERSION
   workflow_dispatch:
-    inputs:
-      bump:
-        description: Version bump type
-        required: true
-        default: patch
-        type: choice
-        options:
-          - patch
-          - minor
-          - major
-      version:
-        description: Explicit version override (X.Y.Z)
-        required: false
-        type: string
 
 permissions:
   contents: write
@@ -23,42 +14,43 @@ permissions:
 jobs:
   release:
     runs-on: ubuntu-latest
-    environment: release
 
     steps:
-      - name: Require main branch
-        run: |
-          if [ "${GITHUB_REF_NAME}" != "main" ]; then
-            echo "Run releases from main only" >&2
-            exit 1
-          fi
-
-      - name: Require release token
-        env:
-          RELEASE_TOKEN: ${{ secrets.RELEASE_TOKEN }}
-        run: |
-          if [ -z "$RELEASE_TOKEN" ]; then
-            echo "Set RELEASE_TOKEN in the protected 'release' environment" >&2
-            exit 1
-          fi
-
-      - name: Checkout
-        uses: actions/checkout@9f698171ed81b15d1823a05fc7211befd50c8ae0 # v6.0.3
+      - name: Checkout multicar-v2
+        uses: actions/checkout@9f698171ed81b15d1823a05fc7211befd50c8ae0
         with:
+          ref: multicar-v2
           fetch-depth: 0
-          ref: main
-          token: ${{ secrets.RELEASE_TOKEN }}
 
-      - name: Run release
+      - name: Run unit tests
+        run: make test
+
+      - name: Publish release
         env:
-          GH_TOKEN: ${{ secrets.RELEASE_TOKEN }}
-          INPUT_BUMP: ${{ inputs.bump }}
-          INPUT_VERSION: ${{ inputs.version }}
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
         run: |
-          release_arg="$INPUT_VERSION"
-          if [ -z "$release_arg" ]; then
-            release_arg="$INPUT_BUMP"
+          VERSION="$(tr -d '[:space:]' < VERSION)"
+          test -n "$VERSION"
+          TAG="v$VERSION"
+
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release $TAG already exists"
+            exit 0
           fi
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          ./scripts/release.sh "$release_arg"
+
+          gh release create "$TAG" \
+            --target "$GITHUB_SHA" \
+            --title "ESPHome Tesla BLE multi-car $TAG" \
+            --notes "Multi-car release from the multicar-v2 branch.
+
+- Multiple Teslas from one ESP32
+- Separate BLE client, private key and Tesla sessions per VIN
+- Home Assistant sub-device per vehicle
+- Independent pairing and key regeneration
+- CLOUD_KEY pairing for software keys
+- Global BLE GATT write serialization across vehicles
+- Parent BLE radio and restart controls supported
+- ESPHome 2026.9.x / Tesla BLE library v5.2.0
+
+The main branch remains reserved for tracking upstream yoziru/esphome-tesla-ble changes."
