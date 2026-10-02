@@ -316,9 +316,13 @@ void TeslaBLEVehicle::defer_release_infotainment_slot_() {
 }
 
 void TeslaBLEVehicle::release_infotainment_slot_() {
-  if (global_infotainment_owner_ == this) {
-    global_infotainment_owner_ = nullptr;
+  // Only the current owner may advance the global queue. Disconnect or cleanup
+  // from another vehicle must not steal the slot and start a second command.
+  if (global_infotainment_owner_ != this) {
+    return;
   }
+
+  global_infotainment_owner_ = nullptr;
 
   // Skip stale work for vehicles that are no longer connected.
   while (!global_infotainment_queue_.empty()) {
