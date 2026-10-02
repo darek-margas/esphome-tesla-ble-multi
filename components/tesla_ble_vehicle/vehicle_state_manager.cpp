@@ -442,10 +442,7 @@ void VehicleStateManager::update_climate_state(const CarServer_ClimateState& cli
     }
 
     if (climate_state.which_optional_cabin_overheat_protection_actively_cooling) {
-        publish_binary_sensor(
-            "cabin_overheat_active",
-            climate_state.optional_cabin_overheat_protection_actively_cooling
-                .cabin_overheat_protection_actively_cooling);
+        publish_binary_sensor("cabin_overheat_active", climate_state.optional_cabin_overheat_protection_actively_cooling.cabin_overheat_protection_actively_cooling);
     }
 
     // Steering wheel heater - sync switch state from vehicle
