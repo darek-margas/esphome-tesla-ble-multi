@@ -7,6 +7,5 @@ esp32:
   framework:
     components:
       - name: tesla-ble
-        source: https://github.com/darek-margas/esphome-tesla-ble-multi.git
-        ref: multicar-v2
-        path: tesla-ble-patched
+        source: https://github.com/yoziru/tesla-ble.git
+        ref: v5.2.0
