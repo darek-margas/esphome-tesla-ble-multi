@@ -6,6 +6,7 @@ on:
       - multicar-v2
     paths:
       - VERSION
+      - .github/workflows/release.yml
   workflow_dispatch:
 
 permissions:
@@ -42,15 +43,4 @@ jobs:
           gh release create "$TAG" \
             --target "$GITHUB_SHA" \
             --title "ESPHome Tesla BLE multi-car $TAG" \
-            --notes "Multi-car release from the multicar-v2 branch.
-
-- Multiple Teslas from one ESP32
-- Separate BLE client, private key and Tesla sessions per VIN
-- Home Assistant sub-device per vehicle
-- Independent pairing and key regeneration
-- CLOUD_KEY pairing for software keys
-- Global BLE GATT write serialization across vehicles
-- Parent BLE radio and restart controls supported
-- ESPHome 2026.9.x / Tesla BLE library v5.2.0
-
-The main branch remains reserved for tracking upstream yoziru/esphome-tesla-ble changes."
+            --notes "Multi-car release from multicar-v2: multiple Teslas per ESP32, per-VIN keys and sessions, Home Assistant sub-devices, independent pairing, CLOUD_KEY enrolment, and serialized BLE GATT writes."
