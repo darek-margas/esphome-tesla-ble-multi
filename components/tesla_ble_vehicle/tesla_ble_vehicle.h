@@ -232,18 +232,10 @@ private:
 
     uint8_t user_commands_in_flight_{0};
     static constexpr uint32_t USER_COMMAND_QUIET_MS = 250;
+    void enqueue_vcsec_poll_(bool interactive = false);
     void enqueue_poll_batch_(TeslaBLE::WakePolicy policy, uint32_t delay_ms = 0);
-    void enqueue_poll_job_(const char *name, int32_t data_type, TeslaBLE::WakePolicy policy,
-                           uint8_t retry_attempt = 0);
+    void enqueue_poll_job_(const char *name, int32_t data_type, TeslaBLE::WakePolicy policy);
     uint8_t poll_batch_start_{0};
-    static constexpr uint8_t POLL_JOB_MAX_RETRIES = 2;
-    static constexpr uint32_t POLL_JOB_RETRY_DELAY_MS = 1500;
-    bool pending_poll_recovery_{false};
-    std::string pending_poll_recovery_name_;
-    int32_t pending_poll_recovery_data_type_{0};
-    TeslaBLE::WakePolicy pending_poll_recovery_policy_{TeslaBLE::WakePolicy::WAKE_IF_NEEDED};
-    uint8_t pending_poll_recovery_attempt_{0};
-    bool is_poisoned_infotainment_error_(const TeslaBLE::CommandError *error) const;
     void enqueue_infotainment_work_(std::function<void()> start, bool interactive);
     void release_infotainment_slot_();
     void defer_release_infotainment_slot_();
