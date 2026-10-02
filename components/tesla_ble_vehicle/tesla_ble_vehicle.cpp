@@ -12,6 +12,7 @@ namespace esphome {
 namespace tesla_ble_vehicle {
 
 TeslaBLEVehicle *TeslaBLEVehicle::global_infotainment_owner_ = nullptr;
+std::deque<TeslaBLEVehicle::InfotainmentWorkItem> TeslaBLEVehicle::global_infotainment_queue_;
 
 void tesla_ble_log_callback(TeslaBLE::LogLevel level, const char *tag, int line,
                             const char *format, va_list args) {
@@ -256,17 +257,53 @@ void TeslaBLEVehicle::update() {
 }
 
 
-bool TeslaBLEVehicle::try_acquire_infotainment_slot_() {
-  if (global_infotainment_owner_ == nullptr || global_infotainment_owner_ == this) {
-    global_infotainment_owner_ = this;
-    return true;
+void TeslaBLEVehicle::enqueue_infotainment_work_(std::function<void()> start, bool interactive) {
+  InfotainmentWorkItem item{this, std::move(start), interactive};
+
+  // Interactive commands should run before queued background polls, while
+  // retaining FIFO order among other interactive commands.
+  if (interactive) {
+    auto pos = global_infotainment_queue_.begin();
+    while (pos != global_infotainment_queue_.end() && pos->interactive) ++pos;
+    global_infotainment_queue_.insert(pos, std::move(item));
+  } else {
+    global_infotainment_queue_.push_back(std::move(item));
   }
-  return false;
+
+  if (global_infotainment_owner_ == nullptr && !global_infotainment_queue_.empty()) {
+    auto next = std::move(global_infotainment_queue_.front());
+    global_infotainment_queue_.pop_front();
+    global_infotainment_owner_ = next.vehicle;
+    if (next.start) next.start();
+  }
 }
 
 void TeslaBLEVehicle::release_infotainment_slot_() {
   if (global_infotainment_owner_ == this) {
     global_infotainment_owner_ = nullptr;
+  }
+
+  // Skip stale work for vehicles that are no longer connected.
+  while (!global_infotainment_queue_.empty()) {
+    auto next = std::move(global_infotainment_queue_.front());
+    global_infotainment_queue_.pop_front();
+    if (next.vehicle == nullptr || !next.vehicle->vehicle_ ||
+        !next.vehicle->vehicle_->is_connected()) {
+      continue;
+    }
+    global_infotainment_owner_ = next.vehicle;
+    if (next.start) next.start();
+    break;
+  }
+}
+
+void TeslaBLEVehicle::cancel_queued_infotainment_work_() {
+  for (auto it = global_infotainment_queue_.begin(); it != global_infotainment_queue_.end();) {
+    if (it->vehicle == this) {
+      it = global_infotainment_queue_.erase(it);
+    } else {
+      ++it;
+    }
   }
 }
 
@@ -282,12 +319,6 @@ void TeslaBLEVehicle::start_infotainment_sequence_(TeslaBLE::WakePolicy policy, 
   infotainment_sequence_policy_ = policy;
 
   this->set_timeout("infotainment-sequence", delay_ms, [this]() {
-    if (!try_acquire_infotainment_slot_()) {
-      this->set_timeout("infotainment-sequence", USER_COMMAND_QUIET_MS, [this]() {
-        run_infotainment_sequence_step_();
-      });
-      return;
-    }
     run_infotainment_sequence_step_();
   });
 }
@@ -295,7 +326,6 @@ void TeslaBLEVehicle::start_infotainment_sequence_(TeslaBLE::WakePolicy policy, 
 void TeslaBLEVehicle::finish_infotainment_sequence_() {
   infotainment_sequence_active_ = false;
   infotainment_sequence_step_ = 0;
-  release_infotainment_slot_();
 }
 
 void TeslaBLEVehicle::run_infotainment_sequence_step_() {
@@ -304,15 +334,8 @@ void TeslaBLEVehicle::run_infotainment_sequence_step_() {
     return;
   }
 
-  if (!try_acquire_infotainment_slot_()) {
-    this->set_timeout("infotainment-sequence", USER_COMMAND_QUIET_MS, [this]() {
-      run_infotainment_sequence_step_();
-    });
-    return;
-  }
-
-  // Let interactive commands go first. Do not start another background request
-  // while a button/select/switch command is still awaiting its result.
+  // Do not queue another background step while this vehicle has an
+  // interactive command pending/in flight.
   if (user_commands_in_flight_ > 0) {
     this->set_timeout("infotainment-sequence", USER_COMMAND_QUIET_MS, [this]() {
       run_infotainment_sequence_step_();
@@ -343,33 +366,46 @@ void TeslaBLEVehicle::run_infotainment_sequence_step_() {
   ESP_LOGD(TAG, "Infotainment sequence %u/%u: %s",
            static_cast<unsigned>(step + 1), static_cast<unsigned>(POLL_COUNT), spec.name);
 
-  vehicle_->send_command_result(
-      UniversalMessage_Domain_DOMAIN_INFOTAINMENT,
-      spec.name,
-      [data_type = spec.data_type](TeslaBLE::Client *client, uint8_t *buff, size_t *len) {
-        return client->build_car_server_get_vehicle_data_message(buff, len, data_type);
-      },
-      [this, step](TeslaBLE::OperationResult result) {
-        if (!infotainment_sequence_active_) return;
-
-        if (!result.is_success()) {
-          const TeslaBLE::CommandError *error = result.error();
-          ESP_LOGW(TAG, "Background %u failed: %s",
-                   static_cast<unsigned>(step + 1),
-                   error != nullptr ? error->message().c_str() : "unknown error");
-        }
-
-        infotainment_sequence_step_ = static_cast<uint8_t>(step + 1);
-        if (infotainment_sequence_step_ >= 5) {
+  enqueue_infotainment_work_(
+      [this, step, spec]() {
+        if (!infotainment_sequence_active_ || !vehicle_ || !vehicle_->is_connected()) {
+          release_infotainment_slot_();
           finish_infotainment_sequence_();
           return;
         }
 
-        this->set_timeout("infotainment-sequence", INFOTAINMENT_STEP_GAP_MS, [this]() {
-          run_infotainment_sequence_step_();
-        });
+        vehicle_->send_command_result(
+            UniversalMessage_Domain_DOMAIN_INFOTAINMENT,
+            spec.name,
+            [data_type = spec.data_type](TeslaBLE::Client *client, uint8_t *buff, size_t *len) {
+              return client->build_car_server_get_vehicle_data_message(buff, len, data_type);
+            },
+            [this, step](TeslaBLE::OperationResult result) {
+              if (!result.is_success()) {
+                const TeslaBLE::CommandError *error = result.error();
+                ESP_LOGW(TAG, "Background %u failed: %s",
+                         static_cast<unsigned>(step + 1),
+                         error != nullptr ? error->message().c_str() : "unknown error");
+              }
+
+              // Release after every logical request. The next queued vehicle
+              // now gets the slot before this sequence schedules its next step.
+              release_infotainment_slot_();
+
+              if (!infotainment_sequence_active_) return;
+              infotainment_sequence_step_ = static_cast<uint8_t>(step + 1);
+              if (infotainment_sequence_step_ >= 5) {
+                finish_infotainment_sequence_();
+                return;
+              }
+
+              this->set_timeout("infotainment-sequence", INFOTAINMENT_STEP_GAP_MS, [this]() {
+                run_infotainment_sequence_step_();
+              });
+            },
+            infotainment_sequence_policy_);
       },
-      infotainment_sequence_policy_);
+      false);
 }
 
 void TeslaBLEVehicle::dump_config() {
@@ -659,20 +695,26 @@ void TeslaBLEVehicle::send_command_with_tracking(
   }
 
   if (domain == UniversalMessage_Domain_DOMAIN_INFOTAINMENT) {
-    // Interactive infotainment actions must not overlap any existing logical
-    // infotainment transaction, including this vehicle's own background poll.
-    if (global_infotainment_owner_ != nullptr) {
-      auto deferred_builder = std::make_shared<
-          std::function<int(TeslaBLE::Client *, uint8_t *, size_t *)>>(std::move(builder));
-      auto deferred_result = std::make_shared<std::function<void(bool)>>(std::move(on_result));
-      this->set_timeout(("interactive-" + name).c_str(), USER_COMMAND_QUIET_MS,
-        [this, domain, name, deferred_builder, wake_policy, deferred_result]() mutable {
-          send_command_with_tracking(domain, name, std::move(*deferred_builder), wake_policy,
-                                     std::move(*deferred_result));
-        });
-      return;
-    }
-    global_infotainment_owner_ = this;
+    if (user_commands_in_flight_ < 255) ++user_commands_in_flight_;
+    auto queued_builder = std::make_shared<
+        std::function<int(TeslaBLE::Client *, uint8_t *, size_t *)>>(std::move(builder));
+    auto queued_result = std::make_shared<std::function<void(bool)>>(std::move(on_result));
+
+    enqueue_infotainment_work_(
+        [this, domain, name, queued_builder, wake_policy, queued_result]() mutable {
+          vehicle_->send_command_result(
+              domain, name, std::move(*queued_builder),
+              [this, name, queued_result](TeslaBLE::OperationResult result) mutable {
+                if (user_commands_in_flight_ > 0) --user_commands_in_flight_;
+                release_infotainment_slot_();
+                const bool succeeded = result.is_success();
+                handle_command_result(name, std::move(result));
+                if (*queued_result) (*queued_result)(succeeded);
+              },
+              wake_policy);
+        },
+        true);
+    return;
   }
 
   if (user_commands_in_flight_ < 255) ++user_commands_in_flight_;
@@ -1306,6 +1348,7 @@ void TeslaBLEVehicle::handle_connection_lost() {
   });
 
   this->cancel_timeout("infotainment-sequence");
+  cancel_queued_infotainment_work_();
   release_infotainment_slot_();
   infotainment_sequence_active_ = false;
   infotainment_sequence_step_ = 0;
