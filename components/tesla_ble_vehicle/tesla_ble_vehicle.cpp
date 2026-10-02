@@ -1262,6 +1262,9 @@ void TeslaBLEVehicle::gattc_event_handler(esp_gattc_cb_event_t event,
     ESP_LOGW(TAG, "BLE disconnected");
     this->read_handle_ = 0;
     this->write_handle_ = 0;
+    notify_ready_ = false;
+    notify_registration_pending_ = false;
+    this->cancel_timeout("tesla-notify-retry");
     // Low-level client owns the connection state transition.
     break;
 
@@ -1274,12 +1277,8 @@ void TeslaBLEVehicle::gattc_event_handler(esp_gattc_cb_event_t event,
     }
     this->read_handle_ = readChar->handle;
 
-    auto reg_status = esp_ble_gattc_register_for_notify(
-        this->ble_client_->get_gattc_if(), this->ble_client_->get_remote_bda(),
-        readChar->handle);
-    if (reg_status) {
-      ESP_LOGE(TAG, "Failed to register for notifications: %d", reg_status);
-    }
+    notify_ready_ = false;
+    notify_registration_pending_ = false;
 
     auto *writeChar = this->ble_client_->get_characteristic(this->service_uuid_,
                                                          this->write_uuid_);
@@ -1288,16 +1287,21 @@ void TeslaBLEVehicle::gattc_event_handler(esp_gattc_cb_event_t event,
       break;
     }
     this->write_handle_ = writeChar->handle;
+    register_notify_();
     break;
   }
 
   case ESP_GATTC_REG_FOR_NOTIFY_EVT:
+    notify_registration_pending_ = false;
     if (param->reg_for_notify.status != ESP_GATT_OK) {
-      ESP_LOGE(TAG, "Failed to register for notifications");
+      ESP_LOGW(TAG, "Tesla notify registration failed: %d - retrying",
+               param->reg_for_notify.status);
+      schedule_notify_retry_();
       break;
     }
 
-    ESP_LOGI(TAG, "BLE connection fully established");
+    notify_ready_ = true;
+    ESP_LOGI(TAG, "Tesla notifications ready");
     handle_connection_established();
     break;
 
@@ -1326,8 +1330,32 @@ void TeslaBLEVehicle::gattc_event_handler(esp_gattc_cb_event_t event,
   }
 }
 
+void TeslaBLEVehicle::schedule_notify_retry_() {
+  this->set_timeout("tesla-notify-retry", NOTIFY_RETRY_MS, [this]() {
+    register_notify_();
+  });
+}
+
+void TeslaBLEVehicle::register_notify_() {
+  if (notify_ready_ || notify_registration_pending_ || ble_client_ == nullptr ||
+      read_handle_ == 0 || !is_connected()) {
+    return;
+  }
+
+  const esp_err_t status = ble_client_->register_for_notify(read_handle_);
+  if (status == ESP_OK) {
+    notify_registration_pending_ = true;
+    ESP_LOGD(TAG, "Tesla notify registration requested");
+  } else {
+    ESP_LOGW(TAG, "Tesla notify registration submit failed: %s - retrying",
+             esp_err_to_name(status));
+    schedule_notify_retry_();
+  }
+}
+
 void TeslaBLEVehicle::handle_connection_established() {
-  if (vehicle_) {
+  if (!notify_ready_) return;
+  if (vehicle_ && !vehicle_->is_connected()) {
     vehicle_->set_connected(true);
     ESP_LOGI(TAG, "Connection established - triggering initial polls");
     vehicle_->vcsec_poll();
@@ -1351,6 +1379,9 @@ void TeslaBLEVehicle::handle_connection_lost() {
   });
 
   this->cancel_timeout("infotainment-batch");
+  this->cancel_timeout("tesla-notify-retry");
+  notify_ready_ = false;
+  notify_registration_pending_ = false;
   cancel_queued_infotainment_work_();
   release_infotainment_slot_();
   user_commands_in_flight_ = 0;
