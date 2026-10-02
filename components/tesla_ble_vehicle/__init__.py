@@ -351,7 +351,7 @@ async def create_text_sensor(var, definition, vehicle_id, vehicle_name, device_i
 async def create_button(var, definition, vehicle_id, vehicle_name, device_id=None):
     """Create a button and register with TeslaBLEVehicle."""
     return _attach(var, await button.new_button(
-        _base_config(definition, definition["class"], "button", vehicle_id, vehicle_name)), definition)
+        _base_config(definition, definition["class"], "button", vehicle_id, vehicle_name, device_id)), definition)
 
 
 async def create_switch(var, definition, vehicle_id, vehicle_name, device_id=None):
