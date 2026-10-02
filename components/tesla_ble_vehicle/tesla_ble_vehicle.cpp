@@ -216,7 +216,7 @@ void TeslaBLEVehicle::loop() {
 }
 
 void TeslaBLEVehicle::update() {
-  if (!is_connected() || !vehicle_)
+  if (!is_connected() || !vehicle_ || !notify_ready_ || !vehicle_->is_connected())
     return;
 
   uint32_t now = millis();
