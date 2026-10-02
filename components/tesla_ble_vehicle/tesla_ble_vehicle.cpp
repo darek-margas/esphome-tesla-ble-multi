@@ -1254,13 +1254,10 @@ void TeslaBLEVehicle::update_ble_rssi(int8_t rssi) {
 }
 
 uint32_t TeslaBLEVehicle::ble_write_gap_ms() const {
-  // Unknown RSSI: keep the conservative middle setting until the first
-  // connected-link RSSI sample arrives.
-  if (latest_ble_rssi_ == -127) return 60;
-  if (latest_ble_rssi_ > -70) return 20;
-  if (latest_ble_rssi_ > -80) return 35;
-  if (latest_ble_rssi_ > -87) return 60;
-  return 100;
+  // Keep fragment pacing deterministic across both vehicles. The adaptive
+  // RSSI policy made strong links much more aggressive and added another
+  // variable while debugging shared-controller congestion.
+  return 60;
 }
 
 bool TeslaBLEVehicle::is_connected() const {
