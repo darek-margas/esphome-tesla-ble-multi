@@ -327,7 +327,7 @@ int Client::parse_payload_car_server_response(
     UniversalMessage_RoutableMessage_protobuf_message_as_bytes_t *input_buffer,
     Signatures_SignatureData *signature_data, pb_size_t which_sub_sig_data,
     UniversalMessage_MessageFault_E signed_message_fault, uint32_t response_flags, CarServer_Response *output,
-    uint32_t *response_counter) {
+    uint32_t *response_counter, const pb_byte_t *request_hash, size_t request_hash_length) {
   uint32_t counter = 0;
 
   // If encrypted, decrypt the payload
@@ -344,11 +344,21 @@ int Client::parse_payload_car_server_response(
 
         UniversalMessage_RoutableMessage_protobuf_message_as_bytes_t decrypt_buffer;
         size_t decrypt_length;
+        const pb_byte_t *hash = request_hash;
+        size_t hash_length = request_hash_length;
+        if (!hash || hash_length == 0) {
+          hash = last_request_hash_.data();
+          hash_length = last_request_hash_length_;
+        }
+        if (!hash || hash_length == 0) {
+          LOG_ERROR("[parse_payload_car_server_response] Missing request hash for response decrypt");
+          return TeslaBLE_Status_E_ERROR_DECRYPT;
+        }
+
         int return_code = session->decrypt_response(
             input_buffer->bytes, input_buffer->size, signature_data->sig_type.AES_GCM_Response_data.nonce,
-            signature_data->sig_type.AES_GCM_Response_data.tag, last_request_hash_.data(),
-            this->last_request_hash_length_, response_flags, signed_message_fault, decrypt_buffer.bytes,
-            sizeof(decrypt_buffer.bytes), &decrypt_length);
+            signature_data->sig_type.AES_GCM_Response_data.tag, hash, hash_length, response_flags,
+            signed_message_fault, decrypt_buffer.bytes, sizeof(decrypt_buffer.bytes), &decrypt_length);
         if (return_code != 0) {
           LOG_ERROR("[parse_payload_car_server_response] Failed to decrypt response");
           return TeslaBLE_Status_E_ERROR_DECRYPT;
@@ -419,6 +429,33 @@ bool Client::get_last_request_uuid(UniversalMessage_Domain domain, pb_byte_t *uu
   std::copy_n(source->data(), length, uuid);
   *uuid_length = length;
   return true;
+}
+
+bool Client::get_request_hash_for_uuid(UniversalMessage_Domain domain, const pb_byte_t *uuid, size_t uuid_length,
+                                       pb_byte_t *request_hash, size_t *request_hash_length) const {
+  if (!uuid || uuid_length == 0 || !request_hash || !request_hash_length) {
+    return false;
+  }
+
+  // Search newest-to-oldest. A ring entry is only valid when both UUID and
+  // request hash lengths are populated.
+  for (size_t offset = 0; offset < REQUEST_CONTEXT_HISTORY_SIZE; ++offset) {
+    const size_t index =
+        (request_context_history_next_ + REQUEST_CONTEXT_HISTORY_SIZE - 1 - offset) % REQUEST_CONTEXT_HISTORY_SIZE;
+    const auto &ctx = request_context_history_[index];
+    if (ctx.domain != domain || ctx.uuid_length != uuid_length || ctx.uuid_length == 0 ||
+        ctx.request_hash_length == 0 || ctx.request_hash_length > *request_hash_length) {
+      continue;
+    }
+    if (!std::equal(uuid, uuid + uuid_length, ctx.uuid.begin())) {
+      continue;
+    }
+
+    std::copy_n(ctx.request_hash.data(), ctx.request_hash_length, request_hash);
+    *request_hash_length = ctx.request_hash_length;
+    return true;
+  }
+  return false;
 }
 
 bool Client::verify_session_info_tag(const Signatures_SessionInfo &session_info, const pb_byte_t *session_info_bytes,
@@ -610,9 +647,12 @@ int Client::build_universal_message_with_payload(pb_byte_t *payload, size_t payl
       return return_code;
     }
 
-    // Store the request hash for later use
+    // Store the request hash for later use and retain a short UUID->hash
+    // history so late encrypted responses can still be authenticated/decrypted.
     std::copy(request_hash, request_hash + request_hash_length, last_request_hash_.begin());
     this->last_request_hash_length_ = request_hash_length;
+    store_request_context_(domain, universal_message.uuid.bytes, universal_message.uuid.size, request_hash,
+                           request_hash_length);
 
     universal_message.which_sub_sigData = UniversalMessage_RoutableMessage_signature_data_tag;
     universal_message.sub_sigData.signature_data = signature_data;
@@ -957,6 +997,23 @@ void Client::store_last_request_uuid_(UniversalMessage_Domain domain, const pb_b
     std::copy(uuid, uuid + uuid_size, last_request_uuid_infotainment_.begin());
     last_request_uuid_infotainment_length_ = uuid_size;
   }
+}
+
+void Client::store_request_context_(UniversalMessage_Domain domain, const pb_byte_t *uuid, size_t uuid_length,
+                                    const pb_byte_t *request_hash, size_t request_hash_length) {
+  if (!uuid || uuid_length == 0 || uuid_length > request_context_history_[0].uuid.size() || !request_hash ||
+      request_hash_length == 0 || request_hash_length > request_context_history_[0].request_hash.size()) {
+    return;
+  }
+
+  auto &ctx = request_context_history_[request_context_history_next_];
+  ctx = RequestContext{};
+  ctx.domain = domain;
+  std::copy_n(uuid, uuid_length, ctx.uuid.begin());
+  ctx.uuid_length = uuid_length;
+  std::copy_n(request_hash, request_hash_length, ctx.request_hash.begin());
+  ctx.request_hash_length = request_hash_length;
+  request_context_history_next_ = (request_context_history_next_ + 1) % REQUEST_CONTEXT_HISTORY_SIZE;
 }
 
 }  // namespace TeslaBLE
