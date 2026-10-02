@@ -44,6 +44,10 @@ private:
     std::queue<BLETXChunk> write_queue_;
     WriteRetryPolicy write_retry_policy_;
     bool write_in_flight_{false};
+
+    // ESP32's GATT client path is shared across all Tesla BLE links. Only one
+    // Tesla fragment may be outstanding globally, not merely per vehicle.
+    static BleAdapterImpl *global_write_owner_;
     
     static const size_t BLOCK_LENGTH = 18; // Safe BLE MTU chunk size
 };
