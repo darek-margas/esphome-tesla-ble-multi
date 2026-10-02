@@ -104,10 +104,13 @@ class Client {
   int parse_payload_car_server_response(UniversalMessage_RoutableMessage_protobuf_message_as_bytes_t *input_buffer,
                                         Signatures_SignatureData *signature_data, pb_size_t which_sub_sig_data,
                                         UniversalMessage_MessageFault_E signed_message_fault, uint32_t response_flags,
-                                        CarServer_Response *output, uint32_t *response_counter = nullptr);
+                                        CarServer_Response *output, uint32_t *response_counter = nullptr,
+                                        const pb_byte_t *request_hash = nullptr, size_t request_hash_length = 0);
 
   const pb_byte_t *get_last_request_hash(size_t *length) const;
   bool get_last_request_uuid(UniversalMessage_Domain domain, pb_byte_t *uuid, size_t *uuid_length) const;
+  bool get_request_hash_for_uuid(UniversalMessage_Domain domain, const pb_byte_t *uuid, size_t uuid_length,
+                                 pb_byte_t *request_hash, size_t *request_hash_length) const;
   bool verify_session_info_tag(const Signatures_SessionInfo &session_info, const pb_byte_t *session_info_bytes,
                                size_t session_info_length, const pb_byte_t *request_uuid, size_t request_uuid_length,
                                const pb_byte_t *tag, size_t tag_length);
@@ -142,6 +145,17 @@ class Client {
   size_t last_request_uuid_vcsec_length_ = 0;
   size_t last_request_uuid_infotainment_length_ = 0;
 
+  struct RequestContext {
+    UniversalMessage_Domain domain = UniversalMessage_Domain_DOMAIN_BROADCAST;
+    std::array<pb_byte_t, 16> uuid{};
+    size_t uuid_length = 0;
+    std::array<pb_byte_t, 33> request_hash{};
+    size_t request_hash_length = 0;
+  };
+  static constexpr size_t REQUEST_CONTEXT_HISTORY_SIZE = 8;
+  std::array<RequestContext, REQUEST_CONTEXT_HISTORY_SIZE> request_context_history_{};
+  size_t request_context_history_next_ = 0;
+
   // Helper methods
   static void prepend_length(const pb_byte_t *input_buffer, size_t input_buffer_length, pb_byte_t *output_buffer,
                              size_t *output_buffer_length);
@@ -153,6 +167,8 @@ class Client {
   void generate_uuid_(pb_byte_t uuid[16]);
 
   void store_last_request_uuid_(UniversalMessage_Domain domain, const pb_byte_t *uuid, pb_size_t uuid_size);
+  void store_request_context_(UniversalMessage_Domain domain, const pb_byte_t *uuid, size_t uuid_length,
+                              const pb_byte_t *request_hash, size_t request_hash_length);
 
   int generate_public_key_data_();
   int generate_key_id_();
