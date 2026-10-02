@@ -197,15 +197,6 @@ private:
     
     // Polling state
     uint32_t last_vcsec_poll_{0};
-
-    // Pairing gets exclusive use of the per-vehicle Tesla command queue.
-    // TeslaBLE can retry Whitelist Add Key for up to ~3 minutes, so normal
-    // polling is suspended during that window and repeated Pair presses are
-    // ignored instead of filling the queue.
-    static constexpr uint32_t PAIRING_GUARD_MS = 190000;
-    bool pairing_in_progress_{false};
-    uint32_t pairing_started_ms_{0};
-
     InfotainmentPollPolicy poll_policy_;
     ConnectionResetPolicy connection_reset_policy_;
 
