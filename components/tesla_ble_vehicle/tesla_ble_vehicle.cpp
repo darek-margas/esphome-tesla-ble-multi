@@ -208,16 +208,6 @@ void TeslaBLEVehicle::update() {
 
   uint32_t now = millis();
 
-  if (pairing_in_progress_) {
-    if (static_cast<uint32_t>(now - pairing_started_ms_) < PAIRING_GUARD_MS) {
-      return;
-    }
-    ESP_LOGI(TAG, "Pairing guard expired - resuming normal polling");
-    pairing_in_progress_ = false;
-    last_vcsec_poll_ = now;
-    poll_policy_.on_poll(now);
-  }
-
   // VCSEC Polling
   if (now - last_vcsec_poll_ >= vcsec_poll_interval_) {
     ESP_LOGI(TAG, "Polling VCSEC");
@@ -615,17 +605,6 @@ int TeslaBLEVehicle::start_pairing() {
     ESP_LOGE(TAG, "Vehicle instance not available");
     return -1;
   }
-  if (!is_connected() || !vehicle_->is_connected()) {
-    ESP_LOGW(TAG, "Cannot pair while vehicle BLE connection is not established");
-    return -1;
-  }
-
-  const uint32_t now = millis();
-  if (pairing_in_progress_ &&
-      static_cast<uint32_t>(now - pairing_started_ms_) < PAIRING_GUARD_MS) {
-    ESP_LOGI(TAG, "Pairing already in progress - ignoring duplicate request");
-    return 0;
-  }
 
   Keys_Role role_enum = Keys_Role_ROLE_OWNER;
   if (role_ == "DRIVER") {
@@ -633,20 +612,6 @@ int TeslaBLEVehicle::start_pairing() {
   } else if (role_ == "CHARGING_MANAGER") {
     role_enum = Keys_Role_ROLE_CHARGING_MANAGER;
   }
-
-  // Give pairing exclusive use of this vehicle's TeslaBLE command queue.
-  // set_connected(false) clears queued/in-flight Tesla commands and resets
-  // sessions; immediately restoring true keeps the already-established GATT
-  // transport intact. The BLE adapter TX queue is cleared separately.
-  vehicle_->set_connected(false);
-  if (ble_adapter_)
-    ble_adapter_->clear_queues();
-  vehicle_->set_connected(true);
-
-  pairing_in_progress_ = true;
-  pairing_started_ms_ = now;
-  last_vcsec_poll_ = now;
-  poll_policy_.on_poll(now);
 
   vehicle_->pair(role_enum);
   return 0;
