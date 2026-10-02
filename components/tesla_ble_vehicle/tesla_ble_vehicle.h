@@ -246,6 +246,7 @@ private:
     bool is_poisoned_infotainment_error_(const TeslaBLE::CommandError *error) const;
     void enqueue_infotainment_work_(std::function<void()> start, bool interactive);
     void release_infotainment_slot_();
+    void defer_release_infotainment_slot_();
     void cancel_queued_infotainment_work_();
 
     TeslaBLEClient *ble_client_{nullptr};
