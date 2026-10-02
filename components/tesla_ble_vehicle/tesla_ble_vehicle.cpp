@@ -1050,6 +1050,8 @@ void TeslaBLEVehicle::gattc_event_handler(esp_gattc_cb_event_t event,
   }
 
   case ESP_GATTC_WRITE_CHAR_EVT:
+    if (ble_adapter_)
+      ble_adapter_->on_write_complete(param->write.status);
     if (param->write.status != ESP_GATT_OK) {
       ESP_LOGW(TAG, "BLE write failed: %d", param->write.status);
     }
