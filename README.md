@@ -1,264 +1,413 @@
-# ESPHome Tesla BLE
+# ESPHome Tesla BLE - multi-car
 
-Manage your Tesla vehicle over BLE using an ESP32 — control charging, check battery status, lock/unlock, and more.
+Control more than one Tesla from one ESP32 over BLE.
 
-| Controls | Sensors | Diagnostic |
-| - | - | - |
-| <img src="./docs/ha-controls.png"> | <img src="./docs/ha-sensors.png"> | <img src="./docs/ha-diagnostic.png"> |
+This is a multi-car fork of [yoziru/esphome-tesla-ble](https://github.com/yoziru/esphome-tesla-ble). The main change is that each car gets its own BLE client, key, sessions and Home Assistant sub-device instead of needing one ESP32 per car.
 
-## Quick Start
+It currently runs on ESPHome 2026.9.x with the Tesla BLE library v5.2.0.
 
-1. Pick your install method:
+## What works
 
-| Method | How | Best for |
-|--------|-----|----------|
-| **ESPHome Device Builder** | Create a project, then add the board package | HA + ESPHome add-on users |
-| **CLI** | `make compile && make upload` | Users with Python + [uv](https://docs.astral.sh/uv/) |
+- Multiple cars from one ESP32
+- Separate BLE connection per car
+- Separate private key and session storage per VIN
+- Home Assistant sub-device per car
+- Pair / regenerate key per car
+- Lock / unlock
+- Frunk / trunk / windows
+- Charge port
+- Charging controls and limits
+- Climate
+- Honk / flash
+- Sentry mode
+- Vehicle, charging, climate, drive, closure and TPMS sensors
+- BLE radio on/off and normal ESPHome restart controls can be added to the parent device
 
-## Boards
+The original single-car package layout still works. Multi-car configs should define the vehicles directly.
 
-Pick the config for your hardware:
+## Example: two cars
 
-| Board | Device Builder package | CLI |
-|-------|------------------------|-----|
-| **M5Stack NanoC6** | `tesla-ble-m5stack-nanoc6.dashboard.yml` | `BOARD=m5stack-nanoc6` |
-| **M5Stack AtomS3** | `tesla-ble-m5stack-atoms3.dashboard.yml` | `BOARD=m5stack-atoms3` |
-| **Generic ESP32** | `tesla-ble-esp32-generic.dashboard.yml` | `BOARD=esp32-generic` |
-
-Other boards? Copy one from `boards/` and set it with `BOARD=<your-board>`.
-
-The generic package targets the classic ESP32 (`esp32dev`). Do not use it for ESP32-C3, ESP32-S3, or other variants; select a matching board package or create one from `boards/` with the correct target settings.
-
-## Features
-
-- [x] Pair BLE key (DRIVER or CHARGING_MANAGER role)
-- [x] Wake vehicle, set charging amps/limit, start/stop charging
-- [x] Sensors: asleep/awake, locked/unlocked, user presence, charge port, BLE signal, IEC 61851
-- [x] Charging sensors: battery level, charge rate, energy added, time to full, charger phases
-
-## Installation
-
-### ESPHome Device Builder (recommended)
-
-If you run the [ESPHome add-on](https://esphome.io/guides/getting_started_hassio.html) in Home Assistant:
-
-1. For a new, unflashed board, select **Create configuration** → **Create new project** and complete the name and Wi-Fi setup. For a board already running this project's firmware, use **Adopt** instead.
-2. Open the device's YAML editor. Keep the generated `esphome`, `api`, and `wifi` sections, but remove the generated `esp32:` section. The board package below supplies the correct target and framework settings.
-3. Add these entries to the `secrets.yaml` used by your ESPHome configuration. Find the vehicle MAC with an [Android BLE scanner](#via-android-ble-scanner-recommended-for-device-builder); iOS apps cannot reveal it.
-
-```yaml
-tesla_ble_mac_address: "A0:B1:C2:D3:E4:F5"
-tesla_vin: "5YJ30123456789ABC"
-```
-
-4. Add the vehicle and version settings to the top-level `substitutions` section:
-```yaml
-substitutions:
-  # The left-hand names are fixed. Change only the secret names on the right.
-  # Set this to main, a branch, a release tag, or a commit SHA.
-  tesla_ble_ref: main
-  ble_mac_address: !secret tesla_ble_mac_address
-  tesla_vin: !secret tesla_vin
-```
-
-5. Add the board package under the top-level `packages` section. It provides the matching `esp32:` target, custom components, and encrypted ESPHome OTA updates using the API encryption key (ESPHome 2026.9.0 or newer). Do not add separate `esp32:`, `external_components:`, or `ota:` sections. For an M5Stack NanoC6:
-
-```yaml
-packages:
-  yoziru.esphome-tesla-ble:
-    url: https://github.com/yoziru/esphome-tesla-ble.git
-    ref: ${tesla_ble_ref}
-    files: [tesla-ble-m5stack-nanoc6.dashboard.yml]
-```
-
-6. Save and **Install**. Future firmware updates are applied from this same device card with **Update**.
-
-Use `tesla-ble-m5stack-atoms3.dashboard.yml` for an AtomS3 or `tesla-ble-esp32-generic.dashboard.yml` for a generic ESP32.
-
-**Wrong board?** If the upload reaches 100% but ends with `Finishing update failed`, the board file doesn't match your chip (e.g. NanoC6 firmware on an AtomS3). Switch `files:` to the `.dashboard.yml` for your hardware and install again.
-
-Set `tesla_ble_ref` once to test a branch, tag, or commit SHA. It selects both the YAML package and the custom C++ components. Local CLI builds need no override because they use the current checkout's `components/` directory.
-
-The first flash needs the generated name, Wi-Fi, and API settings plus the two vehicle secrets above. See [Finding the BLE MAC](#finding-the-ble-mac) if you do not have the MAC yet.
-
-#### Different board
-
-No pre-made file for your board? Point `files:` at `packages/dashboard.yml` and supply the chip settings yourself (see the sketch).
+Keep VINs and BLE MACs in ESPHome secrets.
 
 ```yaml
 substitutions:
-  tesla_ble_ref: main
-  board: esp32-c6-devkitm-1
-  variant: esp32c6
-  flash_size: 4MB
-  ble_mac_address: !secret tesla_ble_mac_address
-  tesla_vin: !secret tesla_vin
+  devicename: tesla-ble
+  friendly_name: "Tesla BLE"
 
-packages:
-  yoziru.esphome-tesla-ble:
-    url: https://github.com/yoziru/esphome-tesla-ble.git
-    ref: ${tesla_ble_ref}
-    files: [packages/dashboard.yml]
-
-esp32:
-  framework:
-    sdkconfig_options:
-      CONFIG_OPENTHREAD_ENABLED: n
-```
-
-`board:`/`variant:`/`flash_size:` must match the physical chip. Copy the full `esp32:` framework block from the closest file in `boards/` (see `boards/esp32-generic.yml` for the minimal shape).
-
-For example, an adopted NanoC6 with the YAML generated by current ESPHome Device Builder should look like this. Preserve the generated name, friendly name, API key, and Wi-Fi secrets from your device.
-
-```yaml
-substitutions:
-  name: tesla-ble-5b1980
-  friendly_name: Tesla BLE 5b1980
-  tesla_ble_ref: main
   charging_amps_max: "32"
-  ble_mac_address: !secret tesla_ble_mac_address
-  tesla_vin: !secret tesla_vin
 
-packages:
-  yoziru.esphome-tesla-ble:
-    url: https://github.com/yoziru/esphome-tesla-ble.git
-    ref: ${tesla_ble_ref}
-    files: [tesla-ble-m5stack-nanoc6.dashboard.yml]
+  # Two simultaneous Tesla connections produce much more BLE traffic than one.
+  # These are deliberately slower than the old single-car defaults.
+  vcsec_poll_interval: "60"
+  infotainment_poll_interval_awake: "180"
+  infotainment_poll_interval_active: "60"
+  infotainment_sleep_timeout: "660"
 
 esphome:
-  name: ${name}
-  name_add_mac_suffix: false
+  name: ${devicename}
   friendly_name: ${friendly_name}
 
-api:
-  encryption:
-    key: !secret api_encryption_key
+  devices:
+    - id: car_one_device
+      name: "Car One"
 
-wifi:
-  ssid: !secret wifi_ssid
-  password: !secret wifi_password
-  ap:
-    password: !secret wifi_hotspot_password
+    - id: car_two_device
+      name: "Car Two"
+
+  project:
+    name: "Tesla.BLE"
+    version: "multicar"
+
+tesla_ble_vehicle:
+  - id: car_one
+    name: "Car One"
+    device_id: car_one_device
+
+    vin: !secret tesla_vin_car_one
+    ble_mac_address: !secret ble_mac_address_car_one
+
+    role: DRIVER
+    charging_amps_max: ${charging_amps_max}
+    vcsec_poll_interval: ${vcsec_poll_interval}
+    infotainment_poll_interval_awake: ${infotainment_poll_interval_awake}
+    infotainment_poll_interval_active: ${infotainment_poll_interval_active}
+    infotainment_sleep_timeout: ${infotainment_sleep_timeout}
+
+  - id: car_two
+    name: "Car Two"
+    device_id: car_two_device
+
+    vin: !secret tesla_vin_car_two
+    ble_mac_address: !secret ble_mac_address_car_two
+
+    role: DRIVER
+    charging_amps_max: ${charging_amps_max}
+    vcsec_poll_interval: ${vcsec_poll_interval}
+    infotainment_poll_interval_awake: ${infotainment_poll_interval_awake}
+    infotainment_poll_interval_active: ${infotainment_poll_interval_active}
+    infotainment_sleep_timeout: ${infotainment_sleep_timeout}
 ```
 
-Secret names are local to each user's dashboard. If yours differ, keep `ble_mac_address` and `tesla_vin` on the left and change only the names after `!secret`.
+Secrets:
 
-For multiple vehicles, create one ESPHome device per vehicle and map each device's substitutions to distinct secrets. For example, the second device can use `ble_mac_address: !secret model_y_ble_mac_address` and `tesla_vin: !secret model_y_tesla_vin`; the package and board configuration stay the same.
+```yaml
+tesla_vin_car_one: "5YJ30123456789ABC"
+ble_mac_address_car_one: "A0:B1:C2:D3:E4:F5"
 
-Or copy [`tesla-ble.example.yml`](./tesla-ble.example.yml) as a starting point for custom configs.
-
-### CLI
-
-Requires Python 3.10+, [uv](https://docs.astral.sh/uv/), and GNU Make.
-
-```sh
-cp secrets.yaml.example secrets.yaml   # edit with your details
-make validate-config BOARD=m5stack-nanoc6  # check config first
-make compile BOARD=m5stack-nanoc6         # build firmware
-make upload BOARD=m5stack-nanoc6          # flash via USB
-make logs                                 # view logs
+tesla_vin_car_two: "5YJ30123456789ABD"
+ble_mac_address_car_two: "A0:B1:C2:D3:E4:F6"
 ```
 
-For OTA updates after initial USB flash:
-```sh
-make discover                      # find your device on the network
-make upload                        # OTA flash (uses saved suffix)
+Do not put real VINs or MACs into a public repo.
+
+## External component
+
+For a normal ESPHome config:
+
+```yaml
+external_components:
+  - source:
+      type: git
+      url: https://github.com/darek-margas/esphome-tesla-ble-multi.git
+      ref: multicar-v2
+      path: components
+    components:
+      - tesla_ble_vehicle
+      - tesla_ble_listener
+    refresh: 60s
 ```
 
-Available boards: `m5stack-nanoc6`, `m5stack-atoms3`, `esp32-generic`.
+ESP32 / ESP-IDF example:
 
-All `make` commands accept `BOARD=<board>` to select the target hardware.
+```yaml
+esp32:
+  board: esp32dev
+  variant: esp32
 
-## Configuration
+  framework:
+    type: esp-idf
 
-### BLE Key Role
+    components:
+      - name: tesla-ble
+        source: https://github.com/yoziru/tesla-ble.git
+        ref: v5.2.0
+```
 
-The `role` determines what the paired BLE key can do (set during pairing):
+The component currently works around one pairing bug in upstream TeslaBLE: software keys are enrolled as `CLOUD_KEY`. The NFC card is the approving key, not the key being added.
 
-- **DRIVER** (default) — full access: lock/unlock, frunk/trunk, windows, honk, climate, charging
-- **CHARGING_MANAGER** — charging only: start/stop, set amps, set limit, open charge port, basic info
+## BLE tracker
 
-The Tesla backend enforces these restrictions. Change requires re-pairing.
+```yaml
+esp32_ble_tracker:
+  scan_parameters:
+    interval: 211ms
+    window: 120ms
+    active: true
+    continuous: true
+```
 
-### Polling
+Each `tesla_ble_vehicle` instance creates its own internal ESPHome BLE client.
+
+You should see separate clients in the log, for example:
+
+```text
+[0] [AA:BB:CC:DD:EE:01]
+[1] [AA:BB:CC:DD:EE:02]
+```
+
+## Parent device controls
+
+These are not car controls. They belong to the ESPHome node itself and are useful when testing BLE.
+
+```yaml
+button:
+  - platform: restart
+    name: "Restart"
+    id: tesla_ble_restart
+    entity_category: diagnostic
+
+switch:
+  - platform: template
+    name: "BLE Radio"
+    id: tesla_ble_radio
+    icon: mdi:bluetooth
+    optimistic: true
+    restore_mode: RESTORE_DEFAULT_ON
+    entity_category: diagnostic
+
+    turn_on_action:
+      - ble.enable:
+
+    turn_off_action:
+      - ble.disable:
+```
+
+Turning BLE off disconnects all cars. Turning it back on makes both internal clients reconnect.
+
+## Pairing
+
+Pair each car separately.
+
+1. Make sure the ESP32 is connected to the car over BLE.
+2. Press that car's **Pair BLE Key** button once.
+3. Put an NFC key card on the car's card reader.
+4. The approval request should then appear on the car screen.
+5. Confirm it.
+
+One slightly confusing Tesla behaviour: the request may not appear until the NFC card is actually on the reader. Pressing Pair repeatedly does not help.
+
+The component therefore treats Pair as single-shot for 180 seconds. Extra presses during that period are ignored and the log says:
+
+```text
+Pairing already requested - present NFC card on reader
+```
+
+During the first 35 seconds after Pair, background polling for that car is paused to give the whitelist request a quiet BLE link.
+
+After pairing, test with something obvious such as **Flash Lights** or **Honk Horn**.
+
+### Regenerate key
+
+**Regenerate Key** creates a new private key for that car only.
+
+Keys and Tesla session data are stored in a VIN-specific NVS namespace. Regenerating one car's key does not touch another car.
+
+There is deliberately no migration from the old global `storage/private_key` key used by earlier versions.
+
+If you regenerate a key, that car needs to be paired again.
+
+## Finding the BLE MAC
+
+Tesla VCSEC advertises continuously. The advertisement name looks roughly like:
+
+```text
+SxxxxxxxxxxxxxxxxC
+```
+
+### Android
+
+Use a BLE scanner such as nRF Connect and find the Tesla advertisement. Android can show the MAC address.
+
+### iPhone
+
+iOS does not expose BLE MAC addresses to scanner apps.
+
+### Listener component
+
+The repo also contains `tesla_ble_listener`. It can be used temporarily if the VIN is known but the BLE MAC is not.
+
+Example:
+
+```yaml
+tesla_ble_listener:
+  id: tesla_listener
+  vin: !secret tesla_vin
+```
+
+Watch the ESPHome log for the detected Tesla name and MAC, then remove or disable the listener once the real vehicle instance is configured.
+
+## Home Assistant sub-devices
+
+ESPHome 2026.9 supports logical devices under one physical node.
+
+Define them under `esphome.devices`:
+
+```yaml
+esphome:
+  name: tesla-ble
+  devices:
+    - id: car_one_device
+      name: "Car One"
+    - id: car_two_device
+      name: "Car Two"
+```
+
+and attach each Tesla instance:
 
 ```yaml
 tesla_ble_vehicle:
-  vcsec_poll_interval: 10               # Status updates (always safe, low power)
-  infotainment_poll_interval_awake: 30  # Detailed data when idle
-  infotainment_poll_interval_active: 10 # Detailed data when charging/sentry mode
-  infotainment_sleep_timeout: 660       # Idle seconds before letting the car sleep (default 11 min)
+  - id: car_one
+    name: "Car One"
+    device_id: car_one_device
+    # ...
+
+  - id: car_two
+    name: "Car Two"
+    device_id: car_two_device
+    # ...
 ```
 
-The system only polls infotainment data during an 11-minute wake window, then lets the car sleep. Active charging and sentry mode keep it awake for continuous updates. A car that is merely left unlocked, or that reports user presence because a phone is in range, is treated as idle — the integration backs off and lets it sleep regardless. VCSEC status polling is low-power and does not affect vehicle sleep.
+All entities created for that vehicle, including Pair and Regenerate Key, are attached to the corresponding Home Assistant device.
 
-## Usage
+The Restart and BLE Radio controls above remain on the parent ESPHome device.
 
-### Finding the BLE MAC
+## Polling
 
-Your vehicle constantly advertises via BLE with a name derived from its VIN (format: `S` + 16 hex chars + `C`). This advertisement comes from VCSEC (vehicle security controller) which is always powered — no need to wake the car. You need the MAC address of that advertisement to configure the ESP32.
+The old single-car defaults were fairly aggressive:
 
-The `tesla_ble_listener` component is included in the firmware but disabled by default. You enable it temporarily, find the MAC, then disable it.
+```text
+VCSEC             10 s
+Infotainment      30 s
+Active            10 s
+```
 
-#### Via CLI
+With two cars that is unnecessary traffic and can push the ESP32 GATT client hard.
 
-In a local checkout of this repo:
+A better starting point for two cars is:
 
-1. **Uncomment** `listener: !include listener.yml` in `packages/base.yml`
-2. Add `tesla_vin` to `secrets.yaml`
-3. Build, flash, and watch logs:
-   ```sh
-   make compile BOARD=m5stack-nanoc6 && make upload BOARD=m5stack-nanoc6
-   make logs
-   ```
-4. Note the MAC from the log output
-5. **Re-comment** the line in `packages/base.yml` and run `make clean`
-6. Add `ble_mac_address` to `secrets.yaml`, rebuild, and reflash
+```yaml
+vcsec_poll_interval: "60"
+infotainment_poll_interval_awake: "180"
+infotainment_poll_interval_active: "60"
+infotainment_sleep_timeout: "660"
+```
 
-#### Via Android BLE Scanner (recommended for Device Builder)
+Commands are still immediate. These settings only control background polling.
 
-Use an Android BLE scanner app such as nRF Connect, scan nearby devices, and look for one with an 18-character name starting with **S** and ending with **C** (e.g., `S1a87a5a75f3df858C`). Record its MAC address. iOS scanner apps cannot display Bluetooth MAC addresses because Apple blocks that information; use an Android device or the [CLI listener](#via-cli) instead.
+Once everything is stable, shorten them if you really need faster state updates.
 
-### Pairing the BLE Key
+## BLE transport notes
 
-1. Sit in your car with the ESP32 powered and within BLE range
-2. In Home Assistant: **Settings → Devices & Services → ESPHome → your device → "Pair BLE key"**
-3. Tap your NFC key card to the center console **immediately**
-4. A prompt appears on the car's screen — tap **confirm**
+Tesla messages are larger than one BLE write, so they are fragmented.
 
-   <img src="./docs/vehicle-pair-request.png" width="500">
+With two simultaneous cars, sending fragments independently from both clients can congest the ESP32 GATT stack. The multi-car adapter therefore:
 
-5. Verify: go to **Controls → Locks** in the car — you'll see a new key named "Unknown device"
+- allows only one Tesla GATT fragment to be outstanding across all cars
+- waits for `ESP_GATTC_WRITE_CHAR_EVT` before advancing
+- retries failed fragments with backoff
+- does not discard a fragment just because `esp_ble_gattc_write_char()` accepted it
 
-   <img src="./docs/vehicle-locks.png" width="500">
+You may still occasionally see:
 
-6. [Optional] Rename it to "ESPHome BLE"
+```text
+BLE write completion failed: 143
+```
 
-> No popup? Press "Pair BLE key" and tap your card again. Make sure BLE MAC and VIN are correct.
+The important question is whether the command later completes. A successful command looks like:
 
-### Adding to Home Assistant
+```text
+[Flash Lights] Command completed successfully
+```
 
-**Settings → Devices & Services → Add Integration → ESPHome**. Enter the device's IP (find it in your router or from ESPHome Device Builder) and your API encryption key.
+If congestion is frequent, slow the polling before changing anything else.
 
-### Make commands reference
+## Roles
 
-| Command | What it does |
-|---------|-------------|
-| `make validate-config BOARD=<board>` | Check YAML without building |
-| `make compile BOARD=<board>` | Build firmware |
-| `make upload BOARD=<board>` | Flash via USB (add `HOST_SUFFIX` for OTA) |
-| `make logs` | View live device logs |
-| `make discover` | Find ESPHome devices on your network, saves suffix for OTA |
-| `make clean` | Delete build artifacts (do this when changing config) |
-| `make help` | Show all commands |
+```yaml
+role: DRIVER
+```
+
+or:
+
+```yaml
+role: CHARGING_MANAGER
+```
+
+The role is stored in the Tesla whitelist when pairing. Changing it requires pairing the key again.
 
 ## Troubleshooting
 
-| Symptom | Likely cause |
-|---------|-------------|
-| "Found Tesla vehicle" never appears | The listener isn't enabled. For CLI: uncomment `listener: !include listener.yml` in `packages/base.yml`. For Device Builder, use an Android BLE scanner before creating the vehicle package. VCSEC always advertises — no need to wake the car. |
-| Pairing fails with HMAC error | BLE MAC or VIN is wrong. Verify both in `secrets.yaml`. |
-| Car stays awake | Active charging or sentry mode keep it awake. Otherwise the integration backs off after `infotainment_sleep_timeout` of idle time and lets the car sleep — watch the log for `Polling Infotainment (sleeping - NO_WAKE_SKIP)`. |
-| `Unknown` on boot | Normal for some sensors — VCSEC corrects within ~10s. |
-| Compile errors | Board mismatch? Run `make clean`, then `make compile` again. |
-| `uv: command not found` | Install [uv](https://docs.astral.sh/uv/getting-started/installation/) |
+### Car is visible but commands fail with HMAC errors
+
+Typical log:
+
+```text
+Missing session info HMAC tag for DOMAIN_VEHICLE_SECURITY
+auth response authentication failed
+```
+
+If the car is not paired yet, this is expected.
+
+If it should already be paired:
+
+- verify VIN and BLE MAC belong to the same car
+- check that the correct per-VIN key was paired
+- try BLE Radio off, wait a few seconds, then on
+- if the key was regenerated, pair again
+
+### Pair button appears to do nothing
+
+Put the NFC card on the reader.
+
+On at least some vehicles the car does not show the approval request until the physical card is present.
+
+Do not keep pressing Pair. The component ignores duplicate presses for 180 seconds.
+
+### One car works and the other does not
+
+Check the log for both internal clients and both MAC addresses.
+
+If only one client reaches service discovery, this is a BLE connection problem, not a key problem.
+
+### Commands are slow
+
+Check polling rates first.
+
+Two cars doing VCSEC plus a full infotainment poll every 10 seconds produce a lot of traffic for one ESP32.
+
+### BLE gets into a strange state
+
+Use the parent **BLE Radio** switch:
+
+```text
+OFF
+wait 3-5 seconds
+ON
+```
+
+If that does not recover it, use the parent **Restart** button.
+
+## Current status
+
+This branch is working with two Teslas on one classic ESP32, including independent pairing and commands for both cars.
+
+There are still occasional ESP-IDF GATT congestion events under heavier polling. The global write serialization and slower polling make this usable, but this is the main area still worth improving.
+
+## Credits
+
+Original project and most of the Tesla integration work:
+
+- [yoziru/esphome-tesla-ble](https://github.com/yoziru/esphome-tesla-ble)
+- Tesla BLE protocol/library work used by that project
+
+This fork mainly adds the multi-car plumbing, per-car storage, ESPHome sub-devices and the BLE transport changes needed to run more than one vehicle from the same ESP32.
