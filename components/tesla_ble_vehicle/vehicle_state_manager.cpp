@@ -418,6 +418,36 @@ void VehicleStateManager::update_climate_state(const CarServer_ClimateState& cli
         climate_on_ = climate_state.optional_is_climate_on.is_climate_on;
     }
     
+    // Cabin Overheat Protection mode and active-cooling state.
+    if (climate_state.which_optional_cabin_overheat_protection && cabin_overheat_select_ != nullptr) {
+        const auto mode =
+            climate_state.optional_cabin_overheat_protection.cabin_overheat_protection;
+        const char *mode_name = nullptr;
+        switch (mode) {
+            case CarServer_ClimateState_CabinOverheatProtection_E_CabinOverheatProtectionOff:
+                mode_name = "Off";
+                break;
+            case CarServer_ClimateState_CabinOverheatProtection_E_CabinOverheatProtectionOn:
+                mode_name = "On";
+                break;
+            case CarServer_ClimateState_CabinOverheatProtection_E_CabinOverheatProtectionFanOnly:
+                mode_name = "Fan Only";
+                break;
+            default:
+                break;
+        }
+        if (mode_name != nullptr) {
+            cabin_overheat_select_->publish_state(mode_name);
+        }
+    }
+
+    if (climate_state.which_optional_cabin_overheat_protection_actively_cooling) {
+        publish_binary_sensor(
+            "cabin_overheat_active",
+            climate_state.optional_cabin_overheat_protection_actively_cooling
+                .cabin_overheat_protection_actively_cooling);
+    }
+
     // Steering wheel heater - sync switch state from vehicle
     if (climate_state.which_optional_steering_wheel_heater && steering_wheel_heat_switch_ != nullptr) {
         const bool heater_on = climate_state.optional_steering_wheel_heater.steering_wheel_heater;
