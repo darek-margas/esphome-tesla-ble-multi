@@ -226,15 +226,10 @@ private:
     static TeslaBLEVehicle *global_infotainment_owner_;
     static std::deque<InfotainmentWorkItem> global_infotainment_queue_;
 
-    bool infotainment_sequence_active_{false};
-    uint8_t infotainment_sequence_step_{0};
-    TeslaBLE::WakePolicy infotainment_sequence_policy_{TeslaBLE::WakePolicy::NO_WAKE_SKIP};
     uint8_t user_commands_in_flight_{0};
-    static constexpr uint32_t INFOTAINMENT_STEP_GAP_MS = 150;
     static constexpr uint32_t USER_COMMAND_QUIET_MS = 250;
-    void start_infotainment_sequence_(TeslaBLE::WakePolicy policy, uint32_t delay_ms = 0);
-    void run_infotainment_sequence_step_();
-    void finish_infotainment_sequence_();
+    void enqueue_poll_batch_(TeslaBLE::WakePolicy policy, uint32_t delay_ms = 0);
+    void enqueue_poll_job_(const char *name, int32_t data_type, TeslaBLE::WakePolicy policy);
     void enqueue_infotainment_work_(std::function<void()> start, bool interactive);
     void release_infotainment_slot_();
     void cancel_queued_infotainment_work_();
