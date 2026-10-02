@@ -22,8 +22,7 @@ public:
     bool initialize();
 
 private:
-    nvs_handle_t global_handle_;
-    nvs_handle_t session_handle_;
+    nvs_handle_t storage_handle_;
     bool initialized_;
     std::string storage_namespace_;
     
