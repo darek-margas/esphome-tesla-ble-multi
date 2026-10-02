@@ -177,6 +177,7 @@ public:
     uint16_t get_read_handle() const { return read_handle_; }
     uint16_t get_write_handle() const { return write_handle_; }
     void update_ble_rssi(int8_t rssi);
+    uint32_t ble_write_gap_ms() const;
 
 private:
     // Initialization helpers
@@ -247,6 +248,7 @@ private:
     uint16_t read_handle_{0};
     uint16_t write_handle_{0};
     uint32_t last_rssi_request_{0};
+    int8_t latest_ble_rssi_{-127};
     static constexpr uint32_t RSSI_POLL_INTERVAL_MS = 10000;
 
     // ==========================================================================
