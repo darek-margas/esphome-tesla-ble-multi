@@ -57,6 +57,15 @@ constexpr int kLimitHighSoc = 4;
 constexpr int kLimitCabin = 5;
 
 // Map a VCSEC enum to true/false, or nullopt when the status is unknown.
+// VCSEC_ClosureState_E
+constexpr int kClosureClosed = 0;
+constexpr int kClosureOpen = 1;
+constexpr int kClosureAjar = 2;
+constexpr int kClosureUnknown = 3;
+constexpr int kClosureFailedUnlatch = 4;
+constexpr int kClosureOpening = 5;
+constexpr int kClosureClosing = 6;
+
 // CarServer_ChargeState_ScheduledChargingMode
 constexpr int kScheduledChargingOff = 0;
 constexpr int kScheduledChargingStartAt = 1;
@@ -236,6 +245,23 @@ inline std::string seat_heater_level(int level) {
       return "High";
     default:
       return "Unknown";
+  }
+}
+
+// VCSEC closure state -> open? Ajar and moving count as open; a failed
+// unlatch left it closed. Nothing when the car does not know.
+inline std::optional<bool> closure_open(int state) {
+  switch (state) {
+    case kClosureClosed:
+    case kClosureFailedUnlatch:
+      return false;
+    case kClosureOpen:
+    case kClosureAjar:
+    case kClosureOpening:
+    case kClosureClosing:
+      return true;
+    default:
+      return std::nullopt;
   }
 }
 

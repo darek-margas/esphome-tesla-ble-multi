@@ -53,6 +53,13 @@ static_assert(CarServer_ClimateState_ClimateKeeperMode_Party_tag == state_text::
 static_assert(CarServer_ClimateState_DefrostMode_Off_tag == state_text::kDefrostOff);
 static_assert(CarServer_ClimateState_DefrostMode_Normal_tag == state_text::kDefrostNormal);
 static_assert(CarServer_ClimateState_DefrostMode_Max_tag == state_text::kDefrostMax);
+static_assert(static_cast<int>(VCSEC_ClosureState_E_CLOSURESTATE_CLOSED) == state_text::kClosureClosed);
+static_assert(static_cast<int>(VCSEC_ClosureState_E_CLOSURESTATE_OPEN) == state_text::kClosureOpen);
+static_assert(static_cast<int>(VCSEC_ClosureState_E_CLOSURESTATE_AJAR) == state_text::kClosureAjar);
+static_assert(static_cast<int>(VCSEC_ClosureState_E_CLOSURESTATE_UNKNOWN) == state_text::kClosureUnknown);
+static_assert(static_cast<int>(VCSEC_ClosureState_E_CLOSURESTATE_FAILED_UNLATCH) == state_text::kClosureFailedUnlatch);
+static_assert(static_cast<int>(VCSEC_ClosureState_E_CLOSURESTATE_OPENING) == state_text::kClosureOpening);
+static_assert(static_cast<int>(VCSEC_ClosureState_E_CLOSURESTATE_CLOSING) == state_text::kClosureClosing);
 static_assert(static_cast<int>(CarServer_ChargeState_ChargeLimitReason_ChargeLimitReasonNone) == state_text::kLimitNone);
 static_assert(static_cast<int>(CarServer_ChargeState_ChargeLimitReason_ChargeLimitReasonEvse) == state_text::kLimitEvse);
 static_assert(static_cast<int>(CarServer_ChargeState_ChargeLimitReason_ChargeLimitReasonBattTempLow) == state_text::kLimitBattTempLow);
@@ -151,11 +158,28 @@ void VehicleStateManager::update_vehicle_status(const VCSEC_VehicleStatus& statu
     update_lock_status(status.vehicleLockState);
     update_user_presence(status.userPresence);
     
-    // Update charge flap if present (from closure statuses)
+    // Closures from VCSEC: also reported while the car sleeps, so doors,
+    // frunk and trunk stay current without waking it for an infotainment poll.
     if (status.has_closureStatuses) {
-        bool flap_open = (status.closureStatuses.chargePort == VCSEC_ClosureState_E_CLOSURESTATE_OPEN);
-        update_charge_flap_open(flap_open);
+        const auto &c = status.closureStatuses;
+        auto open = [](VCSEC_ClosureState_E state) { return state_text::closure_open(static_cast<int>(state)); };
+        if (auto o = open(c.frontDriverDoor)) publish_binary_sensor("door_driver_front", *o);
+        if (auto o = open(c.rearDriverDoor)) publish_binary_sensor("door_driver_rear", *o);
+        if (auto o = open(c.frontPassengerDoor)) publish_binary_sensor("door_passenger_front", *o);
+        if (auto o = open(c.rearPassengerDoor)) publish_binary_sensor("door_passenger_rear", *o);
+        if (auto o = open(c.frontTrunk)) publish_cover_open(frunk_cover_, *o);
+        if (auto o = open(c.rearTrunk)) publish_cover_open(trunk_cover_, *o);
+        if (auto o = open(c.chargePort)) update_charge_flap_open(*o);
     }
+}
+
+void VehicleStateManager::publish_cover_open(cover::Cover *cover, bool open) {
+    if (cover == nullptr) return;
+    const float position = open ? cover::COVER_OPEN : cover::COVER_CLOSED;
+    if (cover->position == position && cover->has_state()) return;
+    cover->position = position;
+    cover->publish_state();
+    cover->set_has_state(true);  // cover::publish_state() does not set it
 }
 
 void VehicleStateManager::update_sleep_status(VCSEC_VehicleSleepStatus_E status) {
@@ -394,11 +418,7 @@ void VehicleStateManager::update_charge_state(const CarServer_ChargeState& charg
     
     // Update charge port door cover (physical door open/closed)
     if (charge_state.which_optional_charge_port_door_open) {
-        const bool door_open = charge_state.optional_charge_port_door_open.charge_port_door_open;
-        if (charge_port_door_cover_ != nullptr) {
-            charge_port_door_cover_->position = door_open ? cover::COVER_OPEN : cover::COVER_CLOSED;
-            charge_port_door_cover_->publish_state();
-        }
+        publish_cover_open(charge_port_door_cover_, charge_state.optional_charge_port_door_open.charge_port_door_open);
     }
     
     // Charge schedule
@@ -638,18 +658,10 @@ void VehicleStateManager::update_closures_state(const CarServer_ClosuresState& c
     
     // Trunks - update cover entities
     if (closures_state.which_optional_door_open_trunk_front) {
-        const bool frunk_open = closures_state.optional_door_open_trunk_front.door_open_trunk_front;
-        if (frunk_cover_ != nullptr) {
-            frunk_cover_->position = frunk_open ? cover::COVER_OPEN : cover::COVER_CLOSED;
-            frunk_cover_->publish_state();
-        }
+        publish_cover_open(frunk_cover_, closures_state.optional_door_open_trunk_front.door_open_trunk_front);
     }
     if (closures_state.which_optional_door_open_trunk_rear) {
-        const bool trunk_open = closures_state.optional_door_open_trunk_rear.door_open_trunk_rear;
-        if (trunk_cover_ != nullptr) {
-            trunk_cover_->position = trunk_open ? cover::COVER_OPEN : cover::COVER_CLOSED;
-            trunk_cover_->publish_state();
-        }
+        publish_cover_open(trunk_cover_, closures_state.optional_door_open_trunk_rear.door_open_trunk_rear);
     }
     
     // Windows - update individual binary sensors and aggregate cover
@@ -747,11 +759,7 @@ void VehicleStateManager::update_user_present(bool present) {
 
 void VehicleStateManager::update_charge_flap_open(bool open) {
     // Update charge port door cover entity with VCSEC data
-    if (charge_port_door_cover_ != nullptr) {
-        charge_port_door_cover_->position = open ? cover::COVER_OPEN : cover::COVER_CLOSED;
-        charge_port_door_cover_->publish_state();
-        ESP_LOGD(STATE_MANAGER_TAG, "Charge port door: %s (from VCSEC)", open ? "OPEN" : "CLOSED");
-    }
+    publish_cover_open(charge_port_door_cover_, open);
 }
 
 void VehicleStateManager::update_charging_amps(float amps) {

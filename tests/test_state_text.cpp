@@ -155,6 +155,17 @@ static void test_climate_fan_mode() {
   CHECK_STR(std::string(climate_fan_mode(false)), "Normal");
 }
 
+static void test_closure_open() {
+  CHECK(closure_open(kClosureClosed) == std::optional<bool>(false));
+  CHECK(closure_open(kClosureFailedUnlatch) == std::optional<bool>(false));
+  CHECK(closure_open(kClosureOpen) == std::optional<bool>(true));
+  CHECK(closure_open(kClosureAjar) == std::optional<bool>(true));
+  CHECK(closure_open(kClosureOpening) == std::optional<bool>(true));
+  CHECK(closure_open(kClosureClosing) == std::optional<bool>(true));
+  CHECK(!closure_open(kClosureUnknown).has_value());
+  CHECK(!closure_open(42).has_value());
+}
+
 int main() {
   test_sleep_status();
   test_lock_status();
@@ -172,6 +183,7 @@ int main() {
   test_miles_to_km();
   test_climate_preset();
   test_climate_fan_mode();
+  test_closure_open();
 
   return test_summary();
 }
