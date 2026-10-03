@@ -146,6 +146,8 @@ public:
     // Dynamic limits
     // ==========================================================================
     void update_charging_amps_max(int32_t new_max);
+    // Last charging session's phases / estimated power, restored from flash at boot
+    void restore_charge_session(int32_t phases, float power_kw);
     int get_charging_amps_max() const { return charging_amps_max_; }
     void set_charging_amps_max(int max) {
         if (max <= 0) return;
@@ -204,6 +206,15 @@ private:
     float cached_charger_current_{NAN};
     std::optional<int32_t> cached_charger_phases_{std::nullopt};
     void update_estimated_power();
+
+    // Charger Phases / Charger Power Estimated keep the last charging session's
+    // values after charging stops or the cable is unplugged, and survive a
+    // reboot: saved to flash once per session, when charging stops.
+    int32_t session_phases_{0};         // 0 = none yet
+    float session_power_kw_{NAN};
+    int32_t saved_session_phases_{0};
+    float saved_session_power_kw_{NAN};
+    void save_charge_session_if_changed();
 
     
     // ==========================================================================

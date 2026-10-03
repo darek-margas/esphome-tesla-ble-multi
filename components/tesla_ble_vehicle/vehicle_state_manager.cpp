@@ -236,6 +236,7 @@ void VehicleStateManager::update_charge_state(const CarServer_ChargeState& charg
         
         if (was_charging != is_charging_) {
             ESP_LOGD(STATE_MANAGER_TAG, "Charging state changed: %s", is_charging_ ? "ON" : "OFF");
+            if (was_charging) save_charge_session_if_changed();
         }
         
         // Update text sensors
@@ -247,11 +248,11 @@ void VehicleStateManager::update_charge_state(const CarServer_ChargeState& charg
         publish_binary_sensor("charger", charger_connected);
         if (!charger_connected) {
             // No cable: clear cached estimate inputs so a later reconnect without voltage doesn't reuse stale AC voltage.
+            // The sensors keep showing the last charging session's values.
             charger_was_disconnected = true;
             cached_charger_voltage_ = NAN;
             cached_charger_current_ = 0.0f;
             cached_charger_phases_ = std::nullopt;
-            publish_sensor("charger_power_estimated", 0.0f);
         }
     }
     
@@ -441,6 +442,7 @@ void VehicleStateManager::update_charge_state(const CarServer_ChargeState& charg
         if (phases >= 1.0f && phases <= 3.0f && std::isfinite(phases)) {
             publish_sensor("charger_phases", phases);
             cached_charger_phases_ = static_cast<int32_t>(phases);
+            session_phases_ = static_cast<int32_t>(phases);
         }
     }
 
@@ -821,6 +823,31 @@ void VehicleStateManager::update_estimated_power() {
     if (!std::isfinite(power_kw) || power_kw < 0.0f || power_kw > 100.0f) {
         return;
     }
+    // Only while charging: afterwards the sensor keeps the session's last value
+    if (!is_charging_) {
+        return;
+    }
+    publish_sensor("charger_power_estimated", power_kw);
+    session_power_kw_ = power_kw;
+}
+
+void VehicleStateManager::save_charge_session_if_changed() {
+    if (session_phases_ == 0 || !std::isfinite(session_power_kw_)) return;
+    // Skip unchanged or near-identical sessions: saves flash writes
+    if (session_phases_ == saved_session_phases_ && std::isfinite(saved_session_power_kw_) &&
+        std::fabs(session_power_kw_ - saved_session_power_kw_) < 0.05f) {
+        return;
+    }
+    parent_->save_charge_session_(session_phases_, session_power_kw_);
+    saved_session_phases_ = session_phases_;
+    saved_session_power_kw_ = session_power_kw_;
+}
+
+void VehicleStateManager::restore_charge_session(int32_t phases, float power_kw) {
+    if (phases < 1 || phases > 3 || !std::isfinite(power_kw) || power_kw < 0.0f || power_kw > 100.0f) return;
+    session_phases_ = saved_session_phases_ = phases;
+    session_power_kw_ = saved_session_power_kw_ = power_kw;
+    publish_sensor("charger_phases", static_cast<float>(phases));
     publish_sensor("charger_power_estimated", power_kw);
 }
 

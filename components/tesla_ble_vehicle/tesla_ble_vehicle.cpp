@@ -67,6 +67,7 @@ void TeslaBLEVehicle::setup() {
   initialize_managers();
   restore_charging_amps_max_();
   configure_pending_sensors();
+  restore_charge_session_();
 
   if (vin_.empty()) {
     ESP_LOGE(TAG, "VIN not configured - component will not function properly");
@@ -688,6 +689,35 @@ void TeslaBLEVehicle::save_charging_amps_max_(int max) {
   const int32_t value = max;
   if (pref.save(&value)) {
     ESP_LOGD(TAG, "Persisted charging amps max %d A", max);
+  }
+}
+
+namespace {
+struct ChargeSessionPref {
+  int32_t phases;
+  float power_kw;
+};
+}  // namespace
+
+uint32_t TeslaBLEVehicle::charge_session_pref_hash_() const {
+  return fnv1_hash_extend(fnv1_hash("tesla_ble_vehicle.charge_session"), vin_);
+}
+
+void TeslaBLEVehicle::restore_charge_session_() {
+  if (!state_manager_) return;
+  auto pref = global_preferences->make_preference<ChargeSessionPref>(charge_session_pref_hash_());
+  ChargeSessionPref stored{};
+  if (pref.load(&stored)) {
+    ESP_LOGI(TAG, "Restored last charge session: %" PRId32 " phase(s), %.2f kW", stored.phases, stored.power_kw);
+    state_manager_->restore_charge_session(stored.phases, stored.power_kw);
+  }
+}
+
+void TeslaBLEVehicle::save_charge_session_(int32_t phases, float power_kw) {
+  auto pref = global_preferences->make_preference<ChargeSessionPref>(charge_session_pref_hash_());
+  const ChargeSessionPref value{phases, power_kw};
+  if (pref.save(&value)) {
+    ESP_LOGD(TAG, "Persisted charge session: %" PRId32 " phase(s), %.2f kW", phases, power_kw);
   }
 }
 

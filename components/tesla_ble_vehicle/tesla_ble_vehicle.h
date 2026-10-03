@@ -403,6 +403,9 @@ private:
     uint32_t charging_amps_max_pref_hash_() const;
     void restore_charging_amps_max_();
     void save_charging_amps_max_(int max);
+    uint32_t charge_session_pref_hash_() const;
+    void restore_charge_session_();
+    void save_charge_session_(int32_t phases, float power_kw);
 
     // Command tracking
     void handle_command_result(const std::string &name, TeslaBLE::OperationResult result);
