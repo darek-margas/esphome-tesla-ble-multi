@@ -10,9 +10,6 @@ namespace tesla_ble_vehicle {
 
 static const char *ADAPTER_TAG = "tesla_ble_adapters";
 
-BleAdapterImpl *BleAdapterImpl::global_write_owner_ = nullptr;
-uint32_t BleAdapterImpl::global_next_write_ms_ = 0;
-
 // --- BleAdapterImpl ---
 
 BleAdapterImpl::BleAdapterImpl(TeslaBLEVehicle* parent) : parent_(parent) {}
@@ -72,8 +69,7 @@ void BleAdapterImpl::process_write_queue() {
                  parent_->log_name(), (unsigned) CongestionGate::MAX_WAIT_MS);
         congestion_gate_.reset();
     }
-    if (global_write_owner_ != nullptr && global_write_owner_ != this) return;
-    if (static_cast<int32_t>(now - global_next_write_ms_) < 0) return;
+    if (static_cast<int32_t>(now - next_write_ms_) < 0) return;
 
     // Back off a failing chunk instead of retrying every loop() iteration,
     // and drop it after repeated failures so it cannot block newer traffic.
@@ -113,10 +109,9 @@ void BleAdapterImpl::process_write_queue() {
         // The call only queues the write in ESP-IDF. Do not discard this
         // fragment until ESP_GATTC_WRITE_CHAR_EVT confirms completion.
         write_in_flight_ = true;
-        global_write_owner_ = this;
     } else {
         write_retry_policy_.on_failure(millis());
-        global_next_write_ms_ = millis() + std::max<uint32_t>(CONGESTION_GAP_MS, parent_->ble_write_gap_ms());
+        next_write_ms_ = millis() + std::max<uint32_t>(CONGESTION_GAP_MS, parent_->ble_write_gap_ms());
         ESP_LOGW(ADAPTER_TAG, "[%s] BLE write submit failed: %s", parent_->log_name(), esp_err_to_name(err));
     }
 }
@@ -124,13 +119,12 @@ void BleAdapterImpl::process_write_queue() {
 void BleAdapterImpl::on_write_complete(esp_gatt_status_t status) {
     if (!write_in_flight_) return;
     write_in_flight_ = false;
-    if (global_write_owner_ == this) global_write_owner_ = nullptr;
 
     switch (classify_write_status(status)) {
         case WriteOutcome::SENT:
             finish_head_fragment_(true, false);
             write_retry_policy_.on_success(millis());
-            global_next_write_ms_ = millis() + parent_->ble_write_gap_ms();
+            next_write_ms_ = millis() + parent_->ble_write_gap_ms();
             return;
 
         case WriteOutcome::SENT_CONGESTED:
@@ -145,7 +139,7 @@ void BleAdapterImpl::on_write_complete(esp_gatt_status_t status) {
             congestion_gate_.on_congested(millis());
             finish_head_fragment_(true, true);
             write_retry_policy_.on_success(millis());
-            global_next_write_ms_ = millis() + parent_->ble_write_gap_ms();
+            next_write_ms_ = millis() + parent_->ble_write_gap_ms();
             return;
 
         case WriteOutcome::FAILED:
@@ -155,7 +149,7 @@ void BleAdapterImpl::on_write_complete(esp_gatt_status_t status) {
     // Keep the same fragment at the front and retry it with backoff: the
     // stack did not accept it, so dropping it would corrupt the message.
     write_retry_policy_.on_failure(millis());
-    global_next_write_ms_ = millis() + std::max<uint32_t>(CONGESTION_GAP_MS, parent_->ble_write_gap_ms());
+    next_write_ms_ = millis() + std::max<uint32_t>(CONGESTION_GAP_MS, parent_->ble_write_gap_ms());
     ESP_LOGW(ADAPTER_TAG, "[%s] BLE write completion failed: %d", parent_->log_name(), status);
 }
 
@@ -197,7 +191,7 @@ void BleAdapterImpl::clear_queues() {
     std::queue<BLETXChunk> empty;
     write_queue_.swap(empty);
     write_in_flight_ = false;
-    if (global_write_owner_ == this) global_write_owner_ = nullptr;
+    next_write_ms_ = millis();  // "now", not 0: the signed comparison must stay valid after 24.8 days
     write_retry_policy_.reset();
     congestion_gate_.reset();
     tx_tracker_.clear();

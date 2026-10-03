@@ -58,10 +58,10 @@ private:
     CongestionGate congestion_gate_;
     TxMessageTracker tx_tracker_;
 
-    // ESP32's GATT client path is shared across all Tesla BLE links. Only one
-    // Tesla fragment may be outstanding globally, not merely per vehicle.
-    static BleAdapterImpl *global_write_owner_;
-    static uint32_t global_next_write_ms_;
+    // Earliest time the next fragment may be submitted on this link. Only one
+    // car is connected at a time, so write state is per link: one fragment in
+    // flight (write_in_flight_) and a short gap between fragments.
+    uint32_t next_write_ms_{0};
     
     static constexpr uint32_t CONGESTION_GAP_MS = 100;
     static const size_t BLOCK_LENGTH = 18; // Safe BLE MTU chunk size
