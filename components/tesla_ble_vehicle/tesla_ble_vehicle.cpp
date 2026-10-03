@@ -1288,11 +1288,23 @@ bool TeslaBLEVehicle::is_connected() const {
   return ble_client_ != nullptr && ble_client_->state() == espbt::ClientState::ESTABLISHED;
 }
 
+void TeslaBLEClient::connect() {
+  // ESP-IDF uses these for the connection it is about to open. Both cars get
+  // the same interval by default, so the controller can interleave the two
+  // links instead of starving one of them (seen as rsn 0x8 timeouts).
+  this->set_conn_params_(link_interval_units_, link_interval_units_, 0, link_timeout_units_, "tesla");
+  esp32_ble_client::BLEClientBase::connect();
+}
+
 bool TeslaBLEClient::gattc_event_handler(esp_gattc_cb_event_t event,
                                          esp_gatt_if_t gattc_if,
                                          esp_ble_gattc_cb_param_t *param) {
   if (!esp32_ble_client::BLEClientBase::gattc_event_handler(event, gattc_if, param))
     return false;
+  if (event == ESP_GATTC_SEARCH_CMPL_EVT) {
+    // Ask again once connected, in case the car negotiated something else.
+    this->update_conn_params_(link_interval_units_, link_interval_units_, 0, link_timeout_units_, "tesla");
+  }
   if (vehicle_ != nullptr)
     vehicle_->gattc_event_handler(event, gattc_if, param);
   return true;
@@ -1301,7 +1313,17 @@ bool TeslaBLEClient::gattc_event_handler(esp_gattc_cb_event_t event,
 void TeslaBLEClient::gap_event_handler(esp_gap_ble_cb_event_t event,
                                         esp_ble_gap_cb_param_t *param) {
   esp32_ble_client::BLEClientBase::gap_event_handler(event, param);
-  if (vehicle_ == nullptr || event != ESP_GAP_BLE_READ_RSSI_COMPLETE_EVT) return;
+  if (vehicle_ == nullptr) return;
+  if (event == ESP_GAP_BLE_UPDATE_CONN_PARAMS_EVT) {
+    auto &p = param->update_conn_params;
+    if (!this->check_addr(p.bda)) return;
+    // Report what the link actually runs with (units: 1.25 ms / 10 ms).
+    ESP_LOGI(TAG, "[%s] BLE link params: interval %.2f ms, latency %u, supervision timeout %u ms (status %d)",
+             vehicle_->log_name(), p.conn_int * 1.25f, (unsigned) p.latency, (unsigned) p.timeout * 10u,
+             (int) p.status);
+    return;
+  }
+  if (event != ESP_GAP_BLE_READ_RSSI_COMPLETE_EVT) return;
   if (!this->check_addr(param->read_rssi_cmpl.remote_addr)) return;
   if (param->read_rssi_cmpl.status == ESP_BT_STATUS_SUCCESS) {
     vehicle_->update_ble_rssi(param->read_rssi_cmpl.rssi);

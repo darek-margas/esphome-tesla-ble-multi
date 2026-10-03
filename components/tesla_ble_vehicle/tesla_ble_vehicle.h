@@ -339,12 +339,23 @@ class TeslaBLEClient : public esp32_ble_client::BLEClientBase {
  public:
   void set_vehicle(TeslaBLEVehicle *vehicle) { vehicle_ = vehicle; }
 
+  // Link parameters in BLE units: interval in 1.25 ms steps, supervision
+  // timeout in 10 ms steps. Applied as the preferred parameters before
+  // connecting and requested again once service discovery is done.
+  void set_link_params(uint16_t interval_units, uint16_t timeout_units) {
+    link_interval_units_ = interval_units;
+    link_timeout_units_ = timeout_units;
+  }
+
+  void connect() override;
   bool gattc_event_handler(esp_gattc_cb_event_t event, esp_gatt_if_t gattc_if,
                            esp_ble_gattc_cb_param_t *param) override;
   void gap_event_handler(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param_t *param) override;
 
  protected:
   TeslaBLEVehicle *vehicle_{nullptr};
+  uint16_t link_interval_units_{24};  // 30 ms
+  uint16_t link_timeout_units_{600};  // 6 s
 };
 
 // =============================================================================

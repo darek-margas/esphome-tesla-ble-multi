@@ -83,6 +83,13 @@ SetChargingLimitAction = tesla_ble_vehicle_ns.class_("SetChargingLimitAction", a
 CONF_VIN = "vin"
 CONF_BLE_MAC_ADDRESS = "ble_mac_address"
 CONF_INTERNAL_BLE_CLIENT_ID = "internal_ble_client_id"
+CONF_CONNECTION_INTERVAL = "connection_interval"
+CONF_SUPERVISION_TIMEOUT = "supervision_timeout"
+
+# BLE link-layer units: connection interval in 1.25 ms steps, supervision
+# timeout in 10 ms steps (Bluetooth Core spec, Vol 6 Part B 4.5.1).
+CONN_INTERVAL_UNIT_US = 1250
+SUPERVISION_TIMEOUT_UNIT_US = 10000
 CONF_CHARGING_AMPS_MAX = "charging_amps_max"
 DEFAULT_CHARGING_AMPS_MAX = 32
 CONF_ROLE = "role"
@@ -282,11 +289,37 @@ CONFIG_SCHEMA = (
             cv.Optional(CONF_INFOTAINMENT_POLL_INTERVAL_AWAKE, default=30): cv.int_range(min=10, max=600), 
             cv.Optional(CONF_INFOTAINMENT_POLL_INTERVAL_ACTIVE, default=10): cv.int_range(min=5, max=120),
             cv.Optional(CONF_INFOTAINMENT_SLEEP_TIMEOUT, default=660): cv.int_range(min=60, max=3600),
+            # BLE link parameters. With two cars on one ESP32, both links use
+            # the same interval by default so their radio slots interleave
+            # instead of colliding, and a long supervision timeout so a few
+            # missed slots do not drop the link.
+            cv.Optional(CONF_CONNECTION_INTERVAL, default="30ms"): cv.All(
+                cv.positive_time_period_microseconds,
+                cv.Range(min=cv.TimePeriod(microseconds=7500), max=cv.TimePeriod(seconds=4)),
+            ),
+            cv.Optional(CONF_SUPERVISION_TIMEOUT, default="6s"): cv.All(
+                cv.positive_time_period_microseconds,
+                cv.Range(min=cv.TimePeriod(milliseconds=100), max=cv.TimePeriod(seconds=32)),
+            ),
         },
     )
     .extend(cv.polling_component_schema("10s"))
     .extend(esp32_ble_tracker.ESP_BLE_DEVICE_SCHEMA)
 )
+
+
+def _validate_link_params(config):
+    interval_us = config[CONF_CONNECTION_INTERVAL].total_microseconds
+    timeout_us = config[CONF_SUPERVISION_TIMEOUT].total_microseconds
+    # The spec requires timeout > (1 + latency) * interval * 2; latency is 0.
+    if timeout_us <= 2 * interval_us:
+        raise cv.Invalid(
+            f"{CONF_SUPERVISION_TIMEOUT} must be more than twice {CONF_CONNECTION_INTERVAL}"
+        )
+    return config
+
+
+CONFIG_SCHEMA = cv.All(CONFIG_SCHEMA, _validate_link_params)
 
 
 # =============================================================================
@@ -459,6 +492,13 @@ async def to_code(config):
     cg.add(ble_var.set_address(config[CONF_BLE_MAC_ADDRESS].as_hex))
     cg.add(ble_var.set_auto_connect(True))
     cg.add(ble_var.set_vehicle(var))
+    interval_units = round(
+        config[CONF_CONNECTION_INTERVAL].total_microseconds / CONN_INTERVAL_UNIT_US
+    )
+    timeout_units = round(
+        config[CONF_SUPERVISION_TIMEOUT].total_microseconds / SUPERVISION_TIMEOUT_UNIT_US
+    )
+    cg.add(ble_var.set_link_params(interval_units, timeout_units))
     cg.add(var.set_ble_client(ble_var))
 
     cg.add(var.set_vin(config[CONF_VIN]))

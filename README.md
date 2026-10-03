@@ -308,28 +308,59 @@ Once everything is stable, shorten them if you really need faster state updates.
 
 ## BLE transport notes
 
-Tesla messages are larger than one BLE write, so they are fragmented.
-
-With two simultaneous cars, sending fragments independently from both clients can congest the ESP32 GATT stack. The multi-car adapter therefore:
+Tesla messages are larger than one BLE write, so they are fragmented into
+18-byte writes. The multi-car adapter:
 
 - allows only one Tesla GATT fragment to be outstanding across all cars
 - waits for `ESP_GATTC_WRITE_CHAR_EVT` before advancing
-- retries failed fragments with backoff
-- does not discard a fragment just because `esp_ble_gattc_write_char()` accepted it
+- treats status `143` (`ESP_GATT_CONGESTED`) as *sent*: the ESP-IDF stack
+  accepted the fragment, so it is never resent; only that car's link pauses
+  until the congestion clears
+- retries genuinely failed fragments with backoff
 
-You may still occasionally see:
-
-```text
-BLE write completion failed: 143
-```
-
-The important question is whether the command later completes. A successful command looks like:
+Every log line carries the car name, for example `[Bluey] Polling VCSEC`. At
+`DEBUG` level each message also logs its size and how long it took to leave
+the ESP32. A warning such as
 
 ```text
-[Flash Lights] Command completed successfully
+[Bluey] TX msg #7 sent in 1415 ms ... slower than the library's 1000 ms resend timer
 ```
 
-If congestion is frequent, slow the polling before changing anything else.
+means the library will resend that request before the car has seen it.
+
+### Link parameters
+
+Two cars on one ESP32 share one radio. If the two connections use unrelated
+intervals, their radio slots collide and the controller keeps sacrificing the
+first-opened link until it times out (`rsn 0x8` in the log). Both links
+therefore use the same connection interval and a long supervision timeout by
+default:
+
+```yaml
+tesla_ble_vehicle:
+  - name: Szarik
+    # ...
+    connection_interval: 30ms   # 7.5ms - 4s, same for every car
+    supervision_timeout: 6s     # 100ms - 32s, > 2 x connection_interval
+```
+
+After connecting, each car logs what the link actually uses:
+
+```text
+[Szarik] BLE link params: interval 30.00 ms, latency 0, supervision timeout 6000 ms (status 0)
+```
+
+Keep an active scan window short while cars are connected; scanning takes radio
+time from both links:
+
+```yaml
+esp32_ble_tracker:
+  scan_parameters:
+    interval: 320ms
+    window: 30ms
+    active: false
+    continuous: true
+```
 
 ## Roles
 
