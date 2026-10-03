@@ -36,36 +36,31 @@ jobs:
           TAG="v$VERSION"
 
           cat > /tmp/release-notes.md <<'EOF'
-          ## First working multi-car version
+          ## Reliable multi-car: one BLE link at a time
 
-          This is the first version I consider properly usable with more than one Tesla on a single ESP32.
+          The first multi-car release kept a permanent BLE connection to every car. In real use that was not reliable: one car worked while the other kept losing data, and which car suffered changed from boot to boot.
 
-          The starting point was yoziru/esphome-tesla-ble, which is a solid single-car implementation, but its architecture and BLE transport assumptions were still centered around one vehicle. Making a second Tesla work reliably exposed several things that were not obvious from simply duplicating the component.
+          Digging through the logs showed several independent problems:
 
-          The first part was isolation. Each car now has its own BLE client, private key, Tesla session storage and Home Assistant sub-device. Keys and sessions are stored per VIN, so pairing or regenerating the key for one vehicle no longer affects the other.
+          - **Error 143 was mishandled.** ESP-IDF returns `ESP_GATT_CONGESTED` (143) for a write it *accepted* while the link is congested. The adapter treated it as a failure and resent the fragment, duplicating bytes inside the Tesla frame and corrupting the message. It is now treated as sent, and only that link pauses until the congestion clears.
+          - **The library's 1 s resend timer.** Fragments were paced 60 ms apart, so a 188-byte request took longer than one second to leave the ESP32 and the library resent it before the car had seen it. Answers to the first copy were then rejected ("response for a different request") and partial replies were thrown away. The gap is now 5 ms.
+          - **Two simultaneous links do not work on the classic ESP32.** With two Tesla connections up, the controller stops serving the first-opened link (HCI handle 0) and it times out (`rsn 0x8`) every 10-20 seconds, whichever car holds it and whatever the connection parameters. Each car on its own was completely stable.
 
-          The next problem was pairing. During testing I found that software-generated keys need to be enrolled as CLOUD_KEY, while the NFC card is only the approving key. Treating the software key as NFC_CARD prevented pairing on current cars. This is not really a multi-car issue; it is a general compatibility fix that also matters for single-car use, and the upstream project has not yet caught up with this Tesla behavior.
+          So the cars now take turns on the radio:
 
-          Pairing also competed with normal background polling, so this branch temporarily quiets polling during the critical pairing window and ignores repeated Pair presses while a request is already active. On some cars the approval prompt does not appear until the physical NFC card is placed on the reader, which can otherwise make pairing look as if it failed.
+          - only one car is connected at a time; the car holding the link keeps it until another car has work waiting, then hands over after 1 s of quiet
+          - a hand-over takes about 1 s: the GATT service table is cached in NVS, and the Tesla VCSEC and infotainment sessions are kept across turns
+          - commands for a car that is not connected are queued and sent on its turn - typically 1.5-2 s in total
+          - presence from BLE adverts: a car that is not in range never takes the link from the car that is home; new `Present` binary sensor per car
+          - sleep-friendly: connecting never wakes a car, background polls never wake a sleeping car, each car is woken once after boot to fill its sensors (`wake_on_boot`)
+          - commands for a sleeping car wake it first and wait for infotainment before sending; a command that fails on a temporary link/session error is retried once
+          - every log line carries the car name, and each Tesla message logs how long it took to leave the ESP32
 
-          The largest runtime issue was BLE transport. Tesla commands are fragmented into multiple GATT writes. With two cars active at once, both clients could advance fragments independently and overload the ESP32 GATT stack. The result was intermittent error 143 responses, failed commands and hard-to-reproduce congestion. The transport now waits for GATT write completion before advancing and uses one ESP32-wide write lock so only one Tesla fragment is in flight at a time.
+          New per-car options: `wake_on_boot`, `connection_interval`, `supervision_timeout` (all optional). New diagnostic sensors `BLE RSSI` and `BLE Advert RSSI` (disabled by default).
 
-          This release therefore includes:
+          Recommended polling for two cars: `vcsec_poll_interval: 60`, `infotainment_poll_interval_awake: 120`, `infotainment_poll_interval_active: 60`, `infotainment_sleep_timeout: 660`. Keep the BLE tracker scan window short (`interval: 320ms`, `window: 30ms`, `active: false`, `continuous: true`).
 
-          - multiple Teslas from one ESP32
-          - separate BLE client, key and session storage per VIN
-          - Home Assistant sub-device per car
-          - independent Pair and Regenerate Key controls
-          - CLOUD_KEY enrolment for software keys
-          - pairing quiet window and duplicate-pair protection
-          - serialized Tesla BLE fragment writes across all cars
-          - GATT completion tracking and retry/backoff
-          - slower multi-car polling defaults to reduce BLE congestion
-          - parent BLE radio and restart controls for recovery/testing
-
-          It is tested with ESPHome 2026.9.x and Tesla BLE library v5.2.0.
-
-          There can still be occasional ESP-IDF GATT congestion under aggressive polling, but with the global write serialization and slower polling this is the first version that has been working reliably with two real Teslas.
+          Tested with two Teslas on a classic ESP32, ESPHome 2026.9.x and Tesla BLE library v5.2.0: no link drops, about 1 s hand-overs, commands to either car in about 2 s.
 
           The main branch remains reserved for tracking upstream yoziru/esphome-tesla-ble changes. Multi-car development and releases come from multicar-v2.
           EOF

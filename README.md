@@ -2,28 +2,25 @@
 
 Control more than one Tesla from one ESP32 over BLE.
 
-This is a multi-car fork of [yoziru/esphome-tesla-ble](https://github.com/yoziru/esphome-tesla-ble). The main change is that each car gets its own BLE client, key, sessions and Home Assistant sub-device instead of needing one ESP32 per car.
+This is a multi-car fork of [yoziru/esphome-tesla-ble](https://github.com/yoziru/esphome-tesla-ble). Each car gets its own BLE client, key, sessions and Home Assistant sub-device, so one ESP32 serves several cars instead of needing one ESP32 per car.
 
-It currently runs on ESPHome 2026.9.x with the Tesla BLE library v5.2.0.
+It runs on ESPHome 2026.9.x with the Tesla BLE library v5.2.0 and is tested with two cars on a classic ESP32 (Shelly Plus 1).
 
 ## What works
 
-- Multiple cars from one ESP32
-- Separate BLE connection per car
+- Multiple cars from one ESP32, one BLE link at a time (see [How it works](#how-it-works))
 - Separate private key and session storage per VIN
 - Home Assistant sub-device per car
 - Pair / regenerate key per car
-- Lock / unlock
-- Frunk / trunk / windows
-- Charge port
-- Charging controls and limits
-- Climate
-- Honk / flash
-- Sentry mode
+- Lock / unlock, frunk / trunk / windows, charge port
+- Charging controls and limits, climate, cabin overheat protection
+- Honk / flash, sentry mode
 - Vehicle, charging, climate, drive, closure and TPMS sensors
-- BLE radio on/off and normal ESPHome restart controls can be added to the parent device
+- `Present` binary sensor per car, based on the car's BLE adverts
+- Commands for a sleeping car wake it first; background polling never wakes a car
+- Commands for a car that is not connected right now are queued and sent on its turn
 
-The original single-car package layout still works. Multi-car configs should define the vehicles directly.
+The original single-car package layout still works. Multi-car configs define the vehicles directly.
 
 ## Example: two cars
 
@@ -36,10 +33,11 @@ substitutions:
 
   charging_amps_max: "32"
 
-  # Two simultaneous Tesla connections produce much more BLE traffic than one.
-  # These are deliberately slower than the old single-car defaults.
+  # Background polling. With several cars, each car's VCSEC poll is what asks
+  # for its BLE turn, so 60 s lets each car hold the link for about a minute.
+  # Commands are never delayed by these values.
   vcsec_poll_interval: "60"
-  infotainment_poll_interval_awake: "180"
+  infotainment_poll_interval_awake: "120"
   infotainment_poll_interval_active: "60"
   infotainment_sleep_timeout: "660"
 
@@ -54,9 +52,12 @@ esphome:
     - id: car_two_device
       name: "Car Two"
 
-  project:
-    name: "Tesla.BLE"
-    version: "multicar"
+esp32_ble_tracker:
+  scan_parameters:
+    interval: 320ms
+    window: 30ms
+    active: false
+    continuous: true
 
 tesla_ble_vehicle:
   - id: car_one
@@ -72,6 +73,11 @@ tesla_ble_vehicle:
     infotainment_poll_interval_awake: ${infotainment_poll_interval_awake}
     infotainment_poll_interval_active: ${infotainment_poll_interval_active}
     infotainment_sleep_timeout: ${infotainment_sleep_timeout}
+
+    # Optional, shown with their defaults:
+    # wake_on_boot: true          # wake the car once after boot to fill sensors
+    # connection_interval: 15ms   # BLE link interval
+    # supervision_timeout: 6s     # BLE link timeout
 
   - id: car_two
     name: "Car Two"
@@ -100,16 +106,110 @@ ble_mac_address_car_two: "A0:B1:C2:D3:E4:F6"
 
 Do not put real VINs or MACs into a public repo.
 
-## External component
+## Configuration reference
 
-For a normal ESPHome config:
+Per car, under `tesla_ble_vehicle:`:
+
+| Option | Default | Meaning |
+|---|---|---|
+| `name` | required | Car name, used for entity names and as the `[Name]` prefix in the log |
+| `vin` | required | Vehicle VIN |
+| `ble_mac_address` | required | Car's BLE MAC address |
+| `device_id` | - | Home Assistant sub-device for this car's entities |
+| `role` | `DRIVER` | `DRIVER` (all controls) or `CHARGING_MANAGER` (charging + basic controls) |
+| `charging_amps_max` | `32` | Upper limit of the charging amps control |
+| `vcsec_poll_interval` | `10` s | VCSEC status poll. Never wakes the car. With several cars this is also how often the car asks for a BLE turn: use 30-60 s |
+| `infotainment_poll_interval_awake` | `30` s | Infotainment data while awake and idle |
+| `infotainment_poll_interval_active` | `10` s | Infotainment data while charging or in sentry mode |
+| `infotainment_sleep_timeout` | `660` s | After this long idle, polls stop asking infotainment so the car can sleep |
+| `wake_on_boot` | `true` | Wake the car once after the ESP32 boots so every sensor gets a value. `false`: sensors stay empty until the car wakes on its own or you press *Force data update* |
+| `connection_interval` | `15ms` | BLE connection interval (7.5 ms - 4 s). Shorter = faster messages and service discovery. Keep it the same for every car |
+| `supervision_timeout` | `6s` | BLE link timeout (100 ms - 32 s, must be more than twice the interval) |
+
+The defaults of the last three suit almost every setup; you normally leave them out.
+
+## How it works
+
+### One car connected at a time
+
+**Why.** The first multi-car version kept a permanent BLE connection to every car. On the classic ESP32 that does not work reliably: with two Tesla links up, the controller stops serving the first-opened link (HCI handle 0) and it times out (`rsn 0x8` in the log) every 10-20 seconds, while the second link runs fine. It is not about signal strength or the car: it happened to whichever car connected first, with matched connection intervals (15-80 ms) and long supervision timeouts, and each car on its own was completely stable. Every drop also reset that car's Tesla sessions and polls, so one car was effectively starved.
+
+**What it does instead.** The cars take turns on the radio. Only the car whose turn it is may connect (the gate is in the BLE client's advert handling, so the other car never even starts a connection):
+
+- the car holding the link keeps it as long as nobody else needs it, so its commands go out immediately
+- when another car has work waiting (a queued command or a due VCSEC poll) and the link has been quiet for 1 s, the owner disconnects and the next car connects (round-robin)
+- a turn lasts at least 2 s (so polls get started) and at most 60 s while another car waits; a car that does not connect within 30 s loses its turn
+- with a single car configured nobody else waits, so it keeps its link - the same as the original single-car behaviour
+
+A hand-over takes about 1 s from one car's last traffic to the next car's first answer, because:
+
+- each car's GATT service table is cached in NVS (written once per car, survives reboots), so a reconnect skips service discovery. A stale cache entry (for example after a Tesla firmware update) shows up as a missing characteristic: the entry is cleared and the car reconnects
+- on a planned hand-over the Tesla VCSEC and infotainment sessions are kept in memory, so the next turn does not repeat the session handshake. An unexpected link loss still resets them
+
+### Presence
+
+A Tesla advertises over BLE all the time while it is in range, also while asleep. The scanner keeps listening while the other car is connected, so each car's adverts are recorded even when it does not hold the link.
+
+- only a car heard in the last 60 s (or connected) can ask for a turn, so a car that is away never takes the link from the car that is home. As soon as it is heard again it gets the next turn
+- `Present` (presence binary sensor) is on while the car is heard or connected, off after 60 s without an advert
+- safety nets: a car that is heard but cannot connect backs off (30 s, doubling up to 5 min); a car that is never heard still gets one try every 10 min
+
+### Commands
+
+- A command for the car holding the link goes out at once.
+- A command for a car that is not connected is queued, the car asks for its turn, and the command is sent as soon as it connects (typically 1.5-2 s in total). Queued commands expire after 2 min if the car does not become reachable.
+- An infotainment command (climate, charging, horn, cabin overheat, ...) for a car that is asleep first wakes it, waits 8 s for infotainment to come up, then sends the command. Without the wait the library's first infotainment session request is often lost and its watchdog resets the link 30 s later.
+- A command that fails with a temporary error (connection lost, session reset) is sent once more. A horn or flash may in rare cases trigger twice; lock, climate and charging commands are idempotent.
+
+### Sleep and polling
+
+- VCSEC (lock state, sleep state, presence) never wakes a car.
+- Connecting never wakes a car: after connecting, only VCSEC is polled, and the infotainment decision waits for its answer, so a sleeping car is left asleep.
+- Infotainment polls follow the polling policy: active interval while charging or in sentry mode, awake interval otherwise, and after `infotainment_sleep_timeout` idle they no longer ask infotainment, so the car can fall asleep.
+- Exception: the first infotainment poll after boot wakes each car once (`wake_on_boot`).
+- *Force data update* always fetches fresh data, waking the car if needed. If the car is not connected it is queued like a command.
+
+### BLE transport
+
+Tesla messages are larger than one BLE write, so they are fragmented into 18-byte writes (5 ms apart). The adapter:
+
+- waits for `ESP_GATTC_WRITE_CHAR_EVT` before sending the next fragment
+- treats status `143` (`ESP_GATT_CONGESTED`) as *sent*. ESP-IDF returns it for a fragment it accepted while the link is congested; resending it duplicated bytes inside the Tesla frame and corrupted the message. The link now just pauses until the congestion clears
+- retries genuinely failed fragments with backoff
+
+### Reading the log
+
+Every line carries the car name. A typical cycle:
+
+```text
+[Szarik] Yielding BLE link to the next car
+[Bluey] BLE turn starts
+[Bluey] Connection established - polling VCSEC
+[Bluey] Sending queued 'Cabin Overheat On'
+[Bluey] [Cabin Overheat On] Command completed successfully in 477 ms
+```
+
+Other useful lines:
+
+```text
+[Szarik] Not heard for 60 s - not present
+[Szarik] Present (BLE heard)
+[Bluey] 'Honk Horn': car asleep - waking it first
+[Bluey] Awake - sending 'Honk Horn' in 8 s
+[Bluey] First poll after boot - waking the car once to fill sensors
+[Szarik] BLE link params: interval 15.00 ms, latency 0, supervision timeout 6000 ms (requested 15.00 ms / 6000 ms)
+```
+
+At `DEBUG` level each Tesla message also logs its size and how long it took to leave the ESP32.
+
+## External component
 
 ```yaml
 external_components:
   - source:
       type: git
       url: https://github.com/darek-margas/esphome-tesla-ble-multi.git
-      ref: multicar-v2
+      ref: multicar-v2          # or a release tag such as v2026.10.0
       path: components
     components:
       - tesla_ble_vehicle
@@ -133,22 +233,26 @@ esp32:
         ref: v5.2.0
 ```
 
-The component currently works around one pairing bug in upstream TeslaBLE: software keys are enrolled as `CLOUD_KEY`. The NFC card is the approving key, not the key being added.
+The component enables the ESP-IDF GATT client cache (`CONFIG_BT_GATTC_CACHE_NVS_FLASH`) itself; nothing to add.
+
+The component also works around one pairing bug in upstream TeslaBLE: software keys are enrolled as `CLOUD_KEY`. The NFC card is the approving key, not the key being added.
 
 ## BLE tracker
 
 ```yaml
 esp32_ble_tracker:
   scan_parameters:
-    interval: 211ms
-    window: 120ms
-    active: true
+    interval: 320ms
+    window: 30ms
+    active: false
     continuous: true
 ```
 
-Each `tesla_ble_vehicle` instance creates its own internal ESPHome BLE client.
+- `continuous: true` is required: scanning is how a car is found to connect, and how presence is detected
+- keep the window short: scanning takes radio time from the connected car. A long active scan window (for example 120 ms of 211 ms) noticeably hurt the links
+- `active: false` is enough; Teslas are found by MAC address. Only the listener component (finding a MAC from a VIN) may need active scanning
 
-You should see separate clients in the log, for example:
+Each `tesla_ble_vehicle` instance creates its own internal ESPHome BLE client, so the log shows separate clients:
 
 ```text
 [0] [AA:BB:CC:DD:EE:01]
@@ -182,17 +286,16 @@ switch:
       - ble.disable:
 ```
 
-Turning BLE off disconnects all cars. Turning it back on makes both internal clients reconnect.
+Turning BLE off disconnects all cars. Turning it back on lets them reconnect in turn.
 
 ## Pairing
 
 Pair each car separately.
 
-1. Make sure the ESP32 is connected to the car over BLE.
-2. Press that car's **Pair BLE Key** button once.
-3. Put an NFC key card on the car's card reader.
-4. The approval request should then appear on the car screen.
-5. Confirm it.
+1. Press that car's **Pair BLE Key** button once. If the car is not connected right now, the request waits for its turn (`'Pair' waits for this car's BLE turn`).
+2. Put an NFC key card on the car's card reader.
+3. The approval request should then appear on the car screen.
+4. Confirm it.
 
 One slightly confusing Tesla behaviour: the request may not appear until the NFC card is actually on the reader. Pressing Pair repeatedly does not help.
 
@@ -202,7 +305,7 @@ The component therefore treats Pair as single-shot for 180 seconds. Extra presse
 Pairing already requested - present NFC card on reader
 ```
 
-During the first 35 seconds after Pair, background polling for that car is paused to give the whitelist request a quiet BLE link.
+During the first 35 seconds after Pair, background polling for that car is paused and the car keeps its BLE turn, to give the whitelist request a quiet link.
 
 After pairing, test with something obvious such as **Flash Lights** or **Honk Horn**.
 
@@ -279,143 +382,37 @@ tesla_ble_vehicle:
 
 All entities created for that vehicle, including Pair and Regenerate Key, are attached to the corresponding Home Assistant device.
 
+Per car, besides the vehicle entities:
+
+| Entity | Type | Notes |
+|---|---|---|
+| Present | binary sensor (presence) | Car heard over BLE in the last 60 s, or connected |
+| BLE RSSI | sensor, diagnostic | Signal of the connected link (only while this car holds it). Disabled by default |
+| BLE Advert RSSI | sensor, diagnostic | Signal of the car's adverts, every 10 s, also while not connected; unknown when not heard. Disabled by default |
+| Last Command | text sensor, diagnostic | Result of the last command. Disabled by default |
+
 The Restart and BLE Radio controls above remain on the parent ESPHome device.
 
 ## Polling
 
-The old single-car defaults were fairly aggressive:
+Commands are always sent immediately (or on the car's next turn). Polling settings only control background data.
 
-```text
-VCSEC             10 s
-Infotainment      30 s
-Active            10 s
-```
-
-With two cars that is unnecessary traffic and can push the ESP32 GATT client hard.
-
-A better starting point for two cars is:
+Recommended for two cars:
 
 ```yaml
-vcsec_poll_interval: "60"
-infotainment_poll_interval_awake: "180"
-infotainment_poll_interval_active: "60"
-infotainment_sleep_timeout: "660"
+vcsec_poll_interval: "60"               # how often each car asks for a turn
+infotainment_poll_interval_awake: "120" # awake, idle
+infotainment_poll_interval_active: "60" # charging / sentry
+infotainment_sleep_timeout: "660"       # leave as is: lets the car sleep
 ```
 
-Commands are still immediate. These settings only control background polling.
+Why these values:
 
-Once everything is stable, shorten them if you really need faster state updates.
+- with several cars, a due VCSEC poll is what makes the waiting car ask for the link. At 10 s the cars swap constantly and most of the time goes into hand-overs; at 60 s each car holds the link for about a minute and its commands go out without any hand-over
+- infotainment polls only run during a car's turn, so intervals shorter than about two turns do not give fresher data
+- keep the sleep timeout: it is what lets an idle car fall asleep
 
-## BLE transport notes
-
-Tesla messages are larger than one BLE write, so they are fragmented into
-18-byte writes. The multi-car adapter:
-
-- allows only one Tesla GATT fragment to be outstanding across all cars
-- waits for `ESP_GATTC_WRITE_CHAR_EVT` before advancing
-- treats status `143` (`ESP_GATT_CONGESTED`) as *sent*: the ESP-IDF stack
-  accepted the fragment, so it is never resent; only that car's link pauses
-  until the congestion clears
-- retries genuinely failed fragments with backoff
-
-Every log line carries the car name, for example `[Bluey] Polling VCSEC`. At
-`DEBUG` level each message also logs its size and how long it took to leave
-the ESP32. A warning such as
-
-```text
-[Bluey] TX msg #7 sent in 1415 ms ... slower than the library's 1000 ms resend timer
-```
-
-means the library will resend that request before the car has seen it.
-
-### One car connected at a time
-
-On the original ESP32, two simultaneous Tesla connections starve each other:
-the first-opened link stops being served and times out (`rsn 0x8`), whichever
-car holds it and whatever the connection parameters. Each car alone is
-reliable, so the cars take turns on the radio:
-
-- the car whose turn it is connects, polls VCSEC, then (only if the car is
-  known to be awake, per the normal polling policy) infotainment
-- when the other car has work waiting and this link has gone quiet, the car
-  disconnects and the other one connects
-- commands for a car that is not connected wait for its turn (up to 2 min);
-  expect a few seconds of extra latency while the link is established
-- only a car that is actually here gets a turn: a Tesla advertises all the
-  time while in range (also asleep), and the scanner hears those adverts
-  while the other car is connected. A car not heard for 60 s never takes the
-  link from the car that is here; as soon as it is heard again it gets the
-  next turn
-- each car has a `Present` binary sensor (presence): on while its adverts
-  are heard (or it is connected), off after 60 s without an advert. The
-  diagnostic `BLE RSSI` (connected link) and `BLE Advert RSSI` (adverts,
-  every 10 s, unknown when not heard) sensors are disabled by default;
-  enable them in Home Assistant when needed
-- safety nets: a car that is heard but cannot connect backs off (30 s,
-  doubling up to 5 min), and a car that is never heard still gets one try
-  every 10 min
-- connecting never wakes a car: infotainment waits for the VCSEC sleep state.
-  The one exception is the first poll after boot, which wakes each car once
-  so every sensor has a value (`wake_on_boot: false` per car to disable).
-  Press *Force data update* to fetch fresh data from a sleeping car
-
-With a single car configured nothing changes: it keeps its link.
-
-Hand-overs are kept cheap:
-
-- each car's GATT service table is cached in NVS (written once per car), so
-  a reconnect skips service discovery; if a cached table is ever stale the
-  cache entry is cleared and the car reconnects
-- on a planned hand-over the Tesla VCSEC and infotainment sessions are kept,
-  so the next turn does not repeat the session handshake (an unexpected link
-  loss still resets them)
-
-The log shows each hand-over, and presence changes:
-
-```text
-[Szarik] Not heard for 60 s - not present
-[Szarik] Present (BLE heard)
-[Szarik] Yielding BLE link to the next car
-[Bluey] BLE turn starts
-```
-
-With two cars, a `vcsec_poll_interval` of 30-60 s keeps the hand-overs
-reasonable; at the default 10 s the cars swap continuously.
-
-### Link parameters
-
-Two cars on one ESP32 share one radio. If the two connections use unrelated
-intervals, their radio slots collide and the controller keeps sacrificing the
-first-opened link until it times out (`rsn 0x8` in the log). Both links
-therefore use the same connection interval and a long supervision timeout by
-default:
-
-```yaml
-tesla_ble_vehicle:
-  - name: Szarik
-    # ...
-    connection_interval: 15ms   # 7.5ms - 4s, same for every car
-    supervision_timeout: 6s     # 100ms - 32s, > 2 x connection_interval
-```
-
-Within 10 s of connecting, and whenever the values change, each car logs what
-the link actually uses:
-
-```text
-[Szarik] BLE link params: interval 15.00 ms, latency 0, supervision timeout 6000 ms (requested 15.00 ms / 6000 ms)
-```
-
-Keep an active scan window short while cars are connected; scanning takes radio
-time from both links:
-
-```yaml
-esp32_ble_tracker:
-  scan_parameters:
-    interval: 320ms
-    window: 30ms
-    active: false
-    continuous: true
-```
+With a single car the original defaults (10 / 30 / 10 / 660) are fine.
 
 ## Roles
 
@@ -459,17 +456,21 @@ On at least some vehicles the car does not show the approval request until the p
 
 Do not keep pressing Pair. The component ignores duplicate presses for 180 seconds.
 
-### One car works and the other does not
+### A car never gets a turn
 
-Check the log for both internal clients and both MAC addresses.
+Check `Present` for that car (or `[Name] Present (BLE heard)` in the log). A car that is not heard is never given the link. If the car is in range but not heard, check `esp32_ble_tracker` has `continuous: true` and the MAC address is right.
 
-If only one client reaches service discovery, this is a BLE connection problem, not a key problem.
+A car that is heard but does not connect logs `Not reachable during its BLE turn - next try in N s`.
 
 ### Commands are slow
 
-Check polling rates first.
+- A command for the car that holds the link should finish in well under a second; for the other car, about 1.5-2 s including the hand-over.
+- If hand-overs are slow, check that `connection_interval` is not set high (the default 15 ms is right) and that `vcsec_poll_interval` is not so low that the cars swap continuously.
+- Commands for a sleeping car take about 10 s longer: wake, 8 s for infotainment, then the command.
 
-Two cars doing VCSEC plus a full infotainment poll every 10 seconds produce a lot of traffic for one ESP32.
+### Sensors are empty after a reboot
+
+With `wake_on_boot: false` a sleeping car's infotainment sensors stay empty until it wakes. Press *Force data update*, or leave `wake_on_boot` at its default.
 
 ### BLE gets into a strange state
 
@@ -485,9 +486,7 @@ If that does not recover it, use the parent **Restart** button.
 
 ## Current status
 
-This branch is working with two Teslas on one classic ESP32, including independent pairing and commands for both cars.
-
-There are still occasional ESP-IDF GATT congestion events under heavier polling. The global write serialization and slower polling make this usable, but this is the main area still worth improving.
+Working with two Teslas on one classic ESP32: no link drops, about 1 s hand-overs, commands to either car in about 2 s, independent pairing, presence detection and sleep-friendly polling.
 
 ## Credits
 
@@ -496,4 +495,4 @@ Original project and most of the Tesla integration work:
 - [yoziru/esphome-tesla-ble](https://github.com/yoziru/esphome-tesla-ble)
 - Tesla BLE protocol/library work used by that project
 
-This fork mainly adds the multi-car plumbing, per-car storage, ESPHome sub-devices and the BLE transport changes needed to run more than one vehicle from the same ESP32.
+This fork mainly adds the multi-car plumbing, per-car storage, ESPHome sub-devices, the one-link-at-a-time scheduler, presence detection and the BLE transport changes needed to run more than one vehicle from the same ESP32.

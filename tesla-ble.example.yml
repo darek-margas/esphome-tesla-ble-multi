@@ -29,14 +29,35 @@ dashboard_import:
   package_import_url: github://yoziru/esphome-tesla-ble/tesla-ble.example.yml@main
 
 
-# Multi-car users should define vehicles directly instead of using packages/client.yml:
+# Multi-car users define vehicles directly instead of using packages/client.yml.
+# Only one car is connected at a time; the cars take turns on the BLE radio
+# (see README "How it works"). Recommended polling for two cars:
+#
+# esp32_ble_tracker:
+#   scan_parameters:
+#     interval: 320ms
+#     window: 30ms
+#     active: false
+#     continuous: true          # required: finds cars and detects presence
 #
 # tesla_ble_vehicle:
 #   - id: orka
 #     name: Orka
 #     vin: !secret tesla_vin_orka
 #     ble_mac_address: !secret ble_mac_address_orka
+#     vcsec_poll_interval: "60"               # also how often this car asks for a BLE turn
+#     infotainment_poll_interval_awake: "120"
+#     infotainment_poll_interval_active: "60"
+#     infotainment_sleep_timeout: "660"
+#     # Optional, shown with their defaults:
+#     # wake_on_boot: true          # wake the car once after boot to fill sensors
+#     # connection_interval: 15ms   # BLE link interval, same for every car
+#     # supervision_timeout: 6s     # BLE link timeout
 #   - id: bluey
 #     name: Bluey
 #     vin: !secret tesla_vin_bluey
 #     ble_mac_address: !secret ble_mac_address_bluey
+#     vcsec_poll_interval: "60"
+#     infotainment_poll_interval_awake: "120"
+#     infotainment_poll_interval_active: "60"
+#     infotainment_sleep_timeout: "660"

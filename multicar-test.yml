@@ -34,6 +34,10 @@ tesla_ble_vehicle:
     name: Car One
     vin: "5YJ30123456789ABC"
     ble_mac_address: "A0:B1:C2:D3:E4:F5"
+    vcsec_poll_interval: 60
+    wake_on_boot: false
+    connection_interval: 15ms
+    supervision_timeout: 6s
   - id: car_two
     name: Car Two
     vin: "5YJ30123456789ABD"
