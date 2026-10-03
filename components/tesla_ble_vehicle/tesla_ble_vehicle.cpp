@@ -521,7 +521,11 @@ void TeslaBLEVehicle::enqueue_infotainment_work_(std::function<void()> start, bo
 }
 
 void TeslaBLEVehicle::defer_release_infotainment_slot_() {
-  this->set_timeout("release-infotainment-slot", LOGICAL_HANDOFF_GAP_MS, [this]() {
+  // Called from the library's completion callback: start the next command on
+  // the next loop pass, not re-entrantly from inside the library. No extra
+  // delay - the library sends one command at a time and waits for its answer,
+  // and only one car is connected, so there is nothing to space out.
+  this->set_timeout("release-infotainment-slot", 0, [this]() {
     release_infotainment_slot_();
   });
 }

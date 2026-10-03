@@ -327,7 +327,6 @@ private:
     static std::deque<InfotainmentWorkItem> global_infotainment_queue_;
 
     uint8_t user_commands_in_flight_{0};
-    static constexpr uint32_t LOGICAL_HANDOFF_GAP_MS = 350;
     void enqueue_poll_batch_(TeslaBLE::WakePolicy policy, uint32_t delay_ms = 0);
     void enqueue_poll_job_(const char *name, int32_t data_type, TeslaBLE::WakePolicy policy);
     void complete_poll_batch_job_();
