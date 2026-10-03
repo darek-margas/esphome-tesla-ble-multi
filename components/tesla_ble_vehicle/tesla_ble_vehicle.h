@@ -327,7 +327,6 @@ private:
     static std::deque<InfotainmentWorkItem> global_infotainment_queue_;
 
     uint8_t user_commands_in_flight_{0};
-    static constexpr uint32_t USER_COMMAND_QUIET_MS = 250;
     static constexpr uint32_t LOGICAL_HANDOFF_GAP_MS = 350;
     void enqueue_poll_batch_(TeslaBLE::WakePolicy policy, uint32_t delay_ms = 0);
     void enqueue_poll_job_(const char *name, int32_t data_type, TeslaBLE::WakePolicy policy);
@@ -365,7 +364,6 @@ private:
     bool notify_registration_pending_{false};
     static constexpr uint32_t NOTIFY_RETRY_MS = 500;
     uint32_t last_rssi_request_{0};
-    int8_t latest_ble_rssi_{-127};
     static constexpr uint32_t RSSI_POLL_INTERVAL_MS = 10000;
 
     // ==========================================================================

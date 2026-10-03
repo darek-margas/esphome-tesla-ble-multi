@@ -1576,7 +1576,6 @@ void TeslaBLEVehicle::close_windows() {
 }
 
 void TeslaBLEVehicle::update_ble_rssi(int8_t rssi) {
-  latest_ble_rssi_ = rssi;
   if (state_manager_ != nullptr) state_manager_->update_ble_rssi(static_cast<float>(rssi));
 }
 
@@ -1859,7 +1858,6 @@ void TeslaBLEVehicle::handle_connection_lost() {
   cancel_queued_infotainment_work_();
   release_infotainment_slot_();
   user_commands_in_flight_ = 0;
-  latest_ble_rssi_ = -127;
   // Poll timing survives a disconnect: with cars taking turns this happens
   // every turn, and resetting it would poll (and keep awake) on every turn.
   if (yielding_link_) {
