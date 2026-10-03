@@ -68,6 +68,18 @@ constexpr int kSeatHeaterLow = 1;
 constexpr int kSeatHeaterMed = 2;
 constexpr int kSeatHeaterHigh = 3;
 
+// CarServer_ClimateState_ClimateKeeperMode tags (which_type)
+constexpr int kKeeperUnknown = 1;
+constexpr int kKeeperOff = 2;
+constexpr int kKeeperOn = 3;
+constexpr int kKeeperDog = 4;
+constexpr int kKeeperParty = 5;  // shown as Camp Mode
+
+// CarServer_ClimateState_DefrostMode tags (which_type)
+constexpr int kDefrostOff = 1;
+constexpr int kDefrostNormal = 2;
+constexpr int kDefrostMax = 3;
+
 constexpr float kKmPerMile = 1.609344f;
 
 inline float miles_to_km(float miles) { return miles * kKmPerMile; }
@@ -226,6 +238,29 @@ inline std::string seat_heater_level(int level) {
       return "Unknown";
   }
 }
+
+// Climate entity preset from the car's climate keeper and defrost state, using
+// the preset names TeslaClimate offers. 0 = field not reported. nullptr when
+// the state does not tell (the entity keeps its current preset).
+inline const char *climate_preset(int keeper_tag, int defrost_tag) {
+  if (defrost_tag == kDefrostMax)
+    return "Defrost";
+  switch (keeper_tag) {
+    case kKeeperOff:
+      return "Normal";
+    case kKeeperOn:
+      return "Keep On";
+    case kKeeperDog:
+      return "Dog Mode";
+    case kKeeperParty:
+      return "Camp Mode";
+    default:
+      return nullptr;
+  }
+}
+
+// Climate entity fan mode from the car's bioweapon defense state.
+inline const char *climate_fan_mode(bool bioweapon_on) { return bioweapon_on ? "Bioweapon Mode" : "Normal"; }
 
 // Minutes after midnight -> "HH:MM"; nothing for values past the end of a day.
 inline std::optional<std::string> time_of_day(uint32_t minutes) {

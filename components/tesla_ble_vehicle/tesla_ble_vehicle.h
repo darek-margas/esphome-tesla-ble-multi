@@ -589,8 +589,10 @@ public:
     climate::ClimateTraits traits() override;
     void control(const climate::ClimateCall &call) override;
     
-    // Called by state manager to update current state
-    void update_state(bool is_on, float current_temp, float target_temp);
+    // Called by state manager to update current state. preset / fan_mode:
+    // nullptr leaves the current value unchanged.
+    void update_state(bool is_on, float current_temp, float target_temp,
+                      const char *preset = nullptr, const char *fan_mode = nullptr);
 };
 
 // =============================================================================

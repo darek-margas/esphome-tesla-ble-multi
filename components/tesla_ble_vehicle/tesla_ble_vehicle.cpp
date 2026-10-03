@@ -2046,7 +2046,8 @@ void TeslaClimate::control(const climate::ClimateCall &call) {
 }
 
 void TeslaClimate::update_state(bool is_on, float current_temp,
-                                float target_temp) {
+                                float target_temp, const char *preset,
+                                const char *fan_mode) {
   this->mode =
       is_on ? climate::CLIMATE_MODE_HEAT_COOL : climate::CLIMATE_MODE_OFF;
 
@@ -2056,6 +2057,14 @@ void TeslaClimate::update_state(bool is_on, float current_temp,
 
   if (!std::isnan(target_temp)) {
     this->target_temperature = target_temp;
+  }
+
+  if (preset != nullptr) {
+    this->set_custom_preset_(preset);
+  }
+
+  if (fan_mode != nullptr) {
+    this->set_custom_fan_mode_(fan_mode);
   }
 
   this->publish_state();

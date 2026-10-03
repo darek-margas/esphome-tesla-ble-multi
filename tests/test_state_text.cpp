@@ -137,6 +137,24 @@ static void test_miles_to_km() {
   CHECK(miles_to_km(100.0f) > 160.93f && miles_to_km(100.0f) < 160.94f);
 }
 
+static void test_climate_preset() {
+  CHECK_STR(std::string(climate_preset(kKeeperOff, kDefrostOff)), "Normal");
+  CHECK_STR(std::string(climate_preset(kKeeperOn, kDefrostOff)), "Keep On");
+  CHECK_STR(std::string(climate_preset(kKeeperDog, 0)), "Dog Mode");
+  CHECK_STR(std::string(climate_preset(kKeeperParty, kDefrostNormal)), "Camp Mode");
+  // Max defrost wins over the climate keeper mode
+  CHECK_STR(std::string(climate_preset(kKeeperOff, kDefrostMax)), "Defrost");
+  CHECK_STR(std::string(climate_preset(0, kDefrostMax)), "Defrost");
+  // Nothing usable reported: keep the current preset
+  CHECK(climate_preset(0, 0) == nullptr);
+  CHECK(climate_preset(kKeeperUnknown, kDefrostOff) == nullptr);
+}
+
+static void test_climate_fan_mode() {
+  CHECK_STR(std::string(climate_fan_mode(true)), "Bioweapon Mode");
+  CHECK_STR(std::string(climate_fan_mode(false)), "Normal");
+}
+
 int main() {
   test_sleep_status();
   test_lock_status();
@@ -152,6 +170,8 @@ int main() {
   test_seat_heater_level_text();
   test_time_of_day();
   test_miles_to_km();
+  test_climate_preset();
+  test_climate_fan_mode();
 
   return test_summary();
 }

@@ -45,6 +45,14 @@ static_assert(static_cast<int>(CarServer_ClimateState_SeatHeaterLevel_E_SeatHeat
 static_assert(static_cast<int>(CarServer_ClimateState_SeatHeaterLevel_E_SeatHeaterLevelLow) == state_text::kSeatHeaterLow);
 static_assert(static_cast<int>(CarServer_ClimateState_SeatHeaterLevel_E_SeatHeaterLevelMed) == state_text::kSeatHeaterMed);
 static_assert(static_cast<int>(CarServer_ClimateState_SeatHeaterLevel_E_SeatHeaterLevelHigh) == state_text::kSeatHeaterHigh);
+static_assert(CarServer_ClimateState_ClimateKeeperMode_Unknown_tag == state_text::kKeeperUnknown);
+static_assert(CarServer_ClimateState_ClimateKeeperMode_Off_tag == state_text::kKeeperOff);
+static_assert(CarServer_ClimateState_ClimateKeeperMode_On_tag == state_text::kKeeperOn);
+static_assert(CarServer_ClimateState_ClimateKeeperMode_Dog_tag == state_text::kKeeperDog);
+static_assert(CarServer_ClimateState_ClimateKeeperMode_Party_tag == state_text::kKeeperParty);
+static_assert(CarServer_ClimateState_DefrostMode_Off_tag == state_text::kDefrostOff);
+static_assert(CarServer_ClimateState_DefrostMode_Normal_tag == state_text::kDefrostNormal);
+static_assert(CarServer_ClimateState_DefrostMode_Max_tag == state_text::kDefrostMax);
 static_assert(static_cast<int>(CarServer_ChargeState_ChargeLimitReason_ChargeLimitReasonNone) == state_text::kLimitNone);
 static_assert(static_cast<int>(CarServer_ChargeState_ChargeLimitReason_ChargeLimitReasonEvse) == state_text::kLimitEvse);
 static_assert(static_cast<int>(CarServer_ChargeState_ChargeLimitReason_ChargeLimitReasonBattTempLow) == state_text::kLimitBattTempLow);
@@ -532,9 +540,17 @@ void VehicleStateManager::update_climate_state(const CarServer_ClimateState& cli
         }
     }
     
+    // Preset (climate keeper / defrost) and fan mode (bioweapon defense)
+    const char *preset = state_text::climate_preset(
+        climate_state.has_climate_keeper_mode ? climate_state.climate_keeper_mode.which_type : 0,
+        climate_state.has_defrost_mode ? climate_state.defrost_mode.which_type : 0);
+    const char *fan_mode = climate_state.which_optional_bioweapon_mode_on
+        ? state_text::climate_fan_mode(climate_state.optional_bioweapon_mode_on.bioweapon_mode_on)
+        : nullptr;  // only reported by cars with a HEPA filter
+
     // Update climate entity with current state
     if (auto* tesla_climate = static_cast<TeslaClimate*>(climate_)) {
-        tesla_climate->update_state(climate_on_, current_inside_temp_, target_temp_);
+        tesla_climate->update_state(climate_on_, current_inside_temp_, target_temp_, preset, fan_mode);
     }
 }
 
