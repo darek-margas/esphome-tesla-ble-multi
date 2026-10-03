@@ -274,10 +274,15 @@ inline std::optional<bool> closure_open(int state) {
 // Climate entity preset from the car's climate keeper and defrost state, using
 // the preset names TeslaClimate offers. 0 = field not reported. nullptr when
 // the state does not tell (the entity keeps its current preset).
+// Cars report the keeper as Unknown when no keeper mode is active (seen on
+// two cars with climate off and on), so Unknown counts as Normal once the
+// defrost state confirms the climate data is there.
 inline const char *climate_preset(int keeper_tag, int defrost_tag) {
   if (defrost_tag == kDefrostMax)
     return "Defrost";
   switch (keeper_tag) {
+    case kKeeperUnknown:
+      return defrost_tag != 0 ? "Normal" : nullptr;
     case kKeeperOff:
       return "Normal";
     case kKeeperOn:

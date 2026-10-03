@@ -147,7 +147,9 @@ static void test_climate_preset() {
   CHECK_STR(std::string(climate_preset(0, kDefrostMax)), "Defrost");
   // Nothing usable reported: keep the current preset
   CHECK(climate_preset(0, 0) == nullptr);
-  CHECK(climate_preset(kKeeperUnknown, kDefrostOff) == nullptr);
+  // Cars report keeper Unknown when no keeper mode is active
+  CHECK_STR(std::string(climate_preset(kKeeperUnknown, kDefrostOff)), "Normal");
+  CHECK(climate_preset(kKeeperUnknown, 0) == nullptr);
 }
 
 static void test_climate_fan_mode() {
