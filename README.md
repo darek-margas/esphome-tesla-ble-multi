@@ -229,8 +229,8 @@ esp32:
 
     components:
       - name: tesla-ble
-        source: https://github.com/yoziru/tesla-ble.git
-        ref: v5.2.0
+        source: https://github.com/darek-margas/tesla-ble.git
+        ref: 07a4ef503a52f736009fdeba953f185aecc863f3  # = upstream yoziru/tesla-ble v5.2.0
 ```
 
 The component enables the ESP-IDF GATT client cache (`CONFIG_BT_GATTC_CACHE_NVS_FLASH`) itself; nothing to add.
