@@ -110,6 +110,33 @@ static void test_charge_limit_reason_text() {
   CHECK_STR(charge_limit_reason(99), "Unknown");
 }
 
+static void test_scheduled_charging_mode_text() {
+  CHECK_STR(scheduled_charging_mode(kScheduledChargingOff), "Off");
+  CHECK_STR(scheduled_charging_mode(kScheduledChargingStartAt), "Start At");
+  CHECK_STR(scheduled_charging_mode(kScheduledChargingDepartBy), "Depart By");
+  CHECK_STR(scheduled_charging_mode(7), "Unknown");
+}
+
+static void test_seat_heater_level_text() {
+  CHECK_STR(seat_heater_level(kSeatHeaterOff), "Off");
+  CHECK_STR(seat_heater_level(kSeatHeaterLow), "Low");
+  CHECK_STR(seat_heater_level(kSeatHeaterMed), "Medium");
+  CHECK_STR(seat_heater_level(kSeatHeaterHigh), "High");
+  CHECK_STR(seat_heater_level(-1), "Unknown");
+}
+
+static void test_time_of_day() {
+  CHECK(time_of_day(0).value() == "00:00");
+  CHECK(time_of_day(7 * 60 + 5).value() == "07:05");
+  CHECK(time_of_day(23 * 60 + 59).value() == "23:59");
+  CHECK(!time_of_day(24 * 60).has_value());
+}
+
+static void test_miles_to_km() {
+  CHECK(miles_to_km(0.0f) == 0.0f);
+  CHECK(miles_to_km(100.0f) > 160.93f && miles_to_km(100.0f) < 160.94f);
+}
+
 int main() {
   test_sleep_status();
   test_lock_status();
@@ -121,6 +148,10 @@ int main() {
   test_shift_state_text();
   test_is_parked();
   test_charge_limit_reason_text();
+  test_scheduled_charging_mode_text();
+  test_seat_heater_level_text();
+  test_time_of_day();
+  test_miles_to_km();
 
   return test_summary();
 }

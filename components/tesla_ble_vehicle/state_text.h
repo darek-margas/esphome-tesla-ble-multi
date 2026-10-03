@@ -1,5 +1,7 @@
 #pragma once
 
+#include <cstdint>
+#include <cstdio>
 #include <optional>
 #include <string>
 
@@ -55,6 +57,21 @@ constexpr int kLimitHighSoc = 4;
 constexpr int kLimitCabin = 5;
 
 // Map a VCSEC enum to true/false, or nullopt when the status is unknown.
+// CarServer_ChargeState_ScheduledChargingMode
+constexpr int kScheduledChargingOff = 0;
+constexpr int kScheduledChargingStartAt = 1;
+constexpr int kScheduledChargingDepartBy = 2;
+
+// CarServer_ClimateState_SeatHeaterLevel_E
+constexpr int kSeatHeaterOff = 0;
+constexpr int kSeatHeaterLow = 1;
+constexpr int kSeatHeaterMed = 2;
+constexpr int kSeatHeaterHigh = 3;
+
+constexpr float kKmPerMile = 1.609344f;
+
+inline float miles_to_km(float miles) { return miles * kKmPerMile; }
+
 inline std::optional<bool> sleep_status(int status) {
   switch (status) {
     case kSleepAwake:
@@ -180,6 +197,44 @@ inline std::string charge_limit_reason(int reason) {
     default:
       return "Unknown";
   }
+}
+
+inline std::string scheduled_charging_mode(int mode) {
+  switch (mode) {
+    case kScheduledChargingOff:
+      return "Off";
+    case kScheduledChargingStartAt:
+      return "Start At";
+    case kScheduledChargingDepartBy:
+      return "Depart By";
+    default:
+      return "Unknown";
+  }
+}
+
+inline std::string seat_heater_level(int level) {
+  switch (level) {
+    case kSeatHeaterOff:
+      return "Off";
+    case kSeatHeaterLow:
+      return "Low";
+    case kSeatHeaterMed:
+      return "Medium";
+    case kSeatHeaterHigh:
+      return "High";
+    default:
+      return "Unknown";
+  }
+}
+
+// Minutes after midnight -> "HH:MM"; nothing for values past the end of a day.
+inline std::optional<std::string> time_of_day(uint32_t minutes) {
+  if (minutes >= 24 * 60)
+    return std::nullopt;
+  char buf[6];
+  snprintf(buf, sizeof(buf), "%02u:%02u", static_cast<unsigned>(minutes / 60),
+           static_cast<unsigned>(minutes % 60));
+  return std::string(buf);
 }
 
 }  // namespace state_text

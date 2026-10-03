@@ -38,6 +38,13 @@ static_assert(CarServer_ShiftState_N_tag == state_text::kShiftN);
 static_assert(CarServer_ShiftState_D_tag == state_text::kShiftD);
 static_assert(CarServer_ShiftState_SNA_tag == state_text::kShiftSNA);
 static_assert(static_cast<int>(CarServer_ChargeState_ChargeLimitReason_ChargeLimitReasonUnknown) == state_text::kLimitUnknown);
+static_assert(static_cast<int>(CarServer_ChargeState_ScheduledChargingMode_ScheduledChargingModeOff) == state_text::kScheduledChargingOff);
+static_assert(static_cast<int>(CarServer_ChargeState_ScheduledChargingMode_ScheduledChargingModeStartAt) == state_text::kScheduledChargingStartAt);
+static_assert(static_cast<int>(CarServer_ChargeState_ScheduledChargingMode_ScheduledChargingModeDepartBy) == state_text::kScheduledChargingDepartBy);
+static_assert(static_cast<int>(CarServer_ClimateState_SeatHeaterLevel_E_SeatHeaterLevelOff) == state_text::kSeatHeaterOff);
+static_assert(static_cast<int>(CarServer_ClimateState_SeatHeaterLevel_E_SeatHeaterLevelLow) == state_text::kSeatHeaterLow);
+static_assert(static_cast<int>(CarServer_ClimateState_SeatHeaterLevel_E_SeatHeaterLevelMed) == state_text::kSeatHeaterMed);
+static_assert(static_cast<int>(CarServer_ClimateState_SeatHeaterLevel_E_SeatHeaterLevelHigh) == state_text::kSeatHeaterHigh);
 static_assert(static_cast<int>(CarServer_ChargeState_ChargeLimitReason_ChargeLimitReasonNone) == state_text::kLimitNone);
 static_assert(static_cast<int>(CarServer_ChargeState_ChargeLimitReason_ChargeLimitReasonEvse) == state_text::kLimitEvse);
 static_assert(static_cast<int>(CarServer_ChargeState_ChargeLimitReason_ChargeLimitReasonBattTempLow) == state_text::kLimitBattTempLow);
@@ -234,25 +241,25 @@ void VehicleStateManager::update_charge_state(const CarServer_ChargeState& charg
         }
     }
     
-    // Update range (battery_range is in miles)
+    // Update range (battery_range is in miles, published in km)
     if (charge_state.which_optional_battery_range) {
         const float range = charge_state.optional_battery_range.battery_range;
         if (range >= 0.0f && range <= 500.0f && std::isfinite(range)) {
-            publish_sensor("range", range);
+            publish_sensor("range", state_text::miles_to_km(range));
         }
     }
     
-    // Estimated and ideal range (miles, like battery_range)
+    // Estimated and ideal range (miles, like battery_range; published in km)
     if (charge_state.which_optional_est_battery_range) {
         const float range = charge_state.optional_est_battery_range.est_battery_range;
         if (range >= 0.0f && range <= 500.0f && std::isfinite(range)) {
-            publish_sensor("est_battery_range", range);
+            publish_sensor("est_battery_range", state_text::miles_to_km(range));
         }
     }
     if (charge_state.which_optional_ideal_battery_range) {
         const float range = charge_state.optional_ideal_battery_range.ideal_battery_range;
         if (range >= 0.0f && range <= 500.0f && std::isfinite(range)) {
-            publish_sensor("ideal_battery_range", range);
+            publish_sensor("ideal_battery_range", state_text::miles_to_km(range));
         }
     }
 
@@ -362,7 +369,7 @@ void VehicleStateManager::update_charge_state(const CarServer_ChargeState& charg
     // Update charging rate
     if (charge_state.which_optional_charge_rate_mph) {
         const float rate_mph = static_cast<float>(charge_state.optional_charge_rate_mph.charge_rate_mph);
-        publish_sensor("charging_rate", rate_mph);
+        publish_sensor("charging_rate", state_text::miles_to_km(rate_mph));
     }
 
     // Update charging amps (set to charging amp setpoint)
@@ -386,6 +393,20 @@ void VehicleStateManager::update_charge_state(const CarServer_ChargeState& charg
         }
     }
     
+    // Charge schedule
+    if (charge_state.which_optional_scheduled_charging_mode) {
+        publish_text_sensor("scheduled_charging_mode",
+            state_text::scheduled_charging_mode(static_cast<int>(charge_state.optional_scheduled_charging_mode.scheduled_charging_mode)));
+    }
+    if (charge_state.which_optional_scheduled_charging_start_time_minutes) {
+        auto time = state_text::time_of_day(charge_state.optional_scheduled_charging_start_time_minutes.scheduled_charging_start_time_minutes);
+        if (time.has_value()) publish_text_sensor("scheduled_charging_time", time.value());
+    }
+    if (charge_state.which_optional_scheduled_departure_time_minutes) {
+        auto time = state_text::time_of_day(charge_state.optional_scheduled_departure_time_minutes.scheduled_departure_time_minutes);
+        if (time.has_value()) publish_text_sensor("scheduled_departure_time", time.value());
+    }
+
     // Update charger phases (integer 1..3, cached for estimated power)
     if (charge_state.which_optional_charger_phases) {
         const float phases = static_cast<float>(charge_state.optional_charger_phases.charger_phases);
@@ -475,6 +496,33 @@ void VehicleStateManager::update_climate_state(const CarServer_ClimateState& cli
         publish_binary_sensor("cabin_overheat_active", climate_state.optional_cabin_overheat_protection_actively_cooling.cabin_overheat_protection_actively_cooling);
     }
 
+    if (climate_state.which_optional_is_preconditioning) {
+        publish_binary_sensor("preconditioning", climate_state.optional_is_preconditioning.is_preconditioning);
+    }
+    if (climate_state.which_optional_is_front_defroster_on) {
+        publish_binary_sensor("front_defroster", climate_state.optional_is_front_defroster_on.is_front_defroster_on);
+    }
+    if (climate_state.which_optional_is_rear_defroster_on) {
+        publish_binary_sensor("rear_defroster", climate_state.optional_is_rear_defroster_on.is_rear_defroster_on);
+    }
+
+    // Seat heaters (each field only set when that seat has a heater)
+    if (climate_state.which_optional_seat_heater_left) {
+        publish_text_sensor("seat_heater_front_left", state_text::seat_heater_level(climate_state.optional_seat_heater_left.seat_heater_left));
+    }
+    if (climate_state.which_optional_seat_heater_right) {
+        publish_text_sensor("seat_heater_front_right", state_text::seat_heater_level(climate_state.optional_seat_heater_right.seat_heater_right));
+    }
+    if (climate_state.which_optional_seat_heater_rear_left) {
+        publish_text_sensor("seat_heater_rear_left", state_text::seat_heater_level(climate_state.optional_seat_heater_rear_left.seat_heater_rear_left));
+    }
+    if (climate_state.which_optional_seat_heater_rear_center) {
+        publish_text_sensor("seat_heater_rear_center", state_text::seat_heater_level(climate_state.optional_seat_heater_rear_center.seat_heater_rear_center));
+    }
+    if (climate_state.which_optional_seat_heater_rear_right) {
+        publish_text_sensor("seat_heater_rear_right", state_text::seat_heater_level(climate_state.optional_seat_heater_rear_right.seat_heater_rear_right));
+    }
+
     // Steering wheel heater - sync switch state from vehicle
     if (climate_state.which_optional_steering_wheel_heater && steering_wheel_heat_switch_ != nullptr) {
         const bool heater_on = climate_state.optional_steering_wheel_heater.steering_wheel_heater;
@@ -502,11 +550,11 @@ void VehicleStateManager::update_drive_state(const CarServer_DriveState& drive_s
         publish_binary_sensor("parking_brake", parked);
     }
     
-    // Odometer (convert from hundredths of a mile to miles)
+    // Odometer (hundredths of a mile, published in km)
     if (drive_state.which_optional_odometer_in_hundredths_of_a_mile) {
         const float odometer = static_cast<float>(drive_state.optional_odometer_in_hundredths_of_a_mile.odometer_in_hundredths_of_a_mile) / 100.0f;
         if (odometer >= 0.0f && std::isfinite(odometer)) {
-            publish_sensor("odometer", odometer);
+            publish_sensor("odometer", state_text::miles_to_km(odometer));
         }
     }
 }
@@ -542,6 +590,17 @@ void VehicleStateManager::update_tire_pressure_state(const CarServer_TirePressur
             publish_sensor("tpms_rear_right", pressure);
         }
     }
+
+    // Low-pressure warnings: hard = significantly low, soft = slightly low
+    const auto &t = tire_pressure_state;
+    if (t.which_optional_tpms_hard_warning_fl) publish_binary_sensor("tpms_hard_warning_front_left", t.optional_tpms_hard_warning_fl.tpms_hard_warning_fl);
+    if (t.which_optional_tpms_hard_warning_fr) publish_binary_sensor("tpms_hard_warning_front_right", t.optional_tpms_hard_warning_fr.tpms_hard_warning_fr);
+    if (t.which_optional_tpms_hard_warning_rl) publish_binary_sensor("tpms_hard_warning_rear_left", t.optional_tpms_hard_warning_rl.tpms_hard_warning_rl);
+    if (t.which_optional_tpms_hard_warning_rr) publish_binary_sensor("tpms_hard_warning_rear_right", t.optional_tpms_hard_warning_rr.tpms_hard_warning_rr);
+    if (t.which_optional_tpms_soft_warning_fl) publish_binary_sensor("tpms_soft_warning_front_left", t.optional_tpms_soft_warning_fl.tpms_soft_warning_fl);
+    if (t.which_optional_tpms_soft_warning_fr) publish_binary_sensor("tpms_soft_warning_front_right", t.optional_tpms_soft_warning_fr.tpms_soft_warning_fr);
+    if (t.which_optional_tpms_soft_warning_rl) publish_binary_sensor("tpms_soft_warning_rear_left", t.optional_tpms_soft_warning_rl.tpms_soft_warning_rl);
+    if (t.which_optional_tpms_soft_warning_rr) publish_binary_sensor("tpms_soft_warning_rear_right", t.optional_tpms_soft_warning_rr.tpms_soft_warning_rr);
 }
 
 void VehicleStateManager::update_closures_state(const CarServer_ClosuresState& closures_state) {
@@ -616,6 +675,24 @@ void VehicleStateManager::update_closures_state(const CarServer_ClosuresState& c
         if (!sentry_mode_switch_->has_state() || sentry_mode_switch_->state != sentry_active) {
             ESP_LOGD(STATE_MANAGER_TAG, "Syncing sentry mode switch to vehicle state: %s", sentry_active ? "ON" : "OFF");
             publish_sensor_state(sentry_mode_switch_, sentry_active);
+        }
+    }
+
+    if (closures_state.which_optional_sentry_mode_available) {
+        publish_binary_sensor("sentry_mode_available", closures_state.optional_sentry_mode_available.sentry_mode_available);
+    }
+
+    // Speed limit mode (only set when the car supports it)
+    if (closures_state.has_speed_limit_mode) {
+        const auto &mode = closures_state.speed_limit_mode;
+        if (mode.which_optional_active) {
+            publish_binary_sensor("speed_limit_mode", mode.optional_active.active);
+        }
+        if (mode.which_optional_current_limit_mph) {
+            const float limit = mode.optional_current_limit_mph.current_limit_mph;
+            if (limit > 0.0f && limit <= 200.0f && std::isfinite(limit)) {
+                publish_sensor("speed_limit", state_text::miles_to_km(limit));
+            }
         }
     }
     

@@ -141,6 +141,25 @@ BINARY_SENSORS = [
     {"id": "cabin_overheat_active", "name": "Cabin Overheat Active", "icon": "mdi:car-defrost-rear"},
     # Car is here: its BLE adverts were heard in the last 60 s (or it is connected)
     {"id": "present", "name": "Present", "icon": "mdi:car-connected", "device_class": "presence"},
+
+    # Climate
+    {"id": "preconditioning", "name": "Preconditioning", "icon": "mdi:car-defrost-front"},
+    {"id": "front_defroster", "name": "Front Defroster", "icon": "mdi:car-defrost-front"},
+    {"id": "rear_defroster", "name": "Rear Defroster", "icon": "mdi:car-defrost-rear"},
+
+    # Closures / modes
+    {"id": "sentry_mode_available", "name": "Sentry Mode Available", "icon": "mdi:cctv", "entity_category": "diagnostic", "disabled_by_default": True},
+    {"id": "speed_limit_mode", "name": "Speed Limit Mode", "icon": "mdi:speedometer-slow"},
+
+    # Tyre low-pressure warnings (hard = significantly low, soft = slightly low)
+    {"id": "tpms_hard_warning_front_left", "name": "TPMS Warning Front Left", "icon": "mdi:car-tire-alert", "device_class": "problem"},
+    {"id": "tpms_hard_warning_front_right", "name": "TPMS Warning Front Right", "icon": "mdi:car-tire-alert", "device_class": "problem"},
+    {"id": "tpms_hard_warning_rear_left", "name": "TPMS Warning Rear Left", "icon": "mdi:car-tire-alert", "device_class": "problem"},
+    {"id": "tpms_hard_warning_rear_right", "name": "TPMS Warning Rear Right", "icon": "mdi:car-tire-alert", "device_class": "problem"},
+    {"id": "tpms_soft_warning_front_left", "name": "TPMS Soft Warning Front Left", "icon": "mdi:car-tire-alert", "device_class": "problem", "disabled_by_default": True},
+    {"id": "tpms_soft_warning_front_right", "name": "TPMS Soft Warning Front Right", "icon": "mdi:car-tire-alert", "device_class": "problem", "disabled_by_default": True},
+    {"id": "tpms_soft_warning_rear_left", "name": "TPMS Soft Warning Rear Left", "icon": "mdi:car-tire-alert", "device_class": "problem", "disabled_by_default": True},
+    {"id": "tpms_soft_warning_rear_right", "name": "TPMS Soft Warning Rear Right", "icon": "mdi:car-tire-alert", "device_class": "problem", "disabled_by_default": True},
     
     # Drive sensors
     {"id": "parking_brake", "name": "Parking Brake", "icon": "mdi:car-brake-parking"},
@@ -165,9 +184,9 @@ SENSORS = [
     {"id": "ble_advert_rssi", "name": "BLE Advert RSSI", "icon": "mdi:bluetooth-audio", "unit": "dBm", "accuracy_decimals": 0, "entity_category": "diagnostic", "disabled_by_default": True},
     # Charge state sensors
     {"id": "battery_level", "name": "Battery", "icon": "mdi:battery", "unit": "%"},
-    {"id": "range", "name": "Range", "icon": "mdi:map-marker-distance", "device_class": "distance", "unit": "mi"},
-    {"id": "est_battery_range", "name": "Estimated Range", "icon": "mdi:map-marker-distance", "device_class": "distance", "unit": "mi", "disabled_by_default": True},
-    {"id": "ideal_battery_range", "name": "Ideal Range", "icon": "mdi:map-marker-distance", "device_class": "distance", "unit": "mi", "disabled_by_default": True},
+    {"id": "range", "name": "Range", "icon": "mdi:map-marker-distance", "device_class": "distance", "unit": "km"},
+    {"id": "est_battery_range", "name": "Estimated Range", "icon": "mdi:map-marker-distance", "device_class": "distance", "unit": "km", "disabled_by_default": True},
+    {"id": "ideal_battery_range", "name": "Ideal Range", "icon": "mdi:map-marker-distance", "device_class": "distance", "unit": "km", "disabled_by_default": True},
     {"id": "usable_battery_level", "name": "Usable Battery", "icon": "mdi:battery", "unit": "%"},
     {"id": "charger_power", "name": "Charger Power", "icon": "mdi:flash", "device_class": "power", "unit": "kW"},
     {"id": "charger_voltage", "name": "Charger Voltage", "icon": "mdi:lightning-bolt", "device_class": "voltage", "unit": "V"},
@@ -177,7 +196,7 @@ SENSORS = [
     {"id": "vehicle_max_charge_current", "name": "Car Max Acceptable", "icon": "mdi:car-battery", "device_class": "current", "unit": "A"},
     {"id": "charger_phases", "name": "Charger Phases", "icon": "mdi:sine-wave", "unit": "", "accuracy_decimals": 0},
     {"id": "charger_power_estimated", "name": "Charger Power Estimated", "icon": "mdi:flash", "device_class": "power", "unit": "kW", "accuracy_decimals": 2},
-    {"id": "charging_rate", "name": "Charging Rate", "icon": "mdi:speedometer", "device_class": "speed", "unit": "mph", "accuracy_decimals": 1},
+    {"id": "charging_rate", "name": "Charging Rate", "icon": "mdi:speedometer", "device_class": "speed", "unit": "km/h", "accuracy_decimals": 1},
     {"id": "energy_added", "name": "Energy Added", "icon": "mdi:battery-charging", "device_class": "energy", "unit": "kWh", "accuracy_decimals": 1},
     {"id": "time_to_full", "name": "Time to Full", "icon": "mdi:clock-outline", "device_class": "duration", "unit": "min"},
     {"id": "time_to_charge_limit", "name": "Time to Charge Limit", "icon": "mdi:clock-outline", "device_class": "duration", "unit": "min"},
@@ -185,8 +204,11 @@ SENSORS = [
     # Climate state sensors
     {"id": "outside_temp", "name": "Outside Temperature", "icon": "mdi:thermometer", "device_class": "temperature", "unit": "°C", "accuracy_decimals": 1},
     
+    # Speed limit mode's current limit
+    {"id": "speed_limit", "name": "Speed Limit", "icon": "mdi:speedometer-slow", "device_class": "speed", "unit": "km/h", "accuracy_decimals": 0},
+
     # Drive state sensors
-    {"id": "odometer", "name": "Odometer", "icon": "mdi:counter", "device_class": "distance", "unit": "mi", "disabled_by_default": True},
+    {"id": "odometer", "name": "Odometer", "icon": "mdi:counter", "device_class": "distance", "unit": "km", "disabled_by_default": True},
     
     # Tire pressure sensors
     {"id": "tpms_front_left", "name": "TPMS Front Left", "icon": "mdi:car-tire-alert", "device_class": "pressure", "unit": "bar", "accuracy_decimals": 1},
@@ -200,6 +222,14 @@ TEXT_SENSORS = [
     {"id": "iec61851_state", "name": "IEC 61851", "icon": "mdi:ev-plug-type2", "disabled_by_default": True},
     {"id": "shift_state", "name": "Shift State", "icon": "mdi:car-shift-pattern", "disabled_by_default": True},
     {"id": "charge_limit_reason", "name": "Charge Limit Reason", "icon": "mdi:ev-plug-tesla"},
+    {"id": "scheduled_charging_mode", "name": "Scheduled Charging", "icon": "mdi:calendar-clock"},
+    {"id": "scheduled_charging_time", "name": "Scheduled Charging Time", "icon": "mdi:clock-start"},
+    {"id": "scheduled_departure_time", "name": "Scheduled Departure Time", "icon": "mdi:clock-end"},
+    {"id": "seat_heater_front_left", "name": "Seat Heater Front Left", "icon": "mdi:car-seat-heater"},
+    {"id": "seat_heater_front_right", "name": "Seat Heater Front Right", "icon": "mdi:car-seat-heater"},
+    {"id": "seat_heater_rear_left", "name": "Seat Heater Rear Left", "icon": "mdi:car-seat-heater", "disabled_by_default": True},
+    {"id": "seat_heater_rear_center", "name": "Seat Heater Rear Center", "icon": "mdi:car-seat-heater", "disabled_by_default": True},
+    {"id": "seat_heater_rear_right", "name": "Seat Heater Rear Right", "icon": "mdi:car-seat-heater", "disabled_by_default": True},
     {"id": "last_command", "name": "Last Command", "icon": "mdi:history", "entity_category": "diagnostic", "disabled_by_default": True, "setter": "set_last_command_text_sensor"},
 ]
 
