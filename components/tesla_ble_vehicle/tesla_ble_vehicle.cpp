@@ -1115,8 +1115,11 @@ void TeslaBLEVehicle::force_update() {
   LogScope log_scope(this);
   uint32_t now = millis();
   if (vehicle_ && !vehicle_->is_connected()) {
-    ESP_LOGI(TAG, "[%s] Force update requested - waiting for this car's BLE turn", log_name());
-    turn_requested_ = true;
+    // Run the forced update itself once connected: the normal on-connect
+    // polling never wakes the car, but a forced update is an explicit request.
+    queue_until_connected_(
+        "Force update", [this]() { force_update(); },
+        [this]() { ESP_LOGW(TAG, "[%s] Force update not sent - car not reachable", log_name()); });
     return;
   }
   if (!poll_policy_.should_poll(now, poll_policy_.active_interval_ms())) {
