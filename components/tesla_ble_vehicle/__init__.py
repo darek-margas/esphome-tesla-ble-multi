@@ -462,6 +462,7 @@ async def to_code(config):
     cg.add(var.set_ble_client(ble_var))
 
     cg.add(var.set_vin(config[CONF_VIN]))
+    cg.add(var.set_debug_name(config[CONF_NAME]))
     
     vehicle_id = str(config[CONF_ID])
     vehicle_name = config[CONF_NAME]

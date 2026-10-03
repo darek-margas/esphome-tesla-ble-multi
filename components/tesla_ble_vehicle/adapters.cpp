@@ -30,14 +30,30 @@ void BleAdapterImpl::disconnect() {
 bool BleAdapterImpl::write(const std::vector<uint8_t>& data) {
     if (!parent_->is_connected()) return false;
     
-    ESP_LOGV(ADAPTER_TAG, "BLE TX: %s", TeslaBLE::format_hex(data.data(), data.size()).c_str());
+    ESP_LOGV(ADAPTER_TAG, "[%s] BLE TX: %s", parent_->log_name(),
+             TeslaBLE::format_hex(data.data(), data.size()).c_str());
     
     // Fragment message
+    size_t fragments = 0;
     for (size_t i = 0; i < data.size(); i += BLOCK_LENGTH) {
         size_t chunk_len = std::min(BLOCK_LENGTH, data.size() - i);
         std::vector<uint8_t> chunk(data.begin() + i, data.begin() + i + chunk_len);
         
         write_queue_.emplace(chunk, ESP_GATT_WRITE_TYPE_NO_RSP, ESP_GATT_AUTH_REQ_NONE);
+        ++fragments;
+    }
+
+    const auto queued = tx_tracker_.on_message_queued(millis(), data.size(), fragments);
+    if (queued.messages_ahead > 0) {
+        // A new message while an earlier one is still being transmitted is
+        // usually the library resending a command it thinks timed out.
+        ESP_LOGW(ADAPTER_TAG,
+                 "[%s] TX msg #%u queued: %u bytes, %u fragments, behind %u unsent fragments of %u earlier message(s)",
+                 parent_->log_name(), (unsigned) queued.seq, (unsigned) data.size(), (unsigned) fragments,
+                 (unsigned) queued.fragments_ahead, (unsigned) queued.messages_ahead);
+    } else {
+        ESP_LOGD(ADAPTER_TAG, "[%s] TX msg #%u queued: %u bytes, %u fragments", parent_->log_name(),
+                 (unsigned) queued.seq, (unsigned) data.size(), (unsigned) fragments);
     }
     
     return true;
@@ -47,8 +63,15 @@ void BleAdapterImpl::process_write_queue() {
     if (write_queue_.empty()) return;
     if (!parent_->is_connected()) return;
     if (write_in_flight_) return;
-    if (global_write_owner_ != nullptr && global_write_owner_ != this) return;
     const uint32_t now = millis();
+    // Congestion is per link: only this car waits, the other keeps sending.
+    if (congestion_gate_.blocked(now)) return;
+    if (congestion_gate_.expired(now)) {
+        ESP_LOGW(ADAPTER_TAG, "[%s] No congestion-cleared event after %u ms - resuming writes",
+                 parent_->log_name(), (unsigned) CongestionGate::MAX_WAIT_MS);
+        congestion_gate_.reset();
+    }
+    if (global_write_owner_ != nullptr && global_write_owner_ != this) return;
     if (static_cast<int32_t>(now - global_next_write_ms_) < 0) return;
 
     // Back off a failing chunk instead of retrying every loop() iteration,
@@ -57,10 +80,10 @@ void BleAdapterImpl::process_write_queue() {
         case WriteAttemptDecision::WAIT:
             return;
         case WriteAttemptDecision::DROP:
-            ESP_LOGE(ADAPTER_TAG, "Dropping TX chunk after %u consecutive failures (%u bytes)",
-                     (unsigned) WriteRetryPolicy::MAX_CONSECUTIVE_FAILURES,
+            ESP_LOGE(ADAPTER_TAG, "[%s] Dropping TX chunk after %u consecutive failures (%u bytes)",
+                     parent_->log_name(), (unsigned) WriteRetryPolicy::MAX_CONSECUTIVE_FAILURES,
                      (unsigned) write_queue_.front().data.size());
-            write_queue_.pop();
+            finish_head_fragment_(false, false);
             write_retry_policy_.on_drop();
             return;
         case WriteAttemptDecision::ATTEMPT:
@@ -93,7 +116,7 @@ void BleAdapterImpl::process_write_queue() {
     } else {
         write_retry_policy_.on_failure(millis());
         global_next_write_ms_ = millis() + std::max<uint32_t>(CONGESTION_GAP_MS, parent_->ble_write_gap_ms());
-        ESP_LOGW(ADAPTER_TAG, "BLE write submit failed: %s", esp_err_to_name(err));
+        ESP_LOGW(ADAPTER_TAG, "[%s] BLE write submit failed: %s", parent_->log_name(), esp_err_to_name(err));
     }
 }
 
@@ -102,19 +125,71 @@ void BleAdapterImpl::on_write_complete(esp_gatt_status_t status) {
     write_in_flight_ = false;
     if (global_write_owner_ == this) global_write_owner_ = nullptr;
 
-    if (status == ESP_GATT_OK) {
-        if (!write_queue_.empty()) write_queue_.pop();
-        write_retry_policy_.on_success(millis());
-        global_next_write_ms_ = millis() + parent_->ble_write_gap_ms();
-        return;
+    switch (classify_write_status(status)) {
+        case WriteOutcome::SENT:
+            finish_head_fragment_(true, false);
+            write_retry_policy_.on_success(millis());
+            global_next_write_ms_ = millis() + parent_->ble_write_gap_ms();
+            return;
+
+        case WriteOutcome::SENT_CONGESTED:
+            // 143 means the stack accepted the fragment but this link is now
+            // congested. Never resend it (that duplicates bytes inside the
+            // Tesla frame). Pause this link only, until ESP_GATTC_CONGEST_EVT
+            // clears it; the other car is not held back.
+            if (!congestion_gate_.congested()) {
+                ESP_LOGD(ADAPTER_TAG, "[%s] Link congested (143) - fragment accepted, pausing this link",
+                         parent_->log_name());
+            }
+            congestion_gate_.on_congested(millis());
+            finish_head_fragment_(true, true);
+            write_retry_policy_.on_success(millis());
+            global_next_write_ms_ = millis() + parent_->ble_write_gap_ms();
+            return;
+
+        case WriteOutcome::FAILED:
+            break;
     }
 
-    // Keep the same fragment at the front and retry it with backoff. This is
-    // especially important for ESP_GATT_CONGESTED: dropping a Tesla frame
-    // fragment corrupts the complete protobuf message.
+    // Keep the same fragment at the front and retry it with backoff: the
+    // stack did not accept it, so dropping it would corrupt the message.
     write_retry_policy_.on_failure(millis());
     global_next_write_ms_ = millis() + std::max<uint32_t>(CONGESTION_GAP_MS, parent_->ble_write_gap_ms());
-    ESP_LOGW(ADAPTER_TAG, "BLE write completion failed: %d", status);
+    ESP_LOGW(ADAPTER_TAG, "[%s] BLE write completion failed: %d", parent_->log_name(), status);
+}
+
+void BleAdapterImpl::on_congest_event(bool congested) {
+    if (congested) {
+        congestion_gate_.on_congested(millis());
+        return;
+    }
+    const uint32_t waited = congestion_gate_.on_uncongested(millis());
+    if (waited > 0) {
+        ESP_LOGD(ADAPTER_TAG, "[%s] Link congestion cleared after %u ms", parent_->log_name(), (unsigned) waited);
+    }
+}
+
+void BleAdapterImpl::finish_head_fragment_(bool sent, bool congested) {
+    if (!write_queue_.empty()) write_queue_.pop();
+
+    TxMessageTracker::Completed done;
+    if (!tx_tracker_.on_fragment_done(millis(), sent, congested, &done)) return;
+
+    if (done.dropped > 0) {
+        ESP_LOGW(ADAPTER_TAG, "[%s] TX msg #%u incomplete: %u of %u fragments dropped - the car will discard it",
+                 parent_->log_name(), (unsigned) done.seq, (unsigned) done.dropped, (unsigned) done.fragments);
+    } else if (done.duration_ms >= TxMessageTracker::LIBRARY_RESEND_MS) {
+        ESP_LOGW(ADAPTER_TAG,
+                 "[%s] TX msg #%u sent in %u ms (%u bytes, %u fragments, %u congested) - slower than the "
+                 "library's %u ms resend timer, expect a duplicate request",
+                 parent_->log_name(), (unsigned) done.seq, (unsigned) done.duration_ms, (unsigned) done.bytes,
+                 (unsigned) done.fragments, (unsigned) done.congested,
+                 (unsigned) TxMessageTracker::LIBRARY_RESEND_MS);
+    } else {
+        ESP_LOGD(ADAPTER_TAG, "[%s] TX msg #%u sent in %u ms (%u bytes, %u fragments, %u congested)",
+                 parent_->log_name(), (unsigned) done.seq, (unsigned) done.duration_ms, (unsigned) done.bytes,
+                 (unsigned) done.fragments, (unsigned) done.congested);
+    }
 }
 
 void BleAdapterImpl::clear_queues() {
@@ -123,6 +198,8 @@ void BleAdapterImpl::clear_queues() {
     write_in_flight_ = false;
     if (global_write_owner_ == this) global_write_owner_ = nullptr;
     write_retry_policy_.reset();
+    congestion_gate_.reset();
+    tx_tracker_.clear();
 }
 
 // --- StorageAdapterImpl ---

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "adapters.h"
+#include "gatt_tx_policy.h"
 #include "write_retry_policy.h"
 #include <esphome/components/esp32_ble_client/ble_client_base.h>
 #include <esphome/core/log.h>
@@ -36,6 +37,9 @@ public:
     // Called from the owning GATT client when ESP-IDF reports completion.
     void on_write_complete(esp_gatt_status_t status);
 
+    // Called on ESP_GATTC_CONGEST_EVT for this link.
+    void on_congest_event(bool congested);
+
     // Clear queues (on disconnect)
     void clear_queues();
 
@@ -44,6 +48,12 @@ private:
     std::queue<BLETXChunk> write_queue_;
     WriteRetryPolicy write_retry_policy_;
     bool write_in_flight_{false};
+
+    // Pops the head fragment and updates per-message diagnostics.
+    void finish_head_fragment_(bool sent, bool congested);
+
+    CongestionGate congestion_gate_;
+    TxMessageTracker tx_tracker_;
 
     // ESP32's GATT client path is shared across all Tesla BLE links. Only one
     // Tesla fragment may be outstanding globally, not merely per vehicle.

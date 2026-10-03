@@ -180,6 +180,26 @@ public:
     void update_ble_rssi(int8_t rssi);
     uint32_t ble_write_gap_ms() const;
 
+    // Car name for log lines (falls back to the VIN).
+    const char *log_name() const { return debug_name_.empty() ? vin_.c_str() : debug_name_.c_str(); }
+
+    // tesla-ble logs through one global callback with no vehicle context.
+    // While a LogScope is alive, those lines are prefixed with this car's
+    // name. Scopes nest (the previous context is restored).
+    static const char *log_context() { return log_context_; }
+    class LogScope {
+     public:
+      explicit LogScope(const TeslaBLEVehicle *vehicle) : previous_(log_context_) {
+        log_context_ = vehicle != nullptr ? vehicle->log_name() : nullptr;
+      }
+      ~LogScope() { log_context_ = previous_; }
+      LogScope(const LogScope &) = delete;
+      LogScope &operator=(const LogScope &) = delete;
+
+     private:
+      const char *previous_;
+    };
+
 private:
     // Initialization helpers
     void initialize_managers();
@@ -245,6 +265,7 @@ private:
     void cancel_queued_infotainment_work_();
 
     TeslaBLEClient *ble_client_{nullptr};
+    static const char *log_context_;
 
     // BLE state
     espbt::ESPBTUUID service_uuid_;

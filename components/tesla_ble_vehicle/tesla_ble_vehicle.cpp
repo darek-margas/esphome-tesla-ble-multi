@@ -2,6 +2,7 @@
 #include "command_warning_policy.h"
 #include <client.h>
 #include <cinttypes>
+#include <cstdio>
 #include <cstring>
 #include <defs.h>
 #include <esp_log.h>
@@ -13,6 +14,7 @@ namespace tesla_ble_vehicle {
 
 TeslaBLEVehicle *TeslaBLEVehicle::global_infotainment_owner_ = nullptr;
 std::deque<TeslaBLEVehicle::InfotainmentWorkItem> TeslaBLEVehicle::global_infotainment_queue_;
+const char *TeslaBLEVehicle::log_context_ = nullptr;
 
 void tesla_ble_log_callback(TeslaBLE::LogLevel level, const char *tag, int line,
                             const char *format, va_list args) {
@@ -41,7 +43,15 @@ void tesla_ble_log_callback(TeslaBLE::LogLevel level, const char *tag, int line,
   default:
     return;
   }
-  esp_log_vprintf_(esphome_level, tag, line, format, args);
+  const char *car = TeslaBLEVehicle::log_context();
+  if (car == nullptr) {
+    esp_log_vprintf_(esphome_level, tag, line, format, args);
+    return;
+  }
+  // Prefix library lines with the car they belong to.
+  char message[512];
+  vsnprintf(message, sizeof(message), format, args);
+  esp_log_printf_(esphome_level, tag, line, "[%s] %s", car, message);
 }
 
 TeslaBLEVehicle::TeslaBLEVehicle() : vin_(""), role_("DRIVER") {
@@ -182,6 +192,7 @@ void TeslaBLEVehicle::configure_pending_sensors() {
 }
 
 void TeslaBLEVehicle::loop() {
+  LogScope log_scope(this);
   if (vehicle_)
     vehicle_->loop();
   if (ble_adapter_)
@@ -209,13 +220,14 @@ void TeslaBLEVehicle::loop() {
   const bool vehicle_connected = vehicle_ != nullptr && vehicle_->is_connected();
   if (connection_reset_policy_.should_force_reconnect(millis(), gatt_established || stalled_setup,
                                                       vehicle_connected)) {
-    ESP_LOGW(TAG, "GATT connection up but vehicle is disconnected - forcing reconnect");
+    ESP_LOGW(TAG, "[%s] GATT connection up but vehicle is disconnected - forcing reconnect", log_name());
     connection_reset_policy_.on_force_reconnect(millis());
     if (ble_client_ != nullptr) ble_client_->disconnect();
   }
 }
 
 void TeslaBLEVehicle::update() {
+  LogScope log_scope(this);
   if (!is_connected() || !vehicle_ || !notify_ready_ || !vehicle_->is_connected())
     return;
 
@@ -234,7 +246,7 @@ void TeslaBLEVehicle::update() {
 
   // VCSEC Polling
   if (now - last_vcsec_poll_ >= vcsec_poll_interval_) {
-    ESP_LOGI(TAG, "Polling VCSEC");
+    ESP_LOGI(TAG, "[%s] Polling VCSEC", log_name());
     vehicle_->vcsec_poll();
     last_vcsec_poll_ = now;
   }
@@ -255,7 +267,7 @@ void TeslaBLEVehicle::update() {
         decision.wake_policy == WakePolicy::NO_WAKE_SKIP
             ? TeslaBLE::WakePolicy::NO_WAKE_SKIP
             : TeslaBLE::WakePolicy::WAKE_IF_NEEDED;
-    ESP_LOGI(TAG, "Polling Infotainment (%s)",
+    ESP_LOGI(TAG, "[%s] Polling Infotainment (%s)", log_name(),
              decision.wake_policy == WakePolicy::NO_WAKE_SKIP
                  ? "sleeping - NO_WAKE_SKIP"
                  : "active - WAKE_IF_NEEDED");
@@ -305,7 +317,10 @@ void TeslaBLEVehicle::enqueue_infotainment_work_(std::function<void()> start, bo
     auto next = std::move(global_infotainment_queue_.front());
     global_infotainment_queue_.pop_front();
     global_infotainment_owner_ = next.vehicle;
-    if (next.start) next.start();
+    if (next.start) {
+      LogScope log_scope(next.vehicle);
+      next.start();
+    }
   }
 }
 
@@ -333,7 +348,10 @@ void TeslaBLEVehicle::release_infotainment_slot_() {
       continue;
     }
     global_infotainment_owner_ = next.vehicle;
-    if (next.start) next.start();
+    if (next.start) {
+      LogScope log_scope(next.vehicle);
+      next.start();
+    }
     break;
   }
 }
@@ -353,7 +371,7 @@ void TeslaBLEVehicle::complete_poll_batch_job_() {
   if (poll_batch_remaining_ > 0) --poll_batch_remaining_;
   if (poll_batch_remaining_ == 0) {
     poll_batch_in_progress_ = false;
-    ESP_LOGD(TAG, "Infotainment batch complete");
+    ESP_LOGD(TAG, "[%s] Infotainment batch complete", log_name());
   }
 }
 
@@ -376,7 +394,7 @@ void TeslaBLEVehicle::enqueue_poll_job_(const char *name, int32_t data_type,
             [this, name](TeslaBLE::OperationResult result) {
               if (!result.is_success() && !result.is_skipped()) {
                 const TeslaBLE::CommandError *error = result.error();
-                ESP_LOGW(TAG, "%s failed: %s", name.c_str(),
+                ESP_LOGW(TAG, "[%s] %s failed: %s", log_name(), name.c_str(),
                          error != nullptr ? error->message().c_str() : "unknown error");
               }
               complete_poll_batch_job_();
@@ -390,7 +408,7 @@ void TeslaBLEVehicle::enqueue_poll_job_(const char *name, int32_t data_type,
 void TeslaBLEVehicle::enqueue_poll_batch_(TeslaBLE::WakePolicy policy, uint32_t delay_ms) {
   if (!vehicle_ || !vehicle_->is_connected() || !notify_ready_) return;
   if (poll_batch_in_progress_) {
-    ESP_LOGD(TAG, "Infotainment batch already in progress - skipping new batch");
+    ESP_LOGD(TAG, "[%s] Infotainment batch already in progress - skipping new batch", log_name());
     return;
   }
 
@@ -419,7 +437,7 @@ void TeslaBLEVehicle::enqueue_poll_batch_(TeslaBLE::WakePolicy policy, uint32_t 
 
     const uint8_t start = poll_batch_start_ % POLL_COUNT;
     poll_batch_start_ = static_cast<uint8_t>((start + 1) % POLL_COUNT);
-    ESP_LOGI(TAG, "Infotainment batch starts with %s", polls[start].name);
+    ESP_LOGI(TAG, "[%s] Infotainment batch starts with %s", log_name(), polls[start].name);
 
     for (uint8_t offset = 0; offset < POLL_COUNT; ++offset) {
       const PollSpec &poll = polls[(start + offset) % POLL_COUNT];
@@ -717,6 +735,7 @@ void TeslaBLEVehicle::send_command_with_tracking(
     const std::string &name,
     std::function<int(TeslaBLE::Client *, uint8_t *, size_t *)> builder,
     TeslaBLE::WakePolicy wake_policy, std::function<void(bool)> on_result) {
+  LogScope log_scope(this);
   if (!vehicle_) {
     ESP_LOGE(TAG, "Cannot send command '%s': vehicle not initialized", name.c_str());
     return;
@@ -778,6 +797,7 @@ void TeslaBLEVehicle::schedule_state_refresh_(ControlStateRefresh refresh) {
   }
 
   this->set_timeout(timeout_name, 1500, [this, refresh]() {
+    LogScope log_scope(this);
     if (!vehicle_ || !vehicle_->is_connected()) return;
     switch (refresh) {
       case ControlStateRefresh::CHARGE_STATE:
@@ -828,6 +848,7 @@ int TeslaBLEVehicle::wake_vehicle() {
 }
 
 int TeslaBLEVehicle::start_pairing() {
+  LogScope log_scope(this);
   ESP_LOGI(TAG, "Pairing requested");
 
   if (!vehicle_) {
@@ -880,6 +901,7 @@ int TeslaBLEVehicle::start_pairing() {
 }
 
 int TeslaBLEVehicle::regenerate_key() {
+  LogScope log_scope(this);
   ESP_LOGI(TAG, "Key regeneration requested");
 
   if (!vehicle_) {
@@ -892,6 +914,7 @@ int TeslaBLEVehicle::regenerate_key() {
 }
 
 void TeslaBLEVehicle::force_update() {
+  LogScope log_scope(this);
   uint32_t now = millis();
   if (!poll_policy_.should_poll(now, poll_policy_.active_interval_ms())) {
     ESP_LOGD(TAG, "Force update requested too soon (within active polling "
@@ -1291,22 +1314,23 @@ void TeslaBLEClient::gap_event_handler(esp_gap_ble_cb_event_t event,
 void TeslaBLEVehicle::gattc_event_handler(esp_gattc_cb_event_t event,
                                           esp_gatt_if_t gattc_if,
                                           esp_ble_gattc_cb_param_t *param) {
-  ESP_LOGV(TAG, "GATTC event %d", event);
+  LogScope log_scope(this);
+  ESP_LOGV(TAG, "[%s] GATTC event %d", log_name(), event);
 
   switch (event) {
   case ESP_GATTC_OPEN_EVT:
     if (param->open.status == ESP_GATT_OK) {
-      ESP_LOGI(TAG, "BLE physical link established");
+      ESP_LOGI(TAG, "[%s] BLE physical link established", log_name());
     }
     break;
 
   case ESP_GATTC_CLOSE_EVT:
-    ESP_LOGW(TAG, "BLE connection closed");
+    ESP_LOGW(TAG, "[%s] BLE connection closed", log_name());
     handle_connection_lost();
     break;
 
   case ESP_GATTC_DISCONNECT_EVT:
-    ESP_LOGW(TAG, "BLE disconnected");
+    ESP_LOGW(TAG, "[%s] BLE disconnected", log_name());
     this->read_handle_ = 0;
     this->write_handle_ = 0;
     notify_ready_ = false;
@@ -1348,7 +1372,7 @@ void TeslaBLEVehicle::gattc_event_handler(esp_gattc_cb_event_t event,
     }
 
     notify_ready_ = true;
-    ESP_LOGI(TAG, "Tesla notifications ready");
+    ESP_LOGI(TAG, "[%s] Tesla notifications ready", log_name());
     handle_connection_established();
     break;
 
@@ -1367,9 +1391,15 @@ void TeslaBLEVehicle::gattc_event_handler(esp_gattc_cb_event_t event,
   case ESP_GATTC_WRITE_CHAR_EVT:
     if (ble_adapter_)
       ble_adapter_->on_write_complete(param->write.status);
-    if (param->write.status != ESP_GATT_OK) {
-      ESP_LOGW(TAG, "BLE write failed: %d", param->write.status);
-    }
+    // 143 (congested) is not a failure: the fragment was accepted. The
+    // adapter logs real failures itself.
+    break;
+
+  case ESP_GATTC_CONGEST_EVT:
+    if (param->congest.conn_id != this->ble_client_->get_conn_id())
+      break;
+    if (ble_adapter_)
+      ble_adapter_->on_congest_event(param->congest.congested);
     break;
 
   default:
@@ -1404,7 +1434,7 @@ void TeslaBLEVehicle::handle_connection_established() {
   if (!notify_ready_) return;
   if (vehicle_ && !vehicle_->is_connected()) {
     vehicle_->set_connected(true);
-    ESP_LOGI(TAG, "Connection established - triggering initial polls");
+    ESP_LOGI(TAG, "[%s] Connection established - triggering initial polls", log_name());
     vehicle_->vcsec_poll();
     enqueue_poll_batch_(TeslaBLE::WakePolicy::WAKE_IF_NEEDED, 750);
     last_vcsec_poll_ = millis();
