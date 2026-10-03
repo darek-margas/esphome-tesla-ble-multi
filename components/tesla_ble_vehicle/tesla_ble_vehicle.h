@@ -337,7 +337,10 @@ private:
     void send_command_tracked_(UniversalMessage_Domain domain, const std::string &name,
                                std::function<int(TeslaBLE::Client *, uint8_t *, size_t *)> builder,
                                TeslaBLE::WakePolicy wake_policy, std::function<void(bool)> on_result,
-                               uint8_t retries_left);
+                               uint8_t retries_left, bool woken = false);
+    // Infotainment needs a moment after VCSEC reports the car awake; a session
+    // request sent at once is often lost (and the library then waits 25 s).
+    static constexpr uint32_t WAKE_SETTLE_MS = 8000;
     bool should_retry_command_(const std::string &name, const TeslaBLE::OperationResult &result,
                                uint8_t retries_left);
     void release_infotainment_slot_();

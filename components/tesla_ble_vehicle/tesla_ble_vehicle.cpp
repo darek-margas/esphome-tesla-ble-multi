@@ -953,7 +953,8 @@ bool TeslaBLEVehicle::should_retry_command_(const std::string &name,
 void TeslaBLEVehicle::send_command_tracked_(
     UniversalMessage_Domain domain, const std::string &name,
     std::function<int(TeslaBLE::Client *, uint8_t *, size_t *)> builder,
-    TeslaBLE::WakePolicy wake_policy, std::function<void(bool)> on_result, uint8_t retries_left) {
+    TeslaBLE::WakePolicy wake_policy, std::function<void(bool)> on_result, uint8_t retries_left,
+    bool woken) {
   LogScope log_scope(this);
   if (!vehicle_) {
     ESP_LOGE(TAG, "Cannot send command '%s': vehicle not initialized", name.c_str());
@@ -964,14 +965,51 @@ void TeslaBLEVehicle::send_command_tracked_(
     // Not this car's BLE turn (or out of range): send it once connected.
     queue_until_connected_(
         name,
-        [this, domain, name, builder, wake_policy, on_result, retries_left]() {
-          send_command_tracked_(domain, name, builder, wake_policy, on_result, retries_left);
+        [this, domain, name, builder, wake_policy, on_result, retries_left, woken]() {
+          send_command_tracked_(domain, name, builder, wake_policy, on_result, retries_left, woken);
         },
         [this, name, on_result]() {
           if (last_command_sensor_)
             last_command_sensor_->publish_state(name + " → Failed: car not reachable");
           if (on_result) on_result(false);
         });
+    return;
+  }
+
+  // Infotainment command for a sleeping car: wake it as a separate step,
+  // give infotainment time to come up, then send the command.
+  if (!woken && domain == UniversalMessage_Domain_DOMAIN_INFOTAINMENT &&
+      wake_policy == TeslaBLE::WakePolicy::WAKE_IF_NEEDED && state_manager_ &&
+      state_manager_->is_asleep()) {
+    ESP_LOGI(TAG, "[%s] '%s': car asleep - waking it first", log_name(), name.c_str());
+    if (user_commands_in_flight_ < 255) ++user_commands_in_flight_;
+    vehicle_->send_command_result(
+        UniversalMessage_Domain_DOMAIN_VEHICLE_SECURITY, "Wake",
+        [](TeslaBLE::Client *client, uint8_t *buff, size_t *len) {
+          return client->build_vcsec_action_message(VCSEC_RKEAction_E_RKE_ACTION_WAKE_VEHICLE, buff, len);
+        },
+        [this, domain, name, builder, wake_policy, on_result, retries_left](TeslaBLE::OperationResult result) {
+          if (!result.is_success()) {
+            if (user_commands_in_flight_ > 0) --user_commands_in_flight_;
+            if (should_retry_command_(name, result, retries_left)) {
+              this->defer([this, domain, name, builder, wake_policy, on_result, retries_left]() {
+                send_command_tracked_(domain, name, builder, wake_policy, on_result, retries_left - 1);
+              });
+              return;
+            }
+            handle_command_result(name, std::move(result));
+            if (on_result) on_result(false);
+            return;
+          }
+          ESP_LOGI(TAG, "[%s] Awake - sending '%s' in %u s", log_name(), name.c_str(),
+                   (unsigned) (WAKE_SETTLE_MS / 1000));
+          // Still counted as in flight, so the car keeps its BLE turn.
+          this->set_timeout(WAKE_SETTLE_MS, [this, domain, name, builder, wake_policy, on_result, retries_left]() {
+            if (user_commands_in_flight_ > 0) --user_commands_in_flight_;
+            send_command_tracked_(domain, name, builder, wake_policy, on_result, retries_left, true);
+          });
+        },
+        TeslaBLE::WakePolicy::WAKE_IF_NEEDED);
     return;
   }
 
