@@ -16,6 +16,7 @@ from esphome.const import (
     CONF_MODE,
     CONF_NAME,
     CONF_RESTORE_MODE,
+    CONF_STATE_CLASS,
     CONF_TYPE,
     CONF_UNIT_OF_MEASUREMENT,
     ENTITY_CATEGORY_DIAGNOSTIC,
@@ -124,6 +125,7 @@ TESLA_ROLES = {
 #   - device_class: ESPHome device class (optional)
 #   - unit: unit of measurement (optional, for sensors/numbers)
 #   - accuracy_decimals: number of decimals for display precision (optional, for sensors only)
+#   - state_class: e.g. "measurement" (optional, for sensors only)
 #   - disabled_by_default: whether disabled by default (optional, default False)
 #   - entity_category: entity category (optional, e.g. "diagnostic")
 #
@@ -202,7 +204,9 @@ SENSORS = [
     {"id": "evse_max_current", "name": "Charger Max", "icon": "mdi:ev-plug-tesla", "device_class": "current", "unit": "A"},
     {"id": "charge_current_request", "name": "Requested Current", "icon": "mdi:current-ac", "device_class": "current", "unit": "A", "entity_category": "diagnostic", "disabled_by_default": True},
     {"id": "vehicle_max_charge_current", "name": "Car Max Acceptable", "icon": "mdi:car-battery", "device_class": "current", "unit": "A"},
-    {"id": "charger_phases", "name": "Charger Phases", "icon": "mdi:sine-wave", "unit": "", "accuracy_decimals": 0},
+    # state_class makes Home Assistant treat it as a number, so the 0 decimals
+    # apply (without unit/device class/state class it shows the raw "1.0")
+    {"id": "charger_phases", "name": "Charger Phases", "icon": "mdi:sine-wave", "accuracy_decimals": 0, "state_class": "measurement"},
     {"id": "charger_power_estimated", "name": "Charger Power Estimated", "icon": "mdi:flash", "device_class": "power", "unit": "kW", "accuracy_decimals": 2},
     {"id": "charging_rate", "name": "Charging Rate", "icon": "mdi:speedometer", "device_class": "speed", "unit": "km/h", "accuracy_decimals": 1},
     {"id": "range_added", "name": "Range Added", "icon": "mdi:map-marker-plus", "device_class": "distance", "unit": "km", "accuracy_decimals": 0},
@@ -442,6 +446,8 @@ async def create_sensor(var, definition, vehicle_id, vehicle_name, device_id=Non
         config[CONF_UNIT_OF_MEASUREMENT] = definition["unit"]
     if "accuracy_decimals" in definition:
         config[CONF_ACCURACY_DECIMALS] = definition["accuracy_decimals"]
+    if "state_class" in definition:
+        config[CONF_STATE_CLASS] = sensor.validate_state_class(definition["state_class"])
     config = _with_device_class(config, sensor, definition)
     sens = await sensor.new_sensor(config)
     cg.add(var.set_sensor(definition["id"], sens))
