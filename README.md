@@ -344,10 +344,11 @@ tesla_ble_vehicle:
     supervision_timeout: 6s     # 100ms - 32s, > 2 x connection_interval
 ```
 
-After connecting, each car logs what the link actually uses:
+Within 10 s of connecting, and whenever the values change, each car logs what
+the link actually uses:
 
 ```text
-[Szarik] BLE link params: interval 30.00 ms, latency 0, supervision timeout 6000 ms (status 0)
+[Szarik] BLE link params: interval 30.00 ms, latency 0, supervision timeout 6000 ms (requested 30.00 ms / 6000 ms)
 ```
 
 Keep an active scan window short while cars are connected; scanning takes radio

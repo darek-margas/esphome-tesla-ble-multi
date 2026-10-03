@@ -203,6 +203,7 @@ void TeslaBLEVehicle::loop() {
     if (now - last_rssi_request_ >= RSSI_POLL_INTERVAL_MS) {
       last_rssi_request_ = now;
       esp_ble_gap_read_rssi(ble_client_->get_remote_bda());
+      ble_client_->log_link_params_if_changed(log_name());
     }
   }
 
@@ -1288,6 +1289,24 @@ bool TeslaBLEVehicle::is_connected() const {
   return ble_client_ != nullptr && ble_client_->state() == espbt::ClientState::ESTABLISHED;
 }
 
+void TeslaBLEClient::log_link_params_if_changed(const char *name) {
+  esp_gap_conn_params_t params{};
+  if (esp_ble_get_current_conn_params(this->get_remote_bda(), &params) != ESP_OK) return;
+  if (params.interval == 0) return;
+  if (params.interval == logged_interval_ && params.latency == logged_latency_ &&
+      params.timeout == logged_timeout_)
+    return;
+  logged_interval_ = params.interval;
+  logged_latency_ = params.latency;
+  logged_timeout_ = params.timeout;
+  // Units: interval 1.25 ms, timeout 10 ms.
+  ESP_LOGI(TAG,
+           "[%s] BLE link params: interval %.2f ms, latency %u, supervision timeout %u ms "
+           "(requested %.2f ms / %u ms)",
+           name, params.interval * 1.25f, (unsigned) params.latency, (unsigned) params.timeout * 10u,
+           link_interval_units_ * 1.25f, (unsigned) link_timeout_units_ * 10u);
+}
+
 void TeslaBLEClient::connect() {
   // ESP-IDF uses these for the connection it is about to open. Both cars get
   // the same interval by default, so the controller can interleave the two
@@ -1304,6 +1323,8 @@ bool TeslaBLEClient::gattc_event_handler(esp_gattc_cb_event_t event,
   if (event == ESP_GATTC_SEARCH_CMPL_EVT) {
     // Ask again once connected, in case the car negotiated something else.
     this->update_conn_params_(link_interval_units_, link_interval_units_, 0, link_timeout_units_, "tesla");
+  } else if (event == ESP_GATTC_DISCONNECT_EVT) {
+    logged_interval_ = logged_latency_ = logged_timeout_ = 0;
   }
   if (vehicle_ != nullptr)
     vehicle_->gattc_event_handler(event, gattc_if, param);
@@ -1313,17 +1334,7 @@ bool TeslaBLEClient::gattc_event_handler(esp_gattc_cb_event_t event,
 void TeslaBLEClient::gap_event_handler(esp_gap_ble_cb_event_t event,
                                         esp_ble_gap_cb_param_t *param) {
   esp32_ble_client::BLEClientBase::gap_event_handler(event, param);
-  if (vehicle_ == nullptr) return;
-  if (event == ESP_GAP_BLE_UPDATE_CONN_PARAMS_EVT) {
-    auto &p = param->update_conn_params;
-    if (!this->check_addr(p.bda)) return;
-    // Report what the link actually runs with (units: 1.25 ms / 10 ms).
-    ESP_LOGI(TAG, "[%s] BLE link params: interval %.2f ms, latency %u, supervision timeout %u ms (status %d)",
-             vehicle_->log_name(), p.conn_int * 1.25f, (unsigned) p.latency, (unsigned) p.timeout * 10u,
-             (int) p.status);
-    return;
-  }
-  if (event != ESP_GAP_BLE_READ_RSSI_COMPLETE_EVT) return;
+  if (vehicle_ == nullptr || event != ESP_GAP_BLE_READ_RSSI_COMPLETE_EVT) return;
   if (!this->check_addr(param->read_rssi_cmpl.remote_addr)) return;
   if (param->read_rssi_cmpl.status == ESP_BT_STATUS_SUCCESS) {
     vehicle_->update_ble_rssi(param->read_rssi_cmpl.rssi);

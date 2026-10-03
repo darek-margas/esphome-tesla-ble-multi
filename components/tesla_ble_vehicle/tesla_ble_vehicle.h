@@ -347,6 +347,11 @@ class TeslaBLEClient : public esp32_ble_client::BLEClientBase {
     link_timeout_units_ = timeout_units;
   }
 
+  // Reads the parameters the link actually runs with and logs them when they
+  // change. ESPHome does not forward ESP_GAP_BLE_UPDATE_CONN_PARAMS_EVT to
+  // components, so this polls esp_ble_get_current_conn_params() instead.
+  void log_link_params_if_changed(const char *name);
+
   void connect() override;
   bool gattc_event_handler(esp_gattc_cb_event_t event, esp_gatt_if_t gattc_if,
                            esp_ble_gattc_cb_param_t *param) override;
@@ -356,6 +361,10 @@ class TeslaBLEClient : public esp32_ble_client::BLEClientBase {
   TeslaBLEVehicle *vehicle_{nullptr};
   uint16_t link_interval_units_{24};  // 30 ms
   uint16_t link_timeout_units_{600};  // 6 s
+  // Last logged values; 0 means not logged on this connection yet.
+  uint16_t logged_interval_{0};
+  uint16_t logged_latency_{0};
+  uint16_t logged_timeout_{0};
 };
 
 // =============================================================================
