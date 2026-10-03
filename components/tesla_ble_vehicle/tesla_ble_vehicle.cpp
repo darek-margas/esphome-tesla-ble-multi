@@ -1277,10 +1277,11 @@ void TeslaBLEVehicle::update_ble_rssi(int8_t rssi) {
 }
 
 uint32_t TeslaBLEVehicle::ble_write_gap_ms() const {
-  // Keep fragment pacing deterministic across both vehicles. The adaptive
-  // RSSI policy made strong links much more aggressive and added another
-  // variable while debugging shared-controller congestion.
-  return 60;
+  // Keep fragment pacing deterministic across both vehicles. 60 ms made a
+  // 188-byte request take longer than the library's 1 s resend timer; 15 ms
+  // keeps a small breather between fragments without that cost. Congestion
+  // is handled per link by the adapter (status 143 + ESP_GATTC_CONGEST_EVT).
+  return 15;
 }
 
 bool TeslaBLEVehicle::is_connected() const {
