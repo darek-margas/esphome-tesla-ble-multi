@@ -143,15 +143,15 @@ BINARY_SENSORS = [
     {"id": "asleep", "name": "Asleep", "icon": "mdi:sleep"},
     {"id": "user_present", "name": "User Present", "icon": "mdi:account-check", "device_class": "occupancy"},
     {"id": "charger", "name": "Charger", "icon": "mdi:power-plug", "device_class": "plug"},
-    {"id": "cabin_overheat_active", "name": "Cabin Overheat Active", "icon": "mdi:car-defrost-rear"},
+    {"id": "cabin_overheat_active", "name": "Cabin Overheat Active", "icon": "mdi:car-defrost-rear", "device_class": "running"},
     # Car is here: its BLE adverts were heard in the last 60 s (or it is connected)
     {"id": "present", "name": "Present", "icon": "mdi:car-connected", "device_class": "presence"},
 
     # Climate
-    {"id": "preconditioning", "name": "Preconditioning", "icon": "mdi:car-defrost-front"},
-    {"id": "front_defroster", "name": "Front Defroster", "icon": "mdi:car-defrost-front"},
-    {"id": "rear_defroster", "name": "Rear Defroster", "icon": "mdi:car-defrost-rear"},
-    {"id": "battery_heater", "name": "Battery Heater", "icon": "mdi:battery-heart-variant"},
+    {"id": "preconditioning", "name": "Preconditioning", "icon": "mdi:car-defrost-front", "device_class": "running"},
+    {"id": "front_defroster", "name": "Front Defroster", "icon": "mdi:car-defrost-front", "device_class": "running"},
+    {"id": "rear_defroster", "name": "Rear Defroster", "icon": "mdi:car-defrost-rear", "device_class": "running"},
+    {"id": "battery_heater", "name": "Battery Heater", "icon": "mdi:battery-heart-variant", "device_class": "running"},
     {"id": "battery_heater_no_power", "name": "Battery Heater No Power", "icon": "mdi:battery-alert", "device_class": "problem"},
 
     # Charging
@@ -188,47 +188,47 @@ BINARY_SENSORS = [
 ]
 
 SENSORS = [
-    {"id": "ble_rssi", "name": "BLE RSSI", "icon": "mdi:signal", "unit": "dBm", "accuracy_decimals": 0, "entity_category": "diagnostic", "disabled_by_default": True},
+    {"id": "ble_rssi", "name": "BLE RSSI", "icon": "mdi:signal", "unit": "dBm", "accuracy_decimals": 0, "entity_category": "diagnostic", "disabled_by_default": True, "device_class": "signal_strength", "state_class": "measurement"},
     # RSSI of the car's advertisements: available while the car is in range,
     # also when it is not connected (unknown once not heard for 60 s)
-    {"id": "ble_advert_rssi", "name": "BLE Advert RSSI", "icon": "mdi:bluetooth-audio", "unit": "dBm", "accuracy_decimals": 0, "entity_category": "diagnostic", "disabled_by_default": True},
+    {"id": "ble_advert_rssi", "name": "BLE Advert RSSI", "icon": "mdi:bluetooth-audio", "unit": "dBm", "accuracy_decimals": 0, "entity_category": "diagnostic", "disabled_by_default": True, "device_class": "signal_strength", "state_class": "measurement"},
     # Charge state sensors
-    {"id": "battery_level", "name": "Battery", "icon": "mdi:battery", "unit": "%"},
-    {"id": "range", "name": "Range", "icon": "mdi:map-marker-distance", "device_class": "distance", "unit": "km"},
-    {"id": "est_battery_range", "name": "Estimated Range", "icon": "mdi:map-marker-distance", "device_class": "distance", "unit": "km", "disabled_by_default": True},
-    {"id": "ideal_battery_range", "name": "Ideal Range", "icon": "mdi:map-marker-distance", "device_class": "distance", "unit": "km", "disabled_by_default": True},
-    {"id": "usable_battery_level", "name": "Usable Battery", "icon": "mdi:battery", "unit": "%"},
-    {"id": "charger_power", "name": "Charger Power", "icon": "mdi:flash", "device_class": "power", "unit": "kW"},
-    {"id": "charger_voltage", "name": "Charger Voltage", "icon": "mdi:lightning-bolt", "device_class": "voltage", "unit": "V"},
-    {"id": "charger_current", "name": "Charger Current", "icon": "mdi:current-ac", "device_class": "current", "unit": "A"},
-    {"id": "evse_max_current", "name": "Charger Max", "icon": "mdi:ev-plug-tesla", "device_class": "current", "unit": "A"},
-    {"id": "charge_current_request", "name": "Requested Current", "icon": "mdi:current-ac", "device_class": "current", "unit": "A", "entity_category": "diagnostic", "disabled_by_default": True},
-    {"id": "vehicle_max_charge_current", "name": "Car Max Acceptable", "icon": "mdi:car-battery", "device_class": "current", "unit": "A"},
+    {"id": "battery_level", "name": "Battery", "unit": "%", "device_class": "battery", "state_class": "measurement"},
+    {"id": "range", "name": "Range", "icon": "mdi:map-marker-distance", "device_class": "distance", "unit": "km", "state_class": "measurement"},
+    {"id": "est_battery_range", "name": "Estimated Range", "icon": "mdi:map-marker-distance", "device_class": "distance", "unit": "km", "disabled_by_default": True, "state_class": "measurement"},
+    {"id": "ideal_battery_range", "name": "Ideal Range", "icon": "mdi:map-marker-distance", "device_class": "distance", "unit": "km", "disabled_by_default": True, "state_class": "measurement"},
+    {"id": "usable_battery_level", "name": "Usable Battery", "unit": "%", "device_class": "battery", "state_class": "measurement"},
+    {"id": "charger_power", "name": "Charger Power", "icon": "mdi:flash", "device_class": "power", "unit": "kW", "state_class": "measurement"},
+    {"id": "charger_voltage", "name": "Charger Voltage", "icon": "mdi:lightning-bolt", "device_class": "voltage", "unit": "V", "state_class": "measurement"},
+    {"id": "charger_current", "name": "Charger Current", "icon": "mdi:current-ac", "device_class": "current", "unit": "A", "state_class": "measurement"},
+    {"id": "evse_max_current", "name": "Charger Max", "icon": "mdi:ev-plug-tesla", "device_class": "current", "unit": "A", "state_class": "measurement"},
+    {"id": "charge_current_request", "name": "Requested Current", "icon": "mdi:current-ac", "device_class": "current", "unit": "A", "entity_category": "diagnostic", "disabled_by_default": True, "state_class": "measurement"},
+    {"id": "vehicle_max_charge_current", "name": "Car Max Acceptable", "icon": "mdi:car-battery", "device_class": "current", "unit": "A", "state_class": "measurement"},
     # state_class makes Home Assistant treat it as a number, so the 0 decimals
     # apply (without unit/device class/state class it shows the raw "1.0")
     {"id": "charger_phases", "name": "Charger Phases", "icon": "mdi:sine-wave", "accuracy_decimals": 0, "state_class": "measurement"},
-    {"id": "charger_power_estimated", "name": "Charger Power Estimated", "icon": "mdi:flash", "device_class": "power", "unit": "kW", "accuracy_decimals": 2},
-    {"id": "charging_rate", "name": "Charging Rate", "icon": "mdi:speedometer", "device_class": "speed", "unit": "km/h", "accuracy_decimals": 1},
+    {"id": "charger_power_estimated", "name": "Charger Power Estimated", "icon": "mdi:flash", "device_class": "power", "unit": "kW", "accuracy_decimals": 2, "state_class": "measurement"},
+    {"id": "charging_rate", "name": "Charging Rate", "icon": "mdi:speedometer", "device_class": "speed", "unit": "km/h", "accuracy_decimals": 1, "state_class": "measurement"},
     {"id": "range_added", "name": "Range Added", "icon": "mdi:map-marker-plus", "device_class": "distance", "unit": "km", "accuracy_decimals": 0},
-    {"id": "energy_added", "name": "Energy Added", "icon": "mdi:battery-charging", "device_class": "energy", "unit": "kWh", "accuracy_decimals": 1},
-    {"id": "time_to_full", "name": "Time to Full", "icon": "mdi:clock-outline", "device_class": "duration", "unit": "min"},
-    {"id": "time_to_charge_limit", "name": "Time to Charge Limit", "icon": "mdi:clock-outline", "device_class": "duration", "unit": "min"},
+    {"id": "energy_added", "name": "Energy Added", "icon": "mdi:battery-charging", "device_class": "energy", "unit": "kWh", "accuracy_decimals": 1, "state_class": "total_increasing"},
+    {"id": "time_to_full", "name": "Time to Full", "icon": "mdi:clock-outline", "device_class": "duration", "unit": "min", "state_class": "measurement"},
+    {"id": "time_to_charge_limit", "name": "Time to Charge Limit", "icon": "mdi:clock-outline", "device_class": "duration", "unit": "min", "state_class": "measurement"},
     
     # Climate state sensors
-    {"id": "passenger_temp_setting", "name": "Passenger Temperature Setting", "icon": "mdi:thermometer", "device_class": "temperature", "unit": "°C", "accuracy_decimals": 1},
-    {"id": "outside_temp", "name": "Outside Temperature", "icon": "mdi:thermometer", "device_class": "temperature", "unit": "°C", "accuracy_decimals": 1},
+    {"id": "passenger_temp_setting", "name": "Passenger Temperature Setting", "icon": "mdi:thermometer", "device_class": "temperature", "unit": "°C", "accuracy_decimals": 1, "state_class": "measurement"},
+    {"id": "outside_temp", "name": "Outside Temperature", "icon": "mdi:thermometer", "device_class": "temperature", "unit": "°C", "accuracy_decimals": 1, "state_class": "measurement"},
     
     # Speed limit mode's current limit
-    {"id": "speed_limit", "name": "Speed Limit", "icon": "mdi:speedometer-slow", "device_class": "speed", "unit": "km/h", "accuracy_decimals": 0},
+    {"id": "speed_limit", "name": "Speed Limit", "icon": "mdi:speedometer-slow", "device_class": "speed", "unit": "km/h", "accuracy_decimals": 0, "state_class": "measurement"},
 
     # Drive state sensors
-    {"id": "odometer", "name": "Odometer", "icon": "mdi:counter", "device_class": "distance", "unit": "km", "disabled_by_default": True},
+    {"id": "odometer", "name": "Odometer", "icon": "mdi:counter", "device_class": "distance", "unit": "km", "disabled_by_default": True, "state_class": "total_increasing"},
     
     # Tire pressure sensors
-    {"id": "tpms_front_left", "name": "TPMS Front Left", "icon": "mdi:car-tire-alert", "device_class": "pressure", "unit": "bar", "accuracy_decimals": 1},
-    {"id": "tpms_front_right", "name": "TPMS Front Right", "icon": "mdi:car-tire-alert", "device_class": "pressure", "unit": "bar", "accuracy_decimals": 1},
-    {"id": "tpms_rear_left", "name": "TPMS Rear Left", "icon": "mdi:car-tire-alert", "device_class": "pressure", "unit": "bar", "accuracy_decimals": 1},
-    {"id": "tpms_rear_right", "name": "TPMS Rear Right", "icon": "mdi:car-tire-alert", "device_class": "pressure", "unit": "bar", "accuracy_decimals": 1},
+    {"id": "tpms_front_left", "name": "TPMS Front Left", "icon": "mdi:car-tire-alert", "device_class": "pressure", "unit": "bar", "accuracy_decimals": 1, "state_class": "measurement"},
+    {"id": "tpms_front_right", "name": "TPMS Front Right", "icon": "mdi:car-tire-alert", "device_class": "pressure", "unit": "bar", "accuracy_decimals": 1, "state_class": "measurement"},
+    {"id": "tpms_rear_left", "name": "TPMS Rear Left", "icon": "mdi:car-tire-alert", "device_class": "pressure", "unit": "bar", "accuracy_decimals": 1, "state_class": "measurement"},
+    {"id": "tpms_rear_right", "name": "TPMS Rear Right", "icon": "mdi:car-tire-alert", "device_class": "pressure", "unit": "bar", "accuracy_decimals": 1, "state_class": "measurement"},
 ]
 
 TEXT_SENSORS = [
@@ -314,6 +314,7 @@ NUMBERS = [
         "setter": "set_charging_amps_number",
         "icon": "mdi:current-ac",
         "unit": "A",
+        "device_class": "current",
         "min": 0,
         "max": "config",  # Will use charging_amps_max from config
         "step": 1,
@@ -325,6 +326,7 @@ NUMBERS = [
         "setter": "set_charging_limit_number",
         "icon": "mdi:battery-charging-100",
         "unit": "%",
+        "device_class": "battery",
         "min": 50,
         "max": 100,
         "step": 1,
@@ -488,6 +490,7 @@ async def create_number(var, definition, config, vehicle_id, vehicle_name, devic
     num_config[CONF_MODE] = number.NUMBER_MODES['AUTO']
     if "unit" in definition:
         num_config[CONF_UNIT_OF_MEASUREMENT] = definition["unit"]
+    num_config = _with_device_class(num_config, number, definition)
     num = await number.new_number(
         num_config,
         min_value=definition["min"],
