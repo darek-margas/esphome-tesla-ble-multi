@@ -36,26 +36,19 @@ jobs:
           TAG="v$VERSION"
 
           cat > /tmp/release-notes.md <<'EOF'
-          ## Build the Tesla BLE library from our own fork
+          ## Refactoring: remove code made redundant by the one-link-at-a-time design
 
-          No functional change: the library code is identical to v2026.10.0 (only its download source changed).
+          No new features and no configuration changes. v2026.10.0 moved to one BLE link at a time (cars take turns). Several parts of the code only existed to keep two simultaneously connected cars from competing, and they are now removed or simplified:
 
-          The Tesla BLE library is now fetched from [darek-margas/tesla-ble](https://github.com/darek-margas/tesla-ble), a fork of [yoziru/tesla-ble](https://github.com/yoziru/tesla-ble), pinned at `v5.2.0` (the same commit as upstream `v5.2.0`).
+          - **Dead code removed:** an unused constant (`USER_COMMAND_QUIET_MS`) and a stored RSSI value that was never read.
+          - **No 350 ms pause after each infotainment command.** It gave the other car's link room while both were connected. Now it only slowed every poll batch by about 1.75 s.
+          - **Infotainment work queue is per car** instead of shared across all cars. Each car still has one command in flight, user commands go ahead of background polls, and user commands are re-queued if the link drops. Queued work starts when the car's turn begins.
+          - **BLE write state is per link.** The ESP32-wide write lock and shared pacing timer are gone. Pacing is now kept per car, and resetting it no longer misbehaves after 24.8 days of uptime.
+          - **Quieter logs:** the BLE link parameters line moved from INFO to DEBUG.
 
-          Why: this component depends closely on the library's behaviour (command queue, session handling, retry timers). Building straight from upstream means an upstream change can break this build, or change runtime behaviour, without warning. With the fork, upstream releases are synced in deliberately: sync the fork, test, then move the `ref:` here to the new tag. Until then the build stays on the tested `v5.2.0`. The fork is also the place for library fixes this project may need later, without vendoring the library into this repo.
+          Tested on two cars: turn hand-over, polling while both cars sleep (no wake-ups), and a command to a sleeping car (wake, then command).
 
-          If your own YAML declares the `tesla-ble` framework component itself (instead of using `packages/board.yml`), update it too:
-
-          ```yaml
-          esp32:
-            framework:
-              components:
-                - name: tesla-ble
-                  source: https://github.com/darek-margas/tesla-ble.git
-                  ref: v5.2.0
-          ```
-
-          See v2026.10.0 for the multi-car changes (one BLE link at a time, presence, queued commands, sleep-friendly polling).
+          Library unchanged: [darek-margas/tesla-ble](https://github.com/darek-margas/tesla-ble) `v5.2.0`. See v2026.10.0 for the multi-car design.
           EOF
 
           if gh release view "$TAG" >/dev/null 2>&1; then
