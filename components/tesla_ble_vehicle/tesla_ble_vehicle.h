@@ -311,6 +311,8 @@ private:
       TeslaBLEVehicle *vehicle;
       std::function<void()> start;
       bool interactive;
+      // User commands: re-issues the command if it is dropped before it ran.
+      std::function<void()> requeue;
     };
 
     // One logical infotainment transaction globally. Pending work is queued,
@@ -328,7 +330,16 @@ private:
     uint8_t poll_batch_start_{0};
     bool poll_batch_in_progress_{false};
     uint8_t poll_batch_remaining_{0};
-    void enqueue_infotainment_work_(std::function<void()> start, bool interactive);
+    void enqueue_infotainment_work_(std::function<void()> start, bool interactive,
+                                    std::function<void()> requeue = nullptr);
+    // send_command_with_tracking with a retry budget: a user command that
+    // fails because the link or session was reset is sent again once.
+    void send_command_tracked_(UniversalMessage_Domain domain, const std::string &name,
+                               std::function<int(TeslaBLE::Client *, uint8_t *, size_t *)> builder,
+                               TeslaBLE::WakePolicy wake_policy, std::function<void(bool)> on_result,
+                               uint8_t retries_left);
+    bool should_retry_command_(const std::string &name, const TeslaBLE::OperationResult &result,
+                               uint8_t retries_left);
     void release_infotainment_slot_();
     void defer_release_infotainment_slot_();
     void cancel_queued_infotainment_work_();

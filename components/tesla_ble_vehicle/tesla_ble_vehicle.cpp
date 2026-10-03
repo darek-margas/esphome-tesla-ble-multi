@@ -468,8 +468,9 @@ void TeslaBLEVehicle::maybe_poll_infotainment_(uint32_t now) {
 }
 
 
-void TeslaBLEVehicle::enqueue_infotainment_work_(std::function<void()> start, bool interactive) {
-  InfotainmentWorkItem item{this, std::move(start), interactive};
+void TeslaBLEVehicle::enqueue_infotainment_work_(std::function<void()> start, bool interactive,
+                                                 std::function<void()> requeue) {
+  InfotainmentWorkItem item{this, std::move(start), interactive, std::move(requeue)};
 
   // Interactive commands should run before queued background polls, while
   // retaining FIFO order among other interactive commands.
@@ -548,13 +549,17 @@ void TeslaBLEVehicle::release_infotainment_slot_() {
 }
 
 void TeslaBLEVehicle::cancel_queued_infotainment_work_() {
+  std::vector<std::function<void()>> requeue;
   for (auto it = global_infotainment_queue_.begin(); it != global_infotainment_queue_.end();) {
     if (it->vehicle == this) {
+      // Background polls are simply dropped; user commands are not lost.
+      if (it->interactive && it->requeue) requeue.push_back(std::move(it->requeue));
       it = global_infotainment_queue_.erase(it);
     } else {
       ++it;
     }
   }
+  for (auto &again : requeue) again();
 }
 
 void TeslaBLEVehicle::complete_poll_batch_job_() {
@@ -926,6 +931,29 @@ void TeslaBLEVehicle::send_command_with_tracking(
     const std::string &name,
     std::function<int(TeslaBLE::Client *, uint8_t *, size_t *)> builder,
     TeslaBLE::WakePolicy wake_policy, std::function<void(bool)> on_result) {
+  send_command_tracked_(domain, name, std::move(builder), wake_policy, std::move(on_result), 1);
+}
+
+bool TeslaBLEVehicle::should_retry_command_(const std::string &name,
+                                            const TeslaBLE::OperationResult &result,
+                                            uint8_t retries_left) {
+  if (result.is_success() || result.is_skipped() || retries_left == 0)
+    return false;
+  const TeslaBLE::CommandError *error = result.error();
+  // Temporary errors are link or session resets (connection lost, session
+  // stale), e.g. the infotainment session timing out right after a wake.
+  // The car is awake by the next turn, so one more try usually succeeds.
+  if (error == nullptr || !error->is_temporary())
+    return false;
+  ESP_LOGW(TAG, "[%s] '%s' failed (%s) - retrying once", log_name(), name.c_str(),
+           error->message().c_str());
+  return true;
+}
+
+void TeslaBLEVehicle::send_command_tracked_(
+    UniversalMessage_Domain domain, const std::string &name,
+    std::function<int(TeslaBLE::Client *, uint8_t *, size_t *)> builder,
+    TeslaBLE::WakePolicy wake_policy, std::function<void(bool)> on_result, uint8_t retries_left) {
   LogScope log_scope(this);
   if (!vehicle_) {
     ESP_LOGE(TAG, "Cannot send command '%s': vehicle not initialized", name.c_str());
@@ -936,8 +964,8 @@ void TeslaBLEVehicle::send_command_with_tracking(
     // Not this car's BLE turn (or out of range): send it once connected.
     queue_until_connected_(
         name,
-        [this, domain, name, builder, wake_policy, on_result]() {
-          send_command_with_tracking(domain, name, builder, wake_policy, on_result);
+        [this, domain, name, builder, wake_policy, on_result, retries_left]() {
+          send_command_tracked_(domain, name, builder, wake_policy, on_result, retries_left);
         },
         [this, name, on_result]() {
           if (last_command_sensor_)
@@ -947,36 +975,49 @@ void TeslaBLEVehicle::send_command_with_tracking(
     return;
   }
 
+  // Re-issues this command later (next loop, or next turn if disconnected).
+  auto retry = [this, domain, name, builder, wake_policy, on_result](uint8_t left) {
+    this->defer([this, domain, name, builder, wake_policy, on_result, left]() {
+      send_command_tracked_(domain, name, builder, wake_policy, on_result, left);
+    });
+  };
+
   if (domain == UniversalMessage_Domain_DOMAIN_INFOTAINMENT) {
     if (user_commands_in_flight_ < 255) ++user_commands_in_flight_;
-    auto queued_builder = std::make_shared<
-        std::function<int(TeslaBLE::Client *, uint8_t *, size_t *)>>(std::move(builder));
-    auto queued_result = std::make_shared<std::function<void(bool)>>(std::move(on_result));
-
     enqueue_infotainment_work_(
-        [this, domain, name, queued_builder, wake_policy, queued_result]() mutable {
+        [this, domain, name, builder, wake_policy, on_result, retries_left, retry]() {
           vehicle_->send_command_result(
-              domain, name, std::move(*queued_builder),
-              [this, name, queued_result](TeslaBLE::OperationResult result) mutable {
+              domain, name, builder,
+              [this, name, on_result, retries_left, retry](TeslaBLE::OperationResult result) {
                 if (user_commands_in_flight_ > 0) --user_commands_in_flight_;
                 defer_release_infotainment_slot_();
+                if (should_retry_command_(name, result, retries_left)) {
+                  retry(retries_left - 1);
+                  return;
+                }
                 const bool succeeded = result.is_success();
                 handle_command_result(name, std::move(result));
-                if (*queued_result) (*queued_result)(succeeded);
+                if (on_result) on_result(succeeded);
               },
               wake_policy);
         },
-        true);
+        true,
+        // Dropped from the queue before it ran (link lost): send it again.
+        [retry, retries_left]() { retry(retries_left); });
     return;
   }
 
   if (user_commands_in_flight_ < 255) ++user_commands_in_flight_;
   vehicle_->send_command_result(
-      domain, name, std::move(builder),
-      [this, domain, name, on_result = std::move(on_result)](TeslaBLE::OperationResult result) {
+      domain, name, builder,
+      [this, domain, name, on_result, retries_left, retry](TeslaBLE::OperationResult result) {
         if (user_commands_in_flight_ > 0) --user_commands_in_flight_;
         if (domain == UniversalMessage_Domain_DOMAIN_INFOTAINMENT)
           release_infotainment_slot_();
+        if (should_retry_command_(name, result, retries_left)) {
+          retry(retries_left - 1);
+          return;
+        }
         const bool succeeded = result.is_success();
         handle_command_result(name, std::move(result));
         if (on_result) on_result(succeeded);

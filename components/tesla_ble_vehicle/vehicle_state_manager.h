@@ -216,7 +216,12 @@ private:
     template<typename T, typename V> static bool publish_sensor_state(T *entity, V state) {
       if (entity == nullptr) return false;
       if constexpr (std::is_floating_point<V>::value) {
-        if (!entity->has_state() || std::abs(entity->state - state) > 0.001f) {
+        // NAN means "unknown". Any comparison with NAN is false, so handle
+        // the transitions explicitly or a sensor stays unknown forever.
+        const bool was_nan = std::isnan(entity->state);
+        const bool is_nan = std::isnan(state);
+        if (!entity->has_state() || was_nan != is_nan ||
+            (!is_nan && std::abs(entity->state - state) > 0.001f)) {
           entity->publish_state(state);
           return true;
         }
