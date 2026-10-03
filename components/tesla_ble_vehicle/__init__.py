@@ -146,6 +146,11 @@ BINARY_SENSORS = [
     {"id": "preconditioning", "name": "Preconditioning", "icon": "mdi:car-defrost-front"},
     {"id": "front_defroster", "name": "Front Defroster", "icon": "mdi:car-defrost-front"},
     {"id": "rear_defroster", "name": "Rear Defroster", "icon": "mdi:car-defrost-rear"},
+    {"id": "battery_heater", "name": "Battery Heater", "icon": "mdi:battery-heart-variant"},
+    {"id": "battery_heater_no_power", "name": "Battery Heater No Power", "icon": "mdi:battery-alert", "device_class": "problem"},
+
+    # Charging
+    {"id": "scheduled_charging_pending", "name": "Scheduled Charging Pending", "icon": "mdi:calendar-clock"},
 
     # Closures / modes
     {"id": "sentry_mode_available", "name": "Sentry Mode Available", "icon": "mdi:cctv", "entity_category": "diagnostic", "disabled_by_default": True},
@@ -197,11 +202,13 @@ SENSORS = [
     {"id": "charger_phases", "name": "Charger Phases", "icon": "mdi:sine-wave", "unit": "", "accuracy_decimals": 0},
     {"id": "charger_power_estimated", "name": "Charger Power Estimated", "icon": "mdi:flash", "device_class": "power", "unit": "kW", "accuracy_decimals": 2},
     {"id": "charging_rate", "name": "Charging Rate", "icon": "mdi:speedometer", "device_class": "speed", "unit": "km/h", "accuracy_decimals": 1},
+    {"id": "range_added", "name": "Range Added", "icon": "mdi:map-marker-plus", "device_class": "distance", "unit": "km", "accuracy_decimals": 0},
     {"id": "energy_added", "name": "Energy Added", "icon": "mdi:battery-charging", "device_class": "energy", "unit": "kWh", "accuracy_decimals": 1},
     {"id": "time_to_full", "name": "Time to Full", "icon": "mdi:clock-outline", "device_class": "duration", "unit": "min"},
     {"id": "time_to_charge_limit", "name": "Time to Charge Limit", "icon": "mdi:clock-outline", "device_class": "duration", "unit": "min"},
     
     # Climate state sensors
+    {"id": "passenger_temp_setting", "name": "Passenger Temperature Setting", "icon": "mdi:thermometer", "device_class": "temperature", "unit": "°C", "accuracy_decimals": 1},
     {"id": "outside_temp", "name": "Outside Temperature", "icon": "mdi:thermometer", "device_class": "temperature", "unit": "°C", "accuracy_decimals": 1},
     
     # Speed limit mode's current limit
@@ -225,6 +232,7 @@ TEXT_SENSORS = [
     {"id": "scheduled_charging_mode", "name": "Scheduled Charging", "icon": "mdi:calendar-clock"},
     {"id": "scheduled_charging_time", "name": "Scheduled Charging Time", "icon": "mdi:clock-start"},
     {"id": "scheduled_departure_time", "name": "Scheduled Departure Time", "icon": "mdi:clock-end"},
+    {"id": "steering_wheel_heat_level", "name": "Steering Wheel Heat Level", "icon": "mdi:steering"},
     {"id": "seat_heater_front_left", "name": "Seat Heater Front Left", "icon": "mdi:car-seat-heater"},
     {"id": "seat_heater_front_right", "name": "Seat Heater Front Right", "icon": "mdi:car-seat-heater"},
     {"id": "seat_heater_rear_left", "name": "Seat Heater Rear Left", "icon": "mdi:car-seat-heater", "disabled_by_default": True},

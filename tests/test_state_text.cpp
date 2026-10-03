@@ -166,6 +166,14 @@ static void test_closure_open() {
   CHECK(!closure_open(42).has_value());
 }
 
+static void test_steering_wheel_heat_level() {
+  CHECK(steering_wheel_heat_level(kStwHeatOff).value() == "Off");
+  CHECK(steering_wheel_heat_level(kStwHeatLow).value() == "Low");
+  CHECK(steering_wheel_heat_level(kStwHeatHigh).value() == "High");
+  CHECK(!steering_wheel_heat_level(kStwHeatUnknown).has_value());
+  CHECK(!steering_wheel_heat_level(9).has_value());
+}
+
 int main() {
   test_sleep_status();
   test_lock_status();
@@ -184,6 +192,7 @@ int main() {
   test_climate_preset();
   test_climate_fan_mode();
   test_closure_open();
+  test_steering_wheel_heat_level();
 
   return test_summary();
 }

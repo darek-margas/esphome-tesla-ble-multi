@@ -89,6 +89,12 @@ constexpr int kDefrostOff = 1;
 constexpr int kDefrostNormal = 2;
 constexpr int kDefrostMax = 3;
 
+// CarServer_StwHeatLevel
+constexpr int kStwHeatUnknown = 0;
+constexpr int kStwHeatOff = 1;
+constexpr int kStwHeatLow = 2;
+constexpr int kStwHeatHigh = 3;
+
 constexpr float kKmPerMile = 1.609344f;
 
 inline float miles_to_km(float miles) { return miles * kKmPerMile; }
@@ -287,6 +293,20 @@ inline const char *climate_preset(int keeper_tag, int defrost_tag) {
 
 // Climate entity fan mode from the car's bioweapon defense state.
 inline const char *climate_fan_mode(bool bioweapon_on) { return bioweapon_on ? "Bioweapon Mode" : "Normal"; }
+
+// Steering wheel heat level; nothing when the car does not know.
+inline std::optional<std::string> steering_wheel_heat_level(int level) {
+  switch (level) {
+    case kStwHeatOff:
+      return std::string("Off");
+    case kStwHeatLow:
+      return std::string("Low");
+    case kStwHeatHigh:
+      return std::string("High");
+    default:
+      return std::nullopt;
+  }
+}
 
 // Minutes after midnight -> "HH:MM"; nothing for values past the end of a day.
 inline std::optional<std::string> time_of_day(uint32_t minutes) {

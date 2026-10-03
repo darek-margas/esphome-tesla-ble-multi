@@ -53,6 +53,10 @@ static_assert(CarServer_ClimateState_ClimateKeeperMode_Party_tag == state_text::
 static_assert(CarServer_ClimateState_DefrostMode_Off_tag == state_text::kDefrostOff);
 static_assert(CarServer_ClimateState_DefrostMode_Normal_tag == state_text::kDefrostNormal);
 static_assert(CarServer_ClimateState_DefrostMode_Max_tag == state_text::kDefrostMax);
+static_assert(static_cast<int>(CarServer_StwHeatLevel_StwHeatLevel_Unknown) == state_text::kStwHeatUnknown);
+static_assert(static_cast<int>(CarServer_StwHeatLevel_StwHeatLevel_Off) == state_text::kStwHeatOff);
+static_assert(static_cast<int>(CarServer_StwHeatLevel_StwHeatLevel_Low) == state_text::kStwHeatLow);
+static_assert(static_cast<int>(CarServer_StwHeatLevel_StwHeatLevel_High) == state_text::kStwHeatHigh);
 static_assert(static_cast<int>(VCSEC_ClosureState_E_CLOSURESTATE_CLOSED) == state_text::kClosureClosed);
 static_assert(static_cast<int>(VCSEC_ClosureState_E_CLOSURESTATE_OPEN) == state_text::kClosureOpen);
 static_assert(static_cast<int>(VCSEC_ClosureState_E_CLOSURESTATE_AJAR) == state_text::kClosureAjar);
@@ -304,6 +308,14 @@ void VehicleStateManager::update_charge_state(const CarServer_ChargeState& charg
         }
     }
 
+    // Range added this charging session (rated miles, published in km)
+    if (charge_state.which_optional_charge_miles_added_rated) {
+        const float added = charge_state.optional_charge_miles_added_rated.charge_miles_added_rated;
+        if (added >= 0.0f && added <= 1000.0f && std::isfinite(added)) {
+            publish_sensor("range_added", state_text::miles_to_km(added));
+        }
+    }
+
     // Update energy added (kWh)
     if (charge_state.which_optional_charge_energy_added) {
         const float energy = charge_state.optional_charge_energy_added.charge_energy_added;
@@ -427,6 +439,9 @@ void VehicleStateManager::update_charge_state(const CarServer_ChargeState& charg
         publish_text_sensor("scheduled_charging_mode",
             state_text::scheduled_charging_mode(static_cast<int>(charge_state.optional_scheduled_charging_mode.scheduled_charging_mode)));
     }
+    if (charge_state.which_optional_scheduled_charging_pending) {
+        publish_binary_sensor("scheduled_charging_pending", charge_state.optional_scheduled_charging_pending.scheduled_charging_pending);
+    }
     if (charge_state.which_optional_scheduled_charging_start_time_minutes) {
         auto time = state_text::time_of_day(charge_state.optional_scheduled_charging_start_time_minutes.scheduled_charging_start_time_minutes);
         if (time.has_value()) publish_text_sensor("scheduled_charging_time", time.value());
@@ -526,6 +541,23 @@ void VehicleStateManager::update_climate_state(const CarServer_ClimateState& cli
         publish_binary_sensor("cabin_overheat_active", climate_state.optional_cabin_overheat_protection_actively_cooling.cabin_overheat_protection_actively_cooling);
     }
 
+    if (climate_state.which_optional_passenger_temp_setting) {
+        const float temp = climate_state.optional_passenger_temp_setting.passenger_temp_setting;
+        if (temp >= 15.0f && temp <= 30.0f && std::isfinite(temp)) {
+            publish_sensor("passenger_temp_setting", temp);
+        }
+    }
+    if (climate_state.which_optional_battery_heater) {
+        publish_binary_sensor("battery_heater", climate_state.optional_battery_heater.battery_heater);
+    }
+    if (climate_state.which_optional_battery_heater_no_power) {
+        publish_binary_sensor("battery_heater_no_power", climate_state.optional_battery_heater_no_power.battery_heater_no_power);
+    }
+    if (climate_state.which_optional_steering_wheel_heat_level) {
+        auto level = state_text::steering_wheel_heat_level(
+            static_cast<int>(climate_state.optional_steering_wheel_heat_level.steering_wheel_heat_level));
+        if (level.has_value()) publish_text_sensor("steering_wheel_heat_level", level.value());
+    }
     if (climate_state.which_optional_is_preconditioning) {
         publish_binary_sensor("preconditioning", climate_state.optional_is_preconditioning.is_preconditioning);
     }
