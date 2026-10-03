@@ -38,7 +38,7 @@ jobs:
           cat > /tmp/release-notes.md <<'EOF'
           ## Build the Tesla BLE library from our own fork
 
-          No functional change: the firmware is byte-identical to v2026.10.0.
+          No functional change: the library code is identical to v2026.10.0 (only its download source changed).
 
           The Tesla BLE library is now fetched from [darek-margas/tesla-ble](https://github.com/darek-margas/tesla-ble), a fork of [yoziru/tesla-ble](https://github.com/yoziru/tesla-ble), pinned at `v5.2.0` (the same commit as upstream `v5.2.0`).
 
