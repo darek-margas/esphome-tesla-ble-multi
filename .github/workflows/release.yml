@@ -36,13 +36,27 @@ jobs:
           TAG="v$VERSION"
 
           cat > /tmp/release-notes.md <<'EOF'
-          ## Fix: climate preset now shows "Normal"
+          ## Home Assistant presentation: statistics, device classes, whole-number phases
 
-          Small fix on top of v2026.10.3.
+          No change to what is read from the cars or how the BLE link works - only how Home Assistant shows and stores the values.
 
-          The climate entity reads its preset back from the car (Normal / Keep On / Dog Mode / Camp Mode / Defrost), but it stayed blank. Logs from two cars showed why: when no climate keeper mode is active, the car reports the keeper mode as "Unknown" (with defrost "Off"), not "Off". The preset now shows **Normal** in that case. Keep On, Dog Mode and Camp Mode still show when the car reports them, and Defrost when max defrost is on.
+          ### Long-term statistics (state classes)
+          No sensor had a state class, so Home Assistant kept no long-term statistics: history disappeared after the recorder period, statistics graph cards stayed empty and Energy Added could not be used in the Energy dashboard.
+          - **measurement:** Battery, Usable Battery, Range / Estimated / Ideal Range, Charger Power, Voltage, Current, Charger Max, Requested Current, Car Max Acceptable, Charger Power Estimated, Charging Rate, Time to Full, Time to Charge Limit, Outside and Passenger Temperature, Speed Limit, TPMS pressures, BLE RSSI and BLE Advert RSSI, Charger Phases.
+          - **total_increasing:** Odometer, and Energy Added (the reset to 0 at a new charging session is handled as a new cycle, so it works in the Energy dashboard).
 
-          Confirmed working in v2026.10.3 on the same cars: climate turned on from the Tesla app shows up in Home Assistant on the car's next BLE turn (`Car woke up - reading its state once`), instead of up to 11 minutes later.
+          Statistics start from this version; nothing earlier is back-filled.
+
+          ### Device classes
+          - **Battery, Usable Battery:** `battery` - the icon now shows the charge level.
+          - **BLE RSSI, BLE Advert RSSI:** `signal_strength`.
+          - **Preconditioning, Front / Rear Defroster, Battery Heater, Cabin Overheat Active:** `running` - shown as *Running / Not running* instead of On / Off. (Home Assistant has no "Heating" class for binary sensors; `heat` would read *Hot / Normal*, which means "too hot".)
+          - **Charging Amps** (number): `current`; **Charging Limit** (number): `battery`.
+
+          ### Charger Phases shows "1", not "1.0"
+          It already had 0 decimals, but with no unit, device class or state class Home Assistant treated it as text and showed the raw "1.0". With a state class it is a number and the 0 decimals apply. If it still shows "1.0", reset the display precision in the entity's settings in Home Assistant.
+
+          Home Assistant may show repair notices about changed state classes on sensors that already have history - that is expected.
 
           See v2026.10.3 for the other changes in this series. Library unchanged: [darek-margas/tesla-ble](https://github.com/darek-margas/tesla-ble) `v5.2.0`.
           EOF
