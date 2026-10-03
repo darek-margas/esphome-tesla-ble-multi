@@ -36,19 +36,36 @@ jobs:
           TAG="v$VERSION"
 
           cat > /tmp/release-notes.md <<'EOF'
-          ## Refactoring: remove code made redundant by the one-link-at-a-time design
+          ## More vehicle data, scheduled charging control, km units
 
-          No new features and no configuration changes. v2026.10.0 moved to one BLE link at a time (cars take turns). Several parts of the code only existed to keep two simultaneously connected cars from competing, and they are now removed or simplified:
+          Most of what the car already sends in the polls we make was decoded by the library and then thrown away. This release exposes it in Home Assistant, adds a scheduled-charging control, and fixes a few states that went stale. No extra BLE traffic: all new values come from polls that already ran.
 
-          - **Dead code removed:** an unused constant (`USER_COMMAND_QUIET_MS`) and a stored RSSI value that was never read.
-          - **No 350 ms pause after each infotainment command.** It gave the other car's link room while both were connected. Now it only slowed every poll batch by about 1.75 s.
-          - **Infotainment work queue is per car** instead of shared across all cars. Each car still has one command in flight, user commands go ahead of background polls, and user commands are re-queued if the link drops. Queued work starts when the car's turn begins.
-          - **BLE write state is per link.** The ESP32-wide write lock and shared pacing timer are gone. Pacing is now kept per car, and resetting it no longer misbehaves after 24.8 days of uptime.
-          - **Quieter logs:** the BLE link parameters line moved from INFO to DEBUG.
+          ### Units: kilometres
+          Range, Odometer, Charging Rate (and the new range and speed-limit sensors) are now in **km** / **km/h** instead of miles / mph. Home Assistant will ask about the unit change on existing sensors and their statistics - that is expected.
 
-          Tested on two cars: turn hand-over, polling while both cars sleep (no wake-ups), and a command to a sleeping car (wake, then command).
+          ### New sensors
+          - **Charging:** Usable Battery, Time to Charge Limit, Range Added (this session), Scheduled Charging Mode, Scheduled Charging Pending, Scheduled Departure Time. Estimated Range and Ideal Range are added disabled by default.
+          - **Climate:** Preconditioning, Front / Rear Defroster, Battery Heater, Battery Heater No Power, Passenger Temperature Setting, Steering Wheel Heat Level, Seat Heater Front Left / Right (rear seats disabled by default).
+          - **Closures and modes:** Speed Limit Mode, Speed Limit, Sentry Mode Available (diagnostic, disabled by default).
+          - **Tyres:** low-pressure warning per wheel (soft warnings disabled by default).
 
-          Library unchanged: [darek-margas/tesla-ble](https://github.com/darek-margas/tesla-ble) `v5.2.0`. See v2026.10.0 for the multi-car design.
+          A sensor that stays "unknown" means that car does not send that field over BLE.
+
+          ### Scheduled charging control
+          - **Scheduled Charging Start** (time picker): sets "start charging at" and turns scheduled charging on.
+          - **Scheduled Charging** (switch): turns it on or off, keeping the car's time.
+
+          Both are read back from the car; after each change the charge state is re-read, so a change the car did not accept snaps back.
+
+          ### Fixes and behaviour changes
+          - **Doors, frunk and trunk stay current while the car sleeps.** VCSEC reports every closure on each status poll, also while asleep, but only the charge port was used. Doors, frunk and trunk now follow it too. Covers publish only on change (fewer state updates).
+          - **Climate entity shows what the car really has.** The preset (Normal / Keep On / Dog / Camp / Defrost) and Bioweapon fan mode were write-only; they are now read back from the car.
+          - **Climate turned on from the Tesla app shows up.** After the 11 min idle window an idle car was re-read only every 11 min, so climate started from the app stayed OFF in Home Assistant. Climate running now counts as active (fast polling - the car cannot sleep with HVAC on anyway), and when a car is seen waking up its state is read once right away (at most once per 15 min, so self-wake blips do not keep it awake). The log shows what the car reports for climate when it changes (`Climate reported: ...`).
+          - **Charger Phases and Charger Power Estimated keep the last session's values** after charging stops or the cable is unplugged, and survive a reboot (saved to flash once per charging session, only if changed). Before, the estimate dropped to 0 on unplug and both were unknown after a reboot.
+
+          ### Other
+          - README log examples use generic car names.
+          - Library unchanged: [darek-margas/tesla-ble](https://github.com/darek-margas/tesla-ble) `v5.2.0`. See v2026.10.0 for the multi-car design.
           EOF
 
           if gh release view "$TAG" >/dev/null 2>&1; then

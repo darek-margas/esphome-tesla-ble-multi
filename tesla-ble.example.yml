@@ -53,10 +53,10 @@ dashboard_import:
 #     # wake_on_boot: true          # wake the car once after boot to fill sensors
 #     # connection_interval: 15ms   # BLE link interval, same for every car
 #     # supervision_timeout: 6s     # BLE link timeout
-#   - id: bluey
-#     name: Bluey
-#     vin: !secret tesla_vin_bluey
-#     ble_mac_address: !secret ble_mac_address_bluey
+#   - id: car_two
+#     name: Car Two
+#     vin: !secret tesla_vin_car_two
+#     ble_mac_address: !secret ble_mac_address_car_two
 #     vcsec_poll_interval: "60"
 #     infotainment_poll_interval_awake: "120"
 #     infotainment_poll_interval_active: "60"

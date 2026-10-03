@@ -183,27 +183,28 @@ Tesla messages are larger than one BLE write, so they are fragmented into 18-byt
 Every line carries the car name. A typical cycle:
 
 ```text
-[Szarik] Yielding BLE link to the next car
-[Bluey] BLE turn starts
-[Bluey] Connection established - polling VCSEC
-[Bluey] Sending queued 'Cabin Overheat On'
-[Bluey] [Cabin Overheat On] Command completed successfully in 477 ms
+[Car One] Yielding BLE link to the next car
+[Car Two] BLE turn starts
+[Car Two] Connection established - polling VCSEC
+[Car Two] Sending queued 'Cabin Overheat On'
+[Car Two] [Cabin Overheat On] Command completed successfully in 477 ms
 ```
 
 Other useful lines:
 
 ```text
-[Szarik] Not heard for 60 s - not present
-[Szarik] Present (BLE heard)
-[Bluey] 'Honk Horn': car asleep - waking it first
-[Bluey] Awake - sending 'Honk Horn' in 8 s
-[Bluey] First poll after boot - waking the car once to fill sensors
+[Car One] Not heard for 60 s - not present
+[Car One] Present (BLE heard)
+[Car Two] 'Honk Horn': car asleep - waking it first
+[Car Two] Awake - sending 'Honk Horn' in 8 s
+[Car Two] First poll after boot - waking the car once to fill sensors
+[Car One] Car woke up - reading its state once
 ```
 
 At `DEBUG` level each Tesla message also logs its size and how long it took to leave the ESP32, and each connection logs the BLE parameters the link actually uses:
 
 ```text
-[Szarik] BLE link params: interval 15.00 ms, latency 0, supervision timeout 6000 ms (requested 15.00 ms / 6000 ms)
+[Car One] BLE link params: interval 15.00 ms, latency 0, supervision timeout 6000 ms (requested 15.00 ms / 6000 ms)
 ```
 
 ## External component
