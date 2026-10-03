@@ -99,6 +99,7 @@ CONF_VCSEC_POLL_INTERVAL = "vcsec_poll_interval"
 CONF_INFOTAINMENT_POLL_INTERVAL_AWAKE = "infotainment_poll_interval_awake" 
 CONF_INFOTAINMENT_POLL_INTERVAL_ACTIVE = "infotainment_poll_interval_active"
 CONF_INFOTAINMENT_SLEEP_TIMEOUT = "infotainment_sleep_timeout"
+CONF_WAKE_ON_BOOT = "wake_on_boot"
 
 # Tesla key roles
 TESLA_ROLES = {
@@ -158,6 +159,9 @@ BINARY_SENSORS = [
 
 SENSORS = [
     {"id": "ble_rssi", "name": "BLE RSSI", "icon": "mdi:signal", "unit": "dBm", "accuracy_decimals": 0, "entity_category": "diagnostic"},
+    # RSSI of the car's advertisements: available while the car is in range,
+    # also when it is not connected (unknown once not heard for 60 s)
+    {"id": "ble_advert_rssi", "name": "BLE Advert RSSI", "icon": "mdi:bluetooth-audio", "unit": "dBm", "accuracy_decimals": 0, "entity_category": "diagnostic"},
     # Charge state sensors
     {"id": "battery_level", "name": "Battery", "icon": "mdi:battery", "unit": "%"},
     {"id": "range", "name": "Range", "icon": "mdi:map-marker-distance", "device_class": "distance", "unit": "mi"},
@@ -291,6 +295,9 @@ CONFIG_SCHEMA = (
             cv.Optional(CONF_INFOTAINMENT_POLL_INTERVAL_AWAKE, default=30): cv.int_range(min=10, max=600), 
             cv.Optional(CONF_INFOTAINMENT_POLL_INTERVAL_ACTIVE, default=10): cv.int_range(min=5, max=120),
             cv.Optional(CONF_INFOTAINMENT_SLEEP_TIMEOUT, default=660): cv.int_range(min=60, max=3600),
+            # Wake the car once after boot to fill all sensors. Later polls
+            # never wake a sleeping car on their own.
+            cv.Optional(CONF_WAKE_ON_BOOT, default=True): cv.boolean,
             # BLE link parameters. With two cars on one ESP32, both links use
             # the same interval by default so their radio slots interleave
             # instead of colliding, and a long supervision timeout so a few
@@ -524,6 +531,7 @@ async def to_code(config):
     cg.add(var.set_infotainment_poll_interval_awake(config[CONF_INFOTAINMENT_POLL_INTERVAL_AWAKE] * 1000))
     cg.add(var.set_infotainment_poll_interval_active(config[CONF_INFOTAINMENT_POLL_INTERVAL_ACTIVE] * 1000))
     cg.add(var.set_infotainment_sleep_timeout(config[CONF_INFOTAINMENT_SLEEP_TIMEOUT] * 1000))
+    cg.add(var.set_wake_on_boot(config[CONF_WAKE_ON_BOOT]))
     
     for creators in (
         (BINARY_SENSORS, create_binary_sensor),

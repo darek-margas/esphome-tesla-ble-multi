@@ -347,11 +347,16 @@ reliable, so the cars take turns on the radio:
   link from the car that is here; as soon as it is heard again it gets the
   next turn
 - each car has a diagnostic `BLE Reachable` binary sensor: on while the car
-  is heard (or connected), off after 60 s without an advert
+  is heard (or connected), off after 60 s without an advert, and a
+  diagnostic `BLE Advert RSSI` sensor (signal of its adverts, every 10 s,
+  unknown when not heard)
 - safety nets: a car that is heard but cannot connect backs off (30 s,
   doubling up to 5 min), and a car that is never heard still gets one try
   every 10 min
-- connecting never wakes a car: infotainment waits for the VCSEC sleep state
+- connecting never wakes a car: infotainment waits for the VCSEC sleep state.
+  The one exception is the first poll after boot, which wakes each car once
+  so every sensor has a value (`wake_on_boot: false` per car to disable).
+  Press *Force data update* to fetch fresh data from a sleeping car
 
 With a single car configured nothing changes: it keeps its link.
 

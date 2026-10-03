@@ -701,6 +701,10 @@ void VehicleStateManager::update_ble_reachable(bool reachable) {
     publish_binary_sensor("ble_reachable", reachable);
 }
 
+void VehicleStateManager::update_ble_advert_rssi(float rssi) {
+    publish_sensor("ble_advert_rssi", rssi);
+}
+
 // =============================================================================
 // Connection state management
 // =============================================================================

@@ -88,6 +88,7 @@ public:
     void set_infotainment_poll_interval_awake(uint32_t interval_ms);
     void set_infotainment_poll_interval_active(uint32_t interval_ms);
     void set_infotainment_sleep_timeout(uint32_t interval_ms);
+    void set_wake_on_boot(bool wake) { wake_on_boot_ = wake; }
 
     // ==========================================================================
     // Generic sensor setters - delegates to state manager
@@ -233,6 +234,9 @@ private:
     // never takes the link from the one that is here.
     uint32_t last_advert_ms_{0};
     uint32_t last_advert_log_ms_{0};
+    uint32_t last_advert_publish_ms_{0};
+    static constexpr uint32_t ADVERT_RSSI_PUBLISH_MS = 10000;
+    bool wake_on_boot_{true};
     uint32_t turn_started_ms_{0};
     bool reachable_published_{false};
     bool reachable_known_{false};

@@ -125,6 +125,7 @@ public:
     void update_charger_connected(bool connected);
     void update_ble_rssi(float rssi);
     void update_ble_reachable(bool reachable);
+    void update_ble_advert_rssi(float rssi);  // NAN when not heard
     
     // ==========================================================================
     // Connection state management

@@ -2,6 +2,7 @@
 #include "command_warning_policy.h"
 #include <client.h>
 #include <cinttypes>
+#include <cmath>
 #include <cstdio>
 #include <cstring>
 #include <defs.h>
@@ -302,6 +303,11 @@ void TeslaBLEVehicle::run_link_scheduler_(uint32_t now) {
 void TeslaBLEVehicle::note_advert_seen(int rssi) {
   const uint32_t now = millis();
   last_advert_ms_ = now == 0 ? 1 : now;
+  if (state_manager_ &&
+      (last_advert_publish_ms_ == 0 || now - last_advert_publish_ms_ >= ADVERT_RSSI_PUBLISH_MS)) {
+    last_advert_publish_ms_ = now == 0 ? 1 : now;
+    state_manager_->update_ble_advert_rssi(static_cast<float>(rssi));
+  }
   if (last_advert_log_ms_ == 0 || now - last_advert_log_ms_ >= ADVERT_LOG_INTERVAL_MS) {
     last_advert_log_ms_ = now == 0 ? 1 : now;
     ESP_LOGD(TAG, "[%s] Advert seen (RSSI %d dBm)", log_name(), rssi);
@@ -326,8 +332,13 @@ void TeslaBLEVehicle::update_reachable_(uint32_t now) {
   }
   reachable_known_ = true;
   reachable_published_ = reachable;
-  if (state_manager_)
+  if (state_manager_) {
     state_manager_->update_ble_reachable(reachable);
+    if (!heard_recently_(now)) {
+      state_manager_->update_ble_advert_rssi(NAN);
+      last_advert_publish_ms_ = 0;
+    }
+  }
 }
 
 void TeslaBLEVehicle::yield_link_() {
@@ -438,10 +449,14 @@ void TeslaBLEVehicle::maybe_poll_infotainment_(uint32_t now) {
         decision.wake_policy == WakePolicy::NO_WAKE_SKIP
             ? TeslaBLE::WakePolicy::NO_WAKE_SKIP
             : TeslaBLE::WakePolicy::WAKE_IF_NEEDED;
-    // The first poll after boot never wakes the car; later ones follow the
-    // policy (which only allows a wake while the car is known to be awake).
-    if (!infotainment_ever_polled_)
-      policy = TeslaBLE::WakePolicy::NO_WAKE_SKIP;
+    // The first poll after boot wakes the car once (wake_on_boot) so every
+    // sensor gets a value; later ones follow the policy, which only allows a
+    // wake while the car is known to be awake.
+    if (!infotainment_ever_polled_) {
+      policy = wake_on_boot_ ? TeslaBLE::WakePolicy::WAKE_IF_NEEDED : TeslaBLE::WakePolicy::NO_WAKE_SKIP;
+      if (wake_on_boot_ && is_asleep)
+        ESP_LOGI(TAG, "[%s] First poll after boot - waking the car once to fill sensors", log_name());
+    }
     ESP_LOGI(TAG, "[%s] Polling Infotainment (%s)", log_name(),
              policy == TeslaBLE::WakePolicy::NO_WAKE_SKIP
                  ? "sleeping - NO_WAKE_SKIP"
@@ -1483,11 +1498,11 @@ void TeslaBLEVehicle::update_ble_rssi(int8_t rssi) {
 }
 
 uint32_t TeslaBLEVehicle::ble_write_gap_ms() const {
-  // Keep fragment pacing deterministic across both vehicles. 60 ms made a
-  // 188-byte request take longer than the library's 1 s resend timer; 15 ms
-  // keeps a small breather between fragments without that cost. Congestion
-  // is handled per link by the adapter (status 143 + ESP_GATTC_CONGEST_EVT).
-  return 15;
+  // Small breather between fragments. 60 ms made a 188-byte request take
+  // longer than the library's 1 s resend timer. Only one car is connected
+  // at a time and congestion is handled per link by the adapter (status 143
+  // + ESP_GATTC_CONGEST_EVT), so a short gap is enough.
+  return 5;
 }
 
 bool TeslaBLEVehicle::is_connected() const {
