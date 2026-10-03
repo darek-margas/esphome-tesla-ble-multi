@@ -71,14 +71,14 @@ static void test_owner_yields_when_quiet_and_other_waits() {
   LinkScheduler s(2);
   s.tick(0, two(wanting(), wanting()));
   CHECK(s.owner() == 0);
-  // Ready at t=2000, last traffic at 4500.
+  // Ready at t=2000, last traffic at 3500.
   s.tick(2000, two(ready_quiet(1900), wanting()));
-  // Minimum turn not over yet (ready for < 3 s).
-  CHECK(s.tick(4900, two(ready_quiet(4500), wanting())) == LinkScheduler::NONE);
+  // Minimum turn not over yet (ready for < 2 s).
+  CHECK(s.tick(3900, two(ready_quiet(3500), wanting())) == LinkScheduler::NONE);
   // Turn long enough but traffic too recent.
-  CHECK(s.tick(5500, two(ready_quiet(4500), wanting())) == LinkScheduler::NONE);
-  // Quiet for 1.5 s: yield.
-  CHECK(s.tick(6000, two(ready_quiet(4500), wanting())) == 0);
+  CHECK(s.tick(4200, two(ready_quiet(3500), wanting())) == LinkScheduler::NONE);
+  // Quiet for 1 s: yield.
+  CHECK(s.tick(4500, two(ready_quiet(3500), wanting())) == 0);
   CHECK(s.owner() == LinkScheduler::NONE);
 }
 

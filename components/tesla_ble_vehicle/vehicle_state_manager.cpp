@@ -697,8 +697,8 @@ void VehicleStateManager::update_ble_rssi(float rssi) {
     publish_sensor("ble_rssi", rssi);
 }
 
-void VehicleStateManager::update_ble_reachable(bool reachable) {
-    publish_binary_sensor("ble_reachable", reachable);
+void VehicleStateManager::update_present(bool present) {
+    publish_binary_sensor("present", present);
 }
 
 void VehicleStateManager::update_ble_advert_rssi(float rssi) {

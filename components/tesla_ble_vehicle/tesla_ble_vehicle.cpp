@@ -324,16 +324,16 @@ void TeslaBLEVehicle::update_reachable_(uint32_t now) {
     return;
   if (reachable_known_) {
     if (reachable) {
-      ESP_LOGI(TAG, "[%s] BLE reachable", log_name());
+      ESP_LOGI(TAG, "[%s] Present (BLE heard)", log_name());
     } else {
-      ESP_LOGI(TAG, "[%s] Not heard for %u s - BLE unreachable", log_name(),
+      ESP_LOGI(TAG, "[%s] Not heard for %u s - not present", log_name(),
                (unsigned) (ADVERT_FRESH_MS / 1000));
     }
   }
   reachable_known_ = true;
   reachable_published_ = reachable;
   if (state_manager_) {
-    state_manager_->update_ble_reachable(reachable);
+    state_manager_->update_present(reachable);
     if (!heard_recently_(now)) {
       state_manager_->update_ble_advert_rssi(NAN);
       last_advert_publish_ms_ = 0;

@@ -346,10 +346,11 @@ reliable, so the cars take turns on the radio:
   while the other car is connected. A car not heard for 60 s never takes the
   link from the car that is here; as soon as it is heard again it gets the
   next turn
-- each car has a diagnostic `BLE Reachable` binary sensor: on while the car
-  is heard (or connected), off after 60 s without an advert, and a
-  diagnostic `BLE Advert RSSI` sensor (signal of its adverts, every 10 s,
-  unknown when not heard)
+- each car has a `Present` binary sensor (presence): on while its adverts
+  are heard (or it is connected), off after 60 s without an advert. The
+  diagnostic `BLE RSSI` (connected link) and `BLE Advert RSSI` (adverts,
+  every 10 s, unknown when not heard) sensors are disabled by default;
+  enable them in Home Assistant when needed
 - safety nets: a car that is heard but cannot connect backs off (30 s,
   doubling up to 5 min), and a car that is never heard still gets one try
   every 10 min
@@ -363,8 +364,8 @@ With a single car configured nothing changes: it keeps its link.
 The log shows each hand-over, and presence changes:
 
 ```text
-[Szarik] Not heard for 60 s - BLE unreachable
-[Szarik] BLE reachable
+[Szarik] Not heard for 60 s - not present
+[Szarik] Present (BLE heard)
 [Szarik] Yielding BLE link to the next car
 [Bluey] BLE turn starts
 ```
@@ -384,7 +385,7 @@ default:
 tesla_ble_vehicle:
   - name: Szarik
     # ...
-    connection_interval: 30ms   # 7.5ms - 4s, same for every car
+    connection_interval: 15ms   # 7.5ms - 4s, same for every car
     supervision_timeout: 6s     # 100ms - 32s, > 2 x connection_interval
 ```
 
@@ -392,7 +393,7 @@ Within 10 s of connecting, and whenever the values change, each car logs what
 the link actually uses:
 
 ```text
-[Szarik] BLE link params: interval 30.00 ms, latency 0, supervision timeout 6000 ms (requested 30.00 ms / 6000 ms)
+[Szarik] BLE link params: interval 15.00 ms, latency 0, supervision timeout 6000 ms (requested 15.00 ms / 6000 ms)
 ```
 
 Keep an active scan window short while cars are connected; scanning takes radio

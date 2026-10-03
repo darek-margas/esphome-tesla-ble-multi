@@ -26,9 +26,9 @@ class LinkScheduler {
  public:
   // After the link is ready, the owner keeps it at least this long, so the
   // polls that start on connect get going before a yield is considered.
-  static constexpr uint32_t MIN_TURN_MS = 3000;
+  static constexpr uint32_t MIN_TURN_MS = 2000;
   // The owner yields once its link has been quiet this long.
-  static constexpr uint32_t IDLE_YIELD_MS = 1500;
+  static constexpr uint32_t IDLE_YIELD_MS = 1000;
   // Hard cap on a turn while another car waits (a long wake or retry loop
   // must not starve the other car).
   static constexpr uint32_t MAX_TURN_MS = 60000;

@@ -453,7 +453,7 @@ class TeslaBLEClient : public esp32_ble_client::BLEClientBase {
  protected:
   TeslaBLEVehicle *vehicle_{nullptr};
   uint64_t tesla_address_{0};
-  uint16_t link_interval_units_{24};  // 30 ms
+  uint16_t link_interval_units_{12};  // 15 ms
   uint16_t link_timeout_units_{600};  // 6 s
   // Last logged values; 0 means not logged on this connection yet.
   uint16_t logged_interval_{0};

@@ -138,8 +138,8 @@ BINARY_SENSORS = [
     {"id": "user_present", "name": "User Present", "icon": "mdi:account-check", "device_class": "occupancy"},
     {"id": "charger", "name": "Charger", "icon": "mdi:power-plug", "device_class": "plug"},
     {"id": "cabin_overheat_active", "name": "Cabin Overheat Active", "icon": "mdi:car-defrost-rear"},
-    # Car heard over BLE (advertising in range, or connected)
-    {"id": "ble_reachable", "name": "BLE Reachable", "icon": "mdi:bluetooth-connect", "device_class": "connectivity", "entity_category": "diagnostic"},
+    # Car is here: its BLE adverts were heard in the last 60 s (or it is connected)
+    {"id": "present", "name": "Present", "icon": "mdi:car-connected", "device_class": "presence"},
     
     # Drive sensors
     {"id": "parking_brake", "name": "Parking Brake", "icon": "mdi:car-brake-parking"},
@@ -158,10 +158,10 @@ BINARY_SENSORS = [
 ]
 
 SENSORS = [
-    {"id": "ble_rssi", "name": "BLE RSSI", "icon": "mdi:signal", "unit": "dBm", "accuracy_decimals": 0, "entity_category": "diagnostic"},
+    {"id": "ble_rssi", "name": "BLE RSSI", "icon": "mdi:signal", "unit": "dBm", "accuracy_decimals": 0, "entity_category": "diagnostic", "disabled_by_default": True},
     # RSSI of the car's advertisements: available while the car is in range,
     # also when it is not connected (unknown once not heard for 60 s)
-    {"id": "ble_advert_rssi", "name": "BLE Advert RSSI", "icon": "mdi:bluetooth-audio", "unit": "dBm", "accuracy_decimals": 0, "entity_category": "diagnostic"},
+    {"id": "ble_advert_rssi", "name": "BLE Advert RSSI", "icon": "mdi:bluetooth-audio", "unit": "dBm", "accuracy_decimals": 0, "entity_category": "diagnostic", "disabled_by_default": True},
     # Charge state sensors
     {"id": "battery_level", "name": "Battery", "icon": "mdi:battery", "unit": "%"},
     {"id": "range", "name": "Range", "icon": "mdi:map-marker-distance", "device_class": "distance", "unit": "mi"},
@@ -302,7 +302,7 @@ CONFIG_SCHEMA = (
             # the same interval by default so their radio slots interleave
             # instead of colliding, and a long supervision timeout so a few
             # missed slots do not drop the link.
-            cv.Optional(CONF_CONNECTION_INTERVAL, default="30ms"): cv.All(
+            cv.Optional(CONF_CONNECTION_INTERVAL, default="15ms"): cv.All(
                 cv.positive_time_period_microseconds,
                 cv.Range(min=cv.TimePeriod(microseconds=7500), max=cv.TimePeriod(seconds=4)),
             ),
