@@ -242,6 +242,28 @@ void VehicleStateManager::update_charge_state(const CarServer_ChargeState& charg
         }
     }
     
+    // Estimated and ideal range (miles, like battery_range)
+    if (charge_state.which_optional_est_battery_range) {
+        const float range = charge_state.optional_est_battery_range.est_battery_range;
+        if (range >= 0.0f && range <= 500.0f && std::isfinite(range)) {
+            publish_sensor("est_battery_range", range);
+        }
+    }
+    if (charge_state.which_optional_ideal_battery_range) {
+        const float range = charge_state.optional_ideal_battery_range.ideal_battery_range;
+        if (range >= 0.0f && range <= 500.0f && std::isfinite(range)) {
+            publish_sensor("ideal_battery_range", range);
+        }
+    }
+
+    // Usable battery level (%) - excludes energy the car keeps in reserve
+    if (charge_state.which_optional_usable_battery_level) {
+        const int32_t level = charge_state.optional_usable_battery_level.usable_battery_level;
+        if (level >= 0 && level <= 100) {
+            publish_sensor("usable_battery_level", static_cast<float>(level));
+        }
+    }
+
     // Update energy added (kWh)
     if (charge_state.which_optional_charge_energy_added) {
         const float energy = charge_state.optional_charge_energy_added.charge_energy_added;
@@ -258,6 +280,14 @@ void VehicleStateManager::update_charge_state(const CarServer_ChargeState& charg
         }
     }
     
+    // Time to charge limit (minutes)
+    if (charge_state.which_optional_minutes_to_charge_limit) {
+        const int32_t minutes = charge_state.optional_minutes_to_charge_limit.minutes_to_charge_limit;
+        if (minutes >= 0) {
+            publish_sensor("time_to_charge_limit", static_cast<float>(minutes));
+        }
+    }
+
     // Update charger voltage (cache for estimated power)
     if (charge_state.which_optional_charger_voltage) {
         const float voltage = static_cast<float>(charge_state.optional_charger_voltage.charger_voltage);

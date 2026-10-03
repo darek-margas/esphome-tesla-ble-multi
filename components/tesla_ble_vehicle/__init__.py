@@ -166,6 +166,9 @@ SENSORS = [
     # Charge state sensors
     {"id": "battery_level", "name": "Battery", "icon": "mdi:battery", "unit": "%"},
     {"id": "range", "name": "Range", "icon": "mdi:map-marker-distance", "device_class": "distance", "unit": "mi"},
+    {"id": "est_battery_range", "name": "Estimated Range", "icon": "mdi:map-marker-distance", "device_class": "distance", "unit": "mi", "disabled_by_default": True},
+    {"id": "ideal_battery_range", "name": "Ideal Range", "icon": "mdi:map-marker-distance", "device_class": "distance", "unit": "mi", "disabled_by_default": True},
+    {"id": "usable_battery_level", "name": "Usable Battery", "icon": "mdi:battery", "unit": "%"},
     {"id": "charger_power", "name": "Charger Power", "icon": "mdi:flash", "device_class": "power", "unit": "kW"},
     {"id": "charger_voltage", "name": "Charger Voltage", "icon": "mdi:lightning-bolt", "device_class": "voltage", "unit": "V"},
     {"id": "charger_current", "name": "Charger Current", "icon": "mdi:current-ac", "device_class": "current", "unit": "A"},
@@ -177,6 +180,7 @@ SENSORS = [
     {"id": "charging_rate", "name": "Charging Rate", "icon": "mdi:speedometer", "device_class": "speed", "unit": "mph", "accuracy_decimals": 1},
     {"id": "energy_added", "name": "Energy Added", "icon": "mdi:battery-charging", "device_class": "energy", "unit": "kWh", "accuracy_decimals": 1},
     {"id": "time_to_full", "name": "Time to Full", "icon": "mdi:clock-outline", "device_class": "duration", "unit": "min"},
+    {"id": "time_to_charge_limit", "name": "Time to Charge Limit", "icon": "mdi:clock-outline", "device_class": "duration", "unit": "min"},
     
     # Climate state sensors
     {"id": "outside_temp", "name": "Outside Temperature", "icon": "mdi:thermometer", "device_class": "temperature", "unit": "°C", "accuracy_decimals": 1},
