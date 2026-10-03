@@ -240,6 +240,7 @@ void TeslaBLEVehicle::loop() {
   }
 
   expire_pending_commands_(millis());
+  update_reachable_(millis());
   // One scheduler for all cars; the first car drives it.
   if (link_slot_ == 0)
     run_link_scheduler_(millis());
@@ -261,9 +262,14 @@ LinkScheduler::Input TeslaBLEVehicle::link_input_(uint32_t now) const {
   LinkScheduler::Input in;
   const bool vcsec_due = now - last_vcsec_poll_ >= vcsec_poll_interval_;
   const bool backing_off = static_cast<int32_t>(now - retry_turn_after_ms_) < 0;
-  in.wants = !pending_commands_.empty() || turn_requested_ ||
-             (!backing_off && (!ever_ready_ || vcsec_due));
   in.ready = is_connected() && notify_ready_ && vehicle_ != nullptr && vehicle_->is_connected();
+  // Only a car that is actually here may ask for the link. The blind retry
+  // is a safety net in case adverts are not reported for some reason.
+  const bool present = in.ready || heard_recently_(now);
+  const bool blind_retry = now - turn_started_ms_ >= BLIND_TURN_MS;
+  in.wants = (present || blind_retry) &&
+             (!pending_commands_.empty() || turn_requested_ ||
+              (!backing_off && (!ever_ready_ || vcsec_due)));
   const bool pairing = pairing_in_progress_ &&
                        static_cast<uint32_t>(now - pairing_started_ms_) < PAIRING_POLL_PAUSE_MS;
   in.busy = user_commands_in_flight_ > 0 || poll_batch_in_progress_ || infotainment_check_pending_ ||
@@ -286,8 +292,42 @@ void TeslaBLEVehicle::run_link_scheduler_(uint32_t now) {
     link_vehicles_[released]->yield_link_();
 
   const int owner = link_scheduler_.owner();
-  if (owner != LinkScheduler::NONE && owner != previous_owner && link_vehicles_.size() > 1)
-    ESP_LOGI(TAG, "[%s] BLE turn starts", link_vehicles_[owner]->log_name());
+  if (owner != LinkScheduler::NONE && owner != previous_owner) {
+    link_vehicles_[owner]->turn_started_ms_ = now;
+    if (link_vehicles_.size() > 1)
+      ESP_LOGI(TAG, "[%s] BLE turn starts", link_vehicles_[owner]->log_name());
+  }
+}
+
+void TeslaBLEVehicle::note_advert_seen(int rssi) {
+  const uint32_t now = millis();
+  last_advert_ms_ = now == 0 ? 1 : now;
+  if (last_advert_log_ms_ == 0 || now - last_advert_log_ms_ >= ADVERT_LOG_INTERVAL_MS) {
+    last_advert_log_ms_ = now == 0 ? 1 : now;
+    ESP_LOGD(TAG, "[%s] Advert seen (RSSI %d dBm)", log_name(), rssi);
+  }
+}
+
+bool TeslaBLEVehicle::heard_recently_(uint32_t now) const {
+  return last_advert_ms_ != 0 && now - last_advert_ms_ < ADVERT_FRESH_MS;
+}
+
+void TeslaBLEVehicle::update_reachable_(uint32_t now) {
+  const bool reachable = is_connected() || heard_recently_(now);
+  if (reachable_known_ && reachable == reachable_published_)
+    return;
+  if (reachable_known_) {
+    if (reachable) {
+      ESP_LOGI(TAG, "[%s] BLE reachable", log_name());
+    } else {
+      ESP_LOGI(TAG, "[%s] Not heard for %u s - BLE unreachable", log_name(),
+               (unsigned) (ADVERT_FRESH_MS / 1000));
+    }
+  }
+  reachable_known_ = true;
+  reachable_published_ = reachable;
+  if (state_manager_)
+    state_manager_->update_ble_reachable(reachable);
 }
 
 void TeslaBLEVehicle::yield_link_() {
@@ -1471,6 +1511,8 @@ void TeslaBLEClient::log_link_params_if_changed(const char *name) {
 
 #ifdef USE_ESP32_BLE_DEVICE
 bool TeslaBLEClient::parse_device(const espbt::ESPBTDevice &device) {
+  if (vehicle_ != nullptr && tesla_address_ != 0 && device.address_uint64() == tesla_address_)
+    vehicle_->note_advert_seen(device.get_rssi());
   if (vehicle_ != nullptr && !vehicle_->link_turn_allows_connect())
     return false;
   return esp32_ble_client::BLEClientBase::parse_device(device);

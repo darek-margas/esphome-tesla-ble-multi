@@ -184,6 +184,8 @@ public:
     // One-link-at-a-time scheduling across all configured cars.
     bool link_turn_allows_connect() const;
     void note_link_activity();
+    // Called for every advertisement from this car's MAC address.
+    void note_advert_seen(int rssi);
 
     // Car name for log lines (falls back to the VIN).
     const char *log_name() const { return debug_name_.empty() ? vin_.c_str() : debug_name_.c_str(); }
@@ -225,6 +227,21 @@ private:
     bool ready_this_turn_{false};
     bool infotainment_ever_polled_{false};
     uint32_t last_link_activity_ms_{0};
+    // Presence from advertisements: a Tesla advertises all the time while in
+    // range (also asleep), and the scanner hears it while the other car is
+    // connected. Only a car heard recently gets a turn, so a car that is away
+    // never takes the link from the one that is here.
+    uint32_t last_advert_ms_{0};
+    uint32_t last_advert_log_ms_{0};
+    uint32_t turn_started_ms_{0};
+    bool reachable_published_{false};
+    bool reachable_known_{false};
+    static constexpr uint32_t ADVERT_FRESH_MS = 60000;
+    // Safety net if adverts are never reported: still try a turn this often.
+    static constexpr uint32_t BLIND_TURN_MS = 600000;
+    static constexpr uint32_t ADVERT_LOG_INTERVAL_MS = 60000;
+    bool heard_recently_(uint32_t now) const;
+    void update_reachable_(uint32_t now);
     // A car that misses its turn (out of range) waits before asking again,
     // so a car that is away does not keep taking the link from the other.
     uint8_t missed_turns_{0};
@@ -401,9 +418,15 @@ class TeslaBLEClient : public esp32_ble_client::BLEClientBase {
   void log_link_params_if_changed(const char *name);
 
 #ifdef USE_ESP32_BLE_DEVICE
-  // Only the car whose turn it is may start a connection.
+  // Records every advert from this car (presence), then lets only the car
+  // whose turn it is start a connection.
   bool parse_device(const espbt::ESPBTDevice &device) override;
 #endif
+  // Keeps the configured MAC: ESPHome may clear address_ on some paths.
+  void set_address(uint64_t address) override {
+    if (address != 0) tesla_address_ = address;
+    esp32_ble_client::BLEClientBase::set_address(address);
+  }
   void connect() override;
   bool gattc_event_handler(esp_gattc_cb_event_t event, esp_gatt_if_t gattc_if,
                            esp_ble_gattc_cb_param_t *param) override;
@@ -411,6 +434,7 @@ class TeslaBLEClient : public esp32_ble_client::BLEClientBase {
 
  protected:
   TeslaBLEVehicle *vehicle_{nullptr};
+  uint64_t tesla_address_{0};
   uint16_t link_interval_units_{24};  // 30 ms
   uint16_t link_timeout_units_{600};  // 6 s
   // Last logged values; 0 means not logged on this connection yet.

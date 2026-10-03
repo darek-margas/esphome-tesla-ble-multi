@@ -341,15 +341,25 @@ reliable, so the cars take turns on the radio:
   disconnects and the other one connects
 - commands for a car that is not connected wait for its turn (up to 2 min);
   expect a few seconds of extra latency while the link is established
-- a car that is out of range backs off (30 s, doubling up to 5 min) so it
-  does not keep taking turns from the car that is here
+- only a car that is actually here gets a turn: a Tesla advertises all the
+  time while in range (also asleep), and the scanner hears those adverts
+  while the other car is connected. A car not heard for 60 s never takes the
+  link from the car that is here; as soon as it is heard again it gets the
+  next turn
+- each car has a diagnostic `BLE Reachable` binary sensor: on while the car
+  is heard (or connected), off after 60 s without an advert
+- safety nets: a car that is heard but cannot connect backs off (30 s,
+  doubling up to 5 min), and a car that is never heard still gets one try
+  every 10 min
 - connecting never wakes a car: infotainment waits for the VCSEC sleep state
 
 With a single car configured nothing changes: it keeps its link.
 
-The log shows each hand-over:
+The log shows each hand-over, and presence changes:
 
 ```text
+[Szarik] Not heard for 60 s - BLE unreachable
+[Szarik] BLE reachable
 [Szarik] Yielding BLE link to the next car
 [Bluey] BLE turn starts
 ```

@@ -124,6 +124,7 @@ public:
     void republish_charging_limit();
     void update_charger_connected(bool connected);
     void update_ble_rssi(float rssi);
+    void update_ble_reachable(bool reachable);
     
     // ==========================================================================
     // Connection state management

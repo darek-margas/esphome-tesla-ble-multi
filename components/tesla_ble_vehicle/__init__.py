@@ -137,6 +137,8 @@ BINARY_SENSORS = [
     {"id": "user_present", "name": "User Present", "icon": "mdi:account-check", "device_class": "occupancy"},
     {"id": "charger", "name": "Charger", "icon": "mdi:power-plug", "device_class": "plug"},
     {"id": "cabin_overheat_active", "name": "Cabin Overheat Active", "icon": "mdi:car-defrost-rear"},
+    # Car heard over BLE (advertising in range, or connected)
+    {"id": "ble_reachable", "name": "BLE Reachable", "icon": "mdi:bluetooth-connect", "device_class": "connectivity", "entity_category": "diagnostic"},
     
     # Drive sensors
     {"id": "parking_brake", "name": "Parking Brake", "icon": "mdi:car-brake-parking"},
