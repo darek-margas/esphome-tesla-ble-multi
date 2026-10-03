@@ -230,8 +230,10 @@ esp32:
     components:
       - name: tesla-ble
         source: https://github.com/darek-margas/tesla-ble.git
-        ref: 07a4ef503a52f736009fdeba953f185aecc863f3  # = upstream yoziru/tesla-ble v5.2.0
+        ref: v5.2.0  # pinned in our fork; sync from yoziru/tesla-ble deliberately
 ```
+
+The library is built from [darek-margas/tesla-ble](https://github.com/darek-margas/tesla-ble), a fork of [yoziru/tesla-ble](https://github.com/yoziru/tesla-ble) pinned at `v5.2.0`. Upstream changes are synced into the fork deliberately, so a new upstream release cannot break this build unannounced.
 
 The component enables the ESP-IDF GATT client cache (`CONFIG_BT_GATTC_CACHE_NVS_FLASH`) itself; nothing to add.
 
