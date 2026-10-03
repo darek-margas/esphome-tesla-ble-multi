@@ -45,7 +45,7 @@ bool BleAdapterImpl::write(const std::vector<uint8_t>& data) {
     if (queued.messages_ahead > 0) {
         // A new message while an earlier one is still being transmitted is
         // usually the library resending a command it thinks timed out.
-        ESP_LOGW(ADAPTER_TAG,
+        ESP_LOGD(ADAPTER_TAG,
                  "[%s] TX msg #%u queued: %u bytes, %u fragments, behind %u unsent fragments of %u earlier message(s)",
                  parent_->log_name(), (unsigned) queued.seq, (unsigned) data.size(), (unsigned) fragments,
                  (unsigned) queued.fragments_ahead, (unsigned) queued.messages_ahead);
@@ -171,10 +171,10 @@ void BleAdapterImpl::finish_head_fragment_(bool sent, bool congested) {
     if (!tx_tracker_.on_fragment_done(millis(), sent, congested, &done)) return;
 
     if (done.dropped > 0) {
-        ESP_LOGW(ADAPTER_TAG, "[%s] TX msg #%u incomplete: %u of %u fragments dropped - the car will discard it",
+        ESP_LOGD(ADAPTER_TAG, "[%s] TX msg #%u incomplete: %u of %u fragments dropped - the car will discard it",
                  parent_->log_name(), (unsigned) done.seq, (unsigned) done.dropped, (unsigned) done.fragments);
     } else if (done.duration_ms >= TxMessageTracker::LIBRARY_RESEND_MS) {
-        ESP_LOGW(ADAPTER_TAG,
+        ESP_LOGD(ADAPTER_TAG,
                  "[%s] TX msg #%u sent in %u ms (%u bytes, %u fragments, %u congested) - slower than the "
                  "library's %u ms resend timer, expect a duplicate request",
                  parent_->log_name(), (unsigned) done.seq, (unsigned) done.duration_ms, (unsigned) done.bytes,
