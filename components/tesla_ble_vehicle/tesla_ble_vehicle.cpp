@@ -15,6 +15,8 @@ namespace tesla_ble_vehicle {
 TeslaBLEVehicle *TeslaBLEVehicle::global_infotainment_owner_ = nullptr;
 std::deque<TeslaBLEVehicle::InfotainmentWorkItem> TeslaBLEVehicle::global_infotainment_queue_;
 const char *TeslaBLEVehicle::log_context_ = nullptr;
+std::vector<TeslaBLEVehicle *> TeslaBLEVehicle::link_vehicles_;
+LinkScheduler TeslaBLEVehicle::link_scheduler_;
 
 void tesla_ble_log_callback(TeslaBLE::LogLevel level, const char *tag, int line,
                             const char *format, va_list args) {
@@ -74,6 +76,10 @@ void TeslaBLEVehicle::setup() {
   }
 
   vehicle_->set_vin(vin_);
+
+  link_slot_ = static_cast<int>(link_vehicles_.size());
+  link_vehicles_.push_back(this);
+  link_scheduler_.set_count(link_vehicles_.size());
 }
 
 void TeslaBLEVehicle::initialize_managers() {
@@ -113,6 +119,13 @@ void TeslaBLEVehicle::initialize_managers() {
   vehicle_->set_vehicle_status_callback([this](const VCSEC_VehicleStatus &s) {
     if (state_manager_)
       state_manager_->update_vehicle_status(s);
+    // First VCSEC status after connecting: the sleep state is known now, so
+    // the infotainment decision cannot wake a sleeping car by accident.
+    if (infotainment_check_pending_) {
+      infotainment_check_pending_ = false;
+      this->cancel_timeout("infotainment-check");
+      maybe_poll_infotainment_(millis());
+    }
   });
 
   vehicle_->set_charge_state_callback([this](const CarServer_ChargeState &s) {
@@ -225,6 +238,115 @@ void TeslaBLEVehicle::loop() {
     connection_reset_policy_.on_force_reconnect(millis());
     if (ble_client_ != nullptr) ble_client_->disconnect();
   }
+
+  expire_pending_commands_(millis());
+  // One scheduler for all cars; the first car drives it.
+  if (link_slot_ == 0)
+    run_link_scheduler_(millis());
+}
+
+// =============================================================================
+// One BLE link at a time (see link_scheduler.h)
+// =============================================================================
+
+void TeslaBLEVehicle::note_link_activity() { last_link_activity_ms_ = millis(); }
+
+bool TeslaBLEVehicle::link_turn_allows_connect() const {
+  if (link_slot_ == LinkScheduler::NONE)
+    return false;
+  return link_scheduler_.may_connect(link_slot_);
+}
+
+LinkScheduler::Input TeslaBLEVehicle::link_input_(uint32_t now) const {
+  LinkScheduler::Input in;
+  const bool vcsec_due = now - last_vcsec_poll_ >= vcsec_poll_interval_;
+  const bool backing_off = static_cast<int32_t>(now - retry_turn_after_ms_) < 0;
+  in.wants = !pending_commands_.empty() || turn_requested_ ||
+             (!backing_off && (!ever_ready_ || vcsec_due));
+  in.ready = is_connected() && notify_ready_ && vehicle_ != nullptr && vehicle_->is_connected();
+  const bool pairing = pairing_in_progress_ &&
+                       static_cast<uint32_t>(now - pairing_started_ms_) < PAIRING_POLL_PAUSE_MS;
+  in.busy = user_commands_in_flight_ > 0 || poll_batch_in_progress_ || infotainment_check_pending_ ||
+            !pending_commands_.empty() || pairing || (ble_adapter_ && !ble_adapter_->tx_idle());
+  const auto state = ble_client_ != nullptr ? ble_client_->state() : espbt::ClientState::IDLE;
+  in.link_idle = state == espbt::ClientState::IDLE || state == espbt::ClientState::INIT;
+  in.last_activity_ms = last_link_activity_ms_;
+  return in;
+}
+
+void TeslaBLEVehicle::run_link_scheduler_(uint32_t now) {
+  std::vector<LinkScheduler::Input> inputs;
+  inputs.reserve(link_vehicles_.size());
+  for (auto *v : link_vehicles_)
+    inputs.push_back(v->link_input_(now));
+
+  const int previous_owner = link_scheduler_.owner();
+  const int released = link_scheduler_.tick(now, inputs);
+  if (released != LinkScheduler::NONE)
+    link_vehicles_[released]->yield_link_();
+
+  const int owner = link_scheduler_.owner();
+  if (owner != LinkScheduler::NONE && owner != previous_owner && link_vehicles_.size() > 1)
+    ESP_LOGI(TAG, "[%s] BLE turn starts", link_vehicles_[owner]->log_name());
+}
+
+void TeslaBLEVehicle::yield_link_() {
+  LogScope log_scope(this);
+  if (ready_this_turn_) {
+    missed_turns_ = 0;
+  } else if (missed_turns_ < 8) {
+    ++missed_turns_;
+  }
+  if (missed_turns_ > 0) {
+    uint32_t backoff = MISSED_TURN_BACKOFF_MS << (missed_turns_ - 1);
+    if (backoff > MAX_MISSED_TURN_BACKOFF_MS) backoff = MAX_MISSED_TURN_BACKOFF_MS;
+    retry_turn_after_ms_ = millis() + backoff;
+    ESP_LOGW(TAG, "[%s] Not reachable during its BLE turn - next try in %u s", log_name(),
+             (unsigned) (backoff / 1000));
+  }
+  ready_this_turn_ = false;
+
+  const auto state = ble_client_ != nullptr ? ble_client_->state() : espbt::ClientState::IDLE;
+  if (state == espbt::ClientState::IDLE || state == espbt::ClientState::INIT)
+    return;
+  ESP_LOGI(TAG, "[%s] Yielding BLE link to the next car", log_name());
+  yielding_link_ = true;
+  ble_client_->disconnect();
+}
+
+bool TeslaBLEVehicle::queue_until_connected_(const std::string &name, std::function<void()> run,
+                                             std::function<void()> expire) {
+  if (pending_commands_.size() >= MAX_PENDING_COMMANDS) {
+    ESP_LOGW(TAG, "[%s] Too many queued commands - dropping '%s'", log_name(),
+             pending_commands_.front().name.c_str());
+    if (pending_commands_.front().expire) pending_commands_.front().expire();
+    pending_commands_.pop_front();
+  }
+  ESP_LOGI(TAG, "[%s] Not connected - '%s' waits for this car's BLE turn", log_name(), name.c_str());
+  pending_commands_.push_back(PendingCommand{millis(), name, std::move(run), std::move(expire)});
+  turn_requested_ = true;
+  return true;
+}
+
+void TeslaBLEVehicle::flush_pending_commands_() {
+  std::deque<PendingCommand> pending;
+  pending.swap(pending_commands_);
+  for (auto &cmd : pending) {
+    ESP_LOGI(TAG, "[%s] Sending queued '%s'", log_name(), cmd.name.c_str());
+    if (cmd.run) cmd.run();
+  }
+}
+
+void TeslaBLEVehicle::expire_pending_commands_(uint32_t now) {
+  while (!pending_commands_.empty() &&
+         now - pending_commands_.front().queued_ms >= PENDING_COMMAND_TIMEOUT_MS) {
+    LogScope log_scope(this);
+    ESP_LOGW(TAG, "[%s] '%s' expired - car not reachable", log_name(),
+             pending_commands_.front().name.c_str());
+    auto expire = std::move(pending_commands_.front().expire);
+    pending_commands_.pop_front();
+    if (expire) expire();
+  }
 }
 
 void TeslaBLEVehicle::update() {
@@ -252,6 +374,14 @@ void TeslaBLEVehicle::update() {
     last_vcsec_poll_ = now;
   }
 
+  if (!infotainment_check_pending_)
+    maybe_poll_infotainment_(now);
+}
+
+void TeslaBLEVehicle::maybe_poll_infotainment_(uint32_t now) {
+  if (!is_connected() || !vehicle_ || !notify_ready_ || !vehicle_->is_connected() || !state_manager_)
+    return;
+
   // Infotainment Polling - use faster interval when vehicle is active
   const bool is_asleep = state_manager_->is_asleep();
   // Only sentry mode and active charging warrant keeping the car awake. A car
@@ -263,17 +393,22 @@ void TeslaBLEVehicle::update() {
       poll_policy_.update(now, is_asleep, state_manager_->is_charging(),
                           state_manager_->is_sentry_mode());
 
-  if (poll_policy_.should_poll(now, decision.interval_ms)) {
+  if (!infotainment_ever_polled_ || poll_policy_.should_poll(now, decision.interval_ms)) {
     TeslaBLE::WakePolicy policy =
         decision.wake_policy == WakePolicy::NO_WAKE_SKIP
             ? TeslaBLE::WakePolicy::NO_WAKE_SKIP
             : TeslaBLE::WakePolicy::WAKE_IF_NEEDED;
+    // The first poll after boot never wakes the car; later ones follow the
+    // policy (which only allows a wake while the car is known to be awake).
+    if (!infotainment_ever_polled_)
+      policy = TeslaBLE::WakePolicy::NO_WAKE_SKIP;
     ESP_LOGI(TAG, "[%s] Polling Infotainment (%s)", log_name(),
-             decision.wake_policy == WakePolicy::NO_WAKE_SKIP
+             policy == TeslaBLE::WakePolicy::NO_WAKE_SKIP
                  ? "sleeping - NO_WAKE_SKIP"
                  : "active - WAKE_IF_NEEDED");
     enqueue_poll_batch_(policy);
     poll_policy_.on_poll(now);
+    infotainment_ever_polled_ = true;
   }
 }
 
@@ -742,6 +877,21 @@ void TeslaBLEVehicle::send_command_with_tracking(
     return;
   }
 
+  if (!vehicle_->is_connected()) {
+    // Not this car's BLE turn (or out of range): send it once connected.
+    queue_until_connected_(
+        name,
+        [this, domain, name, builder, wake_policy, on_result]() {
+          send_command_with_tracking(domain, name, builder, wake_policy, on_result);
+        },
+        [this, name, on_result]() {
+          if (last_command_sensor_)
+            last_command_sensor_->publish_state(name + " → Failed: car not reachable");
+          if (on_result) on_result(false);
+        });
+    return;
+  }
+
   if (domain == UniversalMessage_Domain_DOMAIN_INFOTAINMENT) {
     if (user_commands_in_flight_ < 255) ++user_commands_in_flight_;
     auto queued_builder = std::make_shared<
@@ -857,6 +1007,13 @@ int TeslaBLEVehicle::start_pairing() {
     return -1;
   }
 
+  if (!vehicle_->is_connected()) {
+    queue_until_connected_(
+        "Pair", [this]() { start_pairing(); },
+        [this]() { ESP_LOGW(TAG, "[%s] Pairing not sent - car not reachable", log_name()); });
+    return 0;
+  }
+
   const uint32_t now = millis();
   if (pairing_in_progress_) {
     const uint32_t pairing_age = static_cast<uint32_t>(now - pairing_started_ms_);
@@ -917,6 +1074,11 @@ int TeslaBLEVehicle::regenerate_key() {
 void TeslaBLEVehicle::force_update() {
   LogScope log_scope(this);
   uint32_t now = millis();
+  if (vehicle_ && !vehicle_->is_connected()) {
+    ESP_LOGI(TAG, "[%s] Force update requested - waiting for this car's BLE turn", log_name());
+    turn_requested_ = true;
+    return;
+  }
   if (!poll_policy_.should_poll(now, poll_policy_.active_interval_ms())) {
     ESP_LOGD(TAG, "Force update requested too soon (within active polling "
                   "interval) - ignoring");
@@ -1307,6 +1469,14 @@ void TeslaBLEClient::log_link_params_if_changed(const char *name) {
            link_interval_units_ * 1.25f, (unsigned) link_timeout_units_ * 10u);
 }
 
+#ifdef USE_ESP32_BLE_DEVICE
+bool TeslaBLEClient::parse_device(const espbt::ESPBTDevice &device) {
+  if (vehicle_ != nullptr && !vehicle_->link_turn_allows_connect())
+    return false;
+  return esp32_ble_client::BLEClientBase::parse_device(device);
+}
+#endif
+
 void TeslaBLEClient::connect() {
   // ESP-IDF uses these for the connection it is about to open. Both cars get
   // the same interval by default, so the controller can interleave the two
@@ -1417,6 +1587,7 @@ void TeslaBLEVehicle::gattc_event_handler(esp_gattc_cb_event_t event,
     std::vector<unsigned char> data(
         param->notify.value, param->notify.value + param->notify.value_len);
 
+    note_link_activity();
     if (vehicle_)
       vehicle_->on_rx_data(data);
     break;
@@ -1468,12 +1639,24 @@ void TeslaBLEVehicle::handle_connection_established() {
   if (!notify_ready_) return;
   if (vehicle_ && !vehicle_->is_connected()) {
     vehicle_->set_connected(true);
-    ESP_LOGI(TAG, "[%s] Connection established - triggering initial polls", log_name());
+    ever_ready_ = true;
+    ready_this_turn_ = true;
+    turn_requested_ = false;
+    missed_turns_ = 0;
+    retry_turn_after_ms_ = 0;
+    note_link_activity();
+    ESP_LOGI(TAG, "[%s] Connection established - polling VCSEC", log_name());
+    // VCSEC never wakes the car. Infotainment waits for its answer (see the
+    // vehicle status callback) so a sleeping car is not woken by connecting.
     vehicle_->vcsec_poll();
-    enqueue_poll_batch_(TeslaBLE::WakePolicy::WAKE_IF_NEEDED, 750);
     last_vcsec_poll_ = millis();
-    poll_policy_.on_poll(millis());
-    poll_policy_.reset();
+    infotainment_check_pending_ = true;
+    this->set_timeout("infotainment-check", INFOTAINMENT_CHECK_TIMEOUT_MS, [this]() {
+      if (!infotainment_check_pending_) return;
+      infotainment_check_pending_ = false;
+      ESP_LOGD(TAG, "[%s] No VCSEC status after connecting - skipping infotainment this turn", log_name());
+    });
+    flush_pending_commands_();
   }
 
   this->status_clear_warning();
@@ -1492,6 +1675,8 @@ void TeslaBLEVehicle::handle_connection_lost() {
   this->cancel_timeout("infotainment-batch");
   this->cancel_timeout("tesla-notify-retry");
   this->cancel_timeout("release-infotainment-slot");
+  this->cancel_timeout("infotainment-check");
+  infotainment_check_pending_ = false;
   notify_ready_ = false;
   notify_registration_pending_ = false;
   poll_batch_in_progress_ = false;
@@ -1500,9 +1685,13 @@ void TeslaBLEVehicle::handle_connection_lost() {
   release_infotainment_slot_();
   user_commands_in_flight_ = 0;
   latest_ble_rssi_ = -127;
-  poll_policy_.on_poll(0);
-  last_vcsec_poll_ = 0;
-  poll_policy_.reset();
+  // Poll timing survives a disconnect: with cars taking turns this happens
+  // every turn, and resetting it would poll (and keep awake) on every turn.
+  if (yielding_link_) {
+    yielding_link_ = false;
+    ESP_LOGD(TAG, "[%s] BLE link handed over", log_name());
+    return;
+  }
   this->status_set_warning("BLE connection lost");
 }
 

@@ -25,6 +25,7 @@
 #include "control_state_policy.h"
 #include "polling_policy.h"
 #include "connection_reset_policy.h"
+#include "link_scheduler.h"
 #include "storage_adapter_impl.h"
 #include <vehicle.h>
 #include "vehicle_state_manager.h"
@@ -180,6 +181,10 @@ public:
     void update_ble_rssi(int8_t rssi);
     uint32_t ble_write_gap_ms() const;
 
+    // One-link-at-a-time scheduling across all configured cars.
+    bool link_turn_allows_connect() const;
+    void note_link_activity();
+
     // Car name for log lines (falls back to the VIN).
     const char *log_name() const { return debug_name_.empty() ? vin_.c_str() : debug_name_.c_str(); }
 
@@ -208,6 +213,49 @@ private:
     // Connection handlers
     void handle_connection_established();
     void handle_connection_lost();
+
+    // Link turn scheduling (see link_scheduler.h). All cars share one
+    // scheduler; each car is one slot.
+    static std::vector<TeslaBLEVehicle *> link_vehicles_;
+    static LinkScheduler link_scheduler_;
+    int link_slot_{LinkScheduler::NONE};
+    bool ever_ready_{false};
+    bool yielding_link_{false};
+    bool turn_requested_{false};
+    bool ready_this_turn_{false};
+    bool infotainment_ever_polled_{false};
+    uint32_t last_link_activity_ms_{0};
+    // A car that misses its turn (out of range) waits before asking again,
+    // so a car that is away does not keep taking the link from the other.
+    uint8_t missed_turns_{0};
+    uint32_t retry_turn_after_ms_{0};
+    static constexpr uint32_t MISSED_TURN_BACKOFF_MS = 30000;
+    static constexpr uint32_t MAX_MISSED_TURN_BACKOFF_MS = 300000;
+    LinkScheduler::Input link_input_(uint32_t now) const;
+    static void run_link_scheduler_(uint32_t now);
+    void yield_link_();
+
+    // Commands issued while this car does not hold the link wait here and
+    // are sent once it connects. They expire if the car stays unreachable.
+    struct PendingCommand {
+      uint32_t queued_ms;
+      std::string name;
+      std::function<void()> run;
+      std::function<void()> expire;
+    };
+    std::deque<PendingCommand> pending_commands_;
+    static constexpr size_t MAX_PENDING_COMMANDS = 8;
+    static constexpr uint32_t PENDING_COMMAND_TIMEOUT_MS = 120000;
+    bool queue_until_connected_(const std::string &name, std::function<void()> run,
+                                std::function<void()> expire);
+    void flush_pending_commands_();
+    void expire_pending_commands_(uint32_t now);
+
+    // Infotainment decision after connecting waits for the VCSEC status, so
+    // a reconnect never polls (or wakes) a car whose sleep state is unknown.
+    bool infotainment_check_pending_{false};
+    static constexpr uint32_t INFOTAINMENT_CHECK_TIMEOUT_MS = 8000;
+    void maybe_poll_infotainment_(uint32_t now);
     void register_notify_();
     void schedule_notify_retry_();
 
@@ -352,6 +400,10 @@ class TeslaBLEClient : public esp32_ble_client::BLEClientBase {
   // components, so this polls esp_ble_get_current_conn_params() instead.
   void log_link_params_if_changed(const char *name);
 
+#ifdef USE_ESP32_BLE_DEVICE
+  // Only the car whose turn it is may start a connection.
+  bool parse_device(const espbt::ESPBTDevice &device) override;
+#endif
   void connect() override;
   bool gattc_event_handler(esp_gattc_cb_event_t event, esp_gatt_if_t gattc_if,
                            esp_ble_gattc_cb_param_t *param) override;

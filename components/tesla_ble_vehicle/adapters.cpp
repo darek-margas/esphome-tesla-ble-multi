@@ -43,6 +43,7 @@ bool BleAdapterImpl::write(const std::vector<uint8_t>& data) {
         ++fragments;
     }
 
+    parent_->note_link_activity();
     const auto queued = tx_tracker_.on_message_queued(millis(), data.size(), fragments);
     if (queued.messages_ahead > 0) {
         // A new message while an earlier one is still being transmitted is

@@ -43,6 +43,9 @@ Error handling: Check pointers before use. Return bool for success/failure helpe
   components/tesla_ble_vehicle/polling_policy.h (dependency-free, unit-testable); tesla_ble_vehicle.cpp wires it to ESPHome
 - Raw state -> text/flag conversions (sleep/lock/presence/charging/shift/charge-limit) live in
   components/tesla_ble_vehicle/state_text.h (dependency-free, values static_asserted against the tesla-ble protobuf headers in vehicle_state_manager.cpp)
+- Multi-car: only one Tesla BLE link is connected at a time; cars take turns. Turn logic lives in
+  components/tesla_ble_vehicle/link_scheduler.h (dependency-free, tests/test_link_scheduler.cpp);
+  TeslaBLEClient::parse_device gates connecting, commands for a disconnected car are queued
 - Sensors defined in __init__.py SENSORS/BINARY_SENSORS/TEXT_SENSORS lists
 - Sensor values published in vehicle_state_manager.cpp update methods
 - Commands use TeslaBLEVehicle::send_command() with Command tracking

@@ -43,6 +43,9 @@ public:
     // Clear queues (on disconnect)
     void clear_queues();
 
+    // True when nothing is waiting to be written.
+    bool tx_idle() const { return write_queue_.empty() && !write_in_flight_; }
+
 private:
     TeslaBLEVehicle* parent_;
     std::queue<BLETXChunk> write_queue_;

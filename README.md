@@ -328,6 +328,35 @@ the ESP32. A warning such as
 
 means the library will resend that request before the car has seen it.
 
+### One car connected at a time
+
+On the original ESP32, two simultaneous Tesla connections starve each other:
+the first-opened link stops being served and times out (`rsn 0x8`), whichever
+car holds it and whatever the connection parameters. Each car alone is
+reliable, so the cars take turns on the radio:
+
+- the car whose turn it is connects, polls VCSEC, then (only if the car is
+  known to be awake, per the normal polling policy) infotainment
+- when the other car has work waiting and this link has gone quiet, the car
+  disconnects and the other one connects
+- commands for a car that is not connected wait for its turn (up to 2 min);
+  expect a few seconds of extra latency while the link is established
+- a car that is out of range backs off (30 s, doubling up to 5 min) so it
+  does not keep taking turns from the car that is here
+- connecting never wakes a car: infotainment waits for the VCSEC sleep state
+
+With a single car configured nothing changes: it keeps its link.
+
+The log shows each hand-over:
+
+```text
+[Szarik] Yielding BLE link to the next car
+[Bluey] BLE turn starts
+```
+
+With two cars, a `vcsec_poll_interval` of 30-60 s keeps the hand-overs
+reasonable; at the default 10 s the cars swap continuously.
+
 ### Link parameters
 
 Two cars on one ESP32 share one radio. If the two connections use unrelated
