@@ -10,6 +10,7 @@
 #include <esphome/components/cover/cover.h>
 #include <esphome/components/climate/climate.h>
 #include <esphome/components/select/select.h>
+#include <esphome/components/datetime/time_entity.h>
 #include <optional>
 #include <map>
 #include <string>
@@ -70,6 +71,10 @@ public:
     }
     void set_charging_limit_number(number::Number* number) { charging_limit_number_ = number; }
     void set_cabin_overheat_select(select::Select* sel) { cabin_overheat_select_ = sel; }
+    void set_scheduled_charging_switch(switch_::Switch* sw) { scheduled_charging_switch_ = sw; }
+    void set_scheduled_charging_time(datetime::TimeEntity* time) { scheduled_charging_time_ = time; }
+    int scheduled_charging_minutes() const { return scheduled_charging_minutes_; }  // -1 = unknown
+    void republish_scheduled_charging();
     
     // ==========================================================================
     // Lock, Cover, and Climate setters
@@ -177,6 +182,10 @@ private:
     number::Number* charging_amps_number_{nullptr};
     number::Number* charging_limit_number_{nullptr};
     select::Select* cabin_overheat_select_{nullptr};
+    switch_::Switch* scheduled_charging_switch_{nullptr};
+    datetime::TimeEntity* scheduled_charging_time_{nullptr};
+    int scheduled_charging_minutes_{-1};
+    bool scheduled_charging_on_{false};
     
     // ==========================================================================
     // Lock, Cover, and Climate entities

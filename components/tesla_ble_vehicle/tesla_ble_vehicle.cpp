@@ -184,6 +184,10 @@ void TeslaBLEVehicle::configure_pending_sensors() {
     state_manager_->set_charging_limit_number(pending_charging_limit_number_);
   if (pending_cabin_overheat_select_)
     state_manager_->set_cabin_overheat_select(pending_cabin_overheat_select_);
+  if (pending_scheduled_charging_switch_)
+    state_manager_->set_scheduled_charging_switch(pending_scheduled_charging_switch_);
+  if (pending_scheduled_charging_time_)
+    state_manager_->set_scheduled_charging_time(pending_scheduled_charging_time_);
   if (pending_doors_lock_)
     state_manager_->set_doors_lock(pending_doors_lock_);
   if (pending_charge_port_latch_lock_)
@@ -803,6 +807,18 @@ void TeslaBLEVehicle::set_charging_limit_number(number::Number *number) {
   pending_charging_limit_number_ = number;
   if (state_manager_)
     state_manager_->set_charging_limit_number(number);
+}
+
+void TeslaBLEVehicle::set_scheduled_charging_switch(switch_::Switch *sw) {
+  pending_scheduled_charging_switch_ = sw;
+  if (state_manager_)
+    state_manager_->set_scheduled_charging_switch(sw);
+}
+
+void TeslaBLEVehicle::set_scheduled_charging_time_entity(datetime::TimeEntity *time) {
+  pending_scheduled_charging_time_ = time;
+  if (state_manager_)
+    state_manager_->set_scheduled_charging_time(time);
 }
 
 void TeslaBLEVehicle::set_cabin_overheat_select(select::Select *sel) {
@@ -1455,6 +1471,51 @@ void TeslaBLEVehicle::set_preconditioning_max(bool enable) {
       [enable](TeslaBLE::Client *client, uint8_t *buff, size_t *len) {
         return client->build_car_server_vehicle_action_message(
             buff, len, CarServer_VehicleAction_hvacSetPreconditioningMaxAction_tag, &enable);
+      });
+}
+
+void TeslaBLEVehicle::set_scheduled_charging(bool enabled) {
+  int minutes = state_manager_ ? state_manager_->scheduled_charging_minutes() : -1;
+  if (enabled && minutes < 0) {
+    ESP_LOGW(TAG, "[%s] Scheduled charging: no start time known yet - set the time instead", log_name());
+    if (state_manager_) state_manager_->republish_scheduled_charging();
+    return;
+  }
+  send_scheduled_charging_(enabled, minutes < 0 ? 0 : minutes);
+}
+
+void TeslaBLEVehicle::set_scheduled_charging_time(int minutes) {
+  if (minutes < 0 || minutes >= 24 * 60) {
+    ESP_LOGW(TAG, "Invalid scheduled charging time: %d min", minutes);
+    return;
+  }
+  send_scheduled_charging_(true, minutes);
+}
+
+void TeslaBLEVehicle::send_scheduled_charging_(bool enabled, int minutes) {
+  CarServer_ScheduledChargingAction action = CarServer_ScheduledChargingAction_init_default;
+  action.enabled = enabled;
+  action.charging_time = minutes;
+
+  char name[40];
+  if (enabled) {
+    snprintf(name, sizeof(name), "Scheduled Charging %02d:%02d", minutes / 60, minutes % 60);
+  } else {
+    snprintf(name, sizeof(name), "Scheduled Charging Off");
+  }
+  ESP_LOGI(TAG, "%s requested", name);
+
+  send_command_with_tracking(
+      UniversalMessage_Domain_DOMAIN_INFOTAINMENT, name,
+      [action](TeslaBLE::Client *client, uint8_t *buff, size_t *len) {
+        return client->build_car_server_vehicle_action_message(
+            buff, len, CarServer_VehicleAction_scheduledChargingAction_tag, &action);
+      },
+      TeslaBLE::WakePolicy::WAKE_IF_NEEDED,
+      [this](bool succeeded) {
+        // Re-read the car's schedule either way: on failure this puts the
+        // switch / time back to what the car really has.
+        schedule_state_refresh_(ControlStateRefresh::CHARGE_STATE);
       });
 }
 

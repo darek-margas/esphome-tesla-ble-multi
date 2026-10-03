@@ -436,15 +436,26 @@ void VehicleStateManager::update_charge_state(const CarServer_ChargeState& charg
     
     // Charge schedule
     if (charge_state.which_optional_scheduled_charging_mode) {
-        publish_text_sensor("scheduled_charging_mode",
-            state_text::scheduled_charging_mode(static_cast<int>(charge_state.optional_scheduled_charging_mode.scheduled_charging_mode)));
+        const int mode = static_cast<int>(charge_state.optional_scheduled_charging_mode.scheduled_charging_mode);
+        publish_text_sensor("scheduled_charging_mode", state_text::scheduled_charging_mode(mode));
+        scheduled_charging_on_ = mode == state_text::kScheduledChargingStartAt;
+        if (scheduled_charging_switch_ != nullptr &&
+            (!scheduled_charging_switch_->has_state() || scheduled_charging_switch_->state != scheduled_charging_on_)) {
+            publish_sensor_state(scheduled_charging_switch_, scheduled_charging_on_);
+        }
     }
     if (charge_state.which_optional_scheduled_charging_pending) {
         publish_binary_sensor("scheduled_charging_pending", charge_state.optional_scheduled_charging_pending.scheduled_charging_pending);
     }
     if (charge_state.which_optional_scheduled_charging_start_time_minutes) {
-        auto time = state_text::time_of_day(charge_state.optional_scheduled_charging_start_time_minutes.scheduled_charging_start_time_minutes);
-        if (time.has_value()) publish_text_sensor("scheduled_charging_time", time.value());
+        const uint32_t minutes = charge_state.optional_scheduled_charging_start_time_minutes.scheduled_charging_start_time_minutes;
+        if (minutes < 24 * 60) {
+            const bool changed = static_cast<int>(minutes) != scheduled_charging_minutes_;
+            scheduled_charging_minutes_ = static_cast<int>(minutes);
+            if (scheduled_charging_time_ != nullptr && (changed || !scheduled_charging_time_->has_state())) {
+                static_cast<TeslaScheduledChargingTime *>(scheduled_charging_time_)->update_time(scheduled_charging_minutes_);
+            }
+        }
     }
     if (charge_state.which_optional_scheduled_departure_time_minutes) {
         auto time = state_text::time_of_day(charge_state.optional_scheduled_departure_time_minutes.scheduled_departure_time_minutes);
@@ -861,6 +872,13 @@ void VehicleStateManager::update_estimated_power() {
     }
     publish_sensor("charger_power_estimated", power_kw);
     session_power_kw_ = power_kw;
+}
+
+void VehicleStateManager::republish_scheduled_charging() {
+    // Undo an optimistic switch flip the car never got
+    if (scheduled_charging_switch_ != nullptr) {
+        scheduled_charging_switch_->publish_state(scheduled_charging_on_);
+    }
 }
 
 void VehicleStateManager::save_charge_session_if_changed() {

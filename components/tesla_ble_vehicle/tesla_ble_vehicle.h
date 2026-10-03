@@ -17,6 +17,7 @@
 #include <esphome/components/cover/cover.h>
 #include <esphome/components/climate/climate.h>
 #include <esphome/components/select/select.h>
+#include <esphome/components/datetime/time_entity.h>
 #include <esphome/core/component.h>
 #include <esphome/core/automation.h>
 #include <esphome/core/preferences.h>
@@ -107,6 +108,8 @@ public:
     void set_charging_amps_number(number::Number *number);
     void set_charging_limit_number(number::Number *number);
     void set_cabin_overheat_select(select::Select *sel);
+    void set_scheduled_charging_switch(switch_::Switch *sw);
+    void set_scheduled_charging_time_entity(datetime::TimeEntity *time);
 
     // ==========================================================================
     // Lock, Cover, and Climate setters
@@ -158,6 +161,10 @@ public:
     void set_bioweapon_mode(bool enable);
     void set_preconditioning_max(bool enable);  // Defrost
     void set_cabin_overheat_protection(int mode);  // 0=Off, 1=On, 2=Fan Only
+    // Scheduled charging ("start charging at"): the switch keeps the car's
+    // time; setting the time also enables it. minutes = after midnight.
+    void set_scheduled_charging(bool enabled);
+    void set_scheduled_charging_time(int minutes);
     void set_steering_wheel_heat(bool enable);
     
     // Vehicle controls (Infotainment)
@@ -381,6 +388,9 @@ private:
     number::Number *pending_charging_amps_number_{nullptr};
     number::Number *pending_charging_limit_number_{nullptr};
     select::Select *pending_cabin_overheat_select_{nullptr};
+    switch_::Switch *pending_scheduled_charging_switch_{nullptr};
+    datetime::TimeEntity *pending_scheduled_charging_time_{nullptr};
+    void send_scheduled_charging_(bool enabled, int minutes);
     
     // Pending locks
     lock::Lock *pending_doors_lock_{nullptr};
@@ -515,6 +525,25 @@ using TeslaSwitchBase = WithParent<switch_::Switch>;
 DEFINE_TESLA_SWITCH(TeslaChargingSwitch, set_charging_state)
 DEFINE_TESLA_SWITCH(TeslaSteeringWheelHeatSwitch, set_steering_wheel_heat)
 DEFINE_TESLA_SWITCH(TeslaSentryModeSwitch, set_sentry_mode)
+DEFINE_TESLA_SWITCH(TeslaScheduledChargingSwitch, set_scheduled_charging)
+
+// "Start charging at" time; read back from the car's charge state
+class TeslaScheduledChargingTime : public WithParent<datetime::TimeEntity> {
+public:
+    void update_time(int minutes) {
+        this->hour_ = minutes / 60;
+        this->minute_ = minutes % 60;
+        this->second_ = 0;
+        this->publish_state();
+    }
+protected:
+    void control(const datetime::TimeCall &call) override {
+        if (!parent_) return;
+        const int hour = call.get_hour().value_or(this->hour_);
+        const int minute = call.get_minute().value_or(this->minute_);
+        parent_->set_scheduled_charging_time(hour * 60 + minute);
+    }
+};
 
 class TeslaChargingAmpsNumber : public WithParent<number::Number> {
 protected:

@@ -1,6 +1,6 @@
 import esphome.codegen as cg
 import esphome.config_validation as cv
-from esphome.components import esp32_ble, esp32_ble_client, esp32_ble_tracker, binary_sensor, button, switch, number, sensor, text_sensor, lock, cover, climate, select
+from esphome.components import esp32_ble, esp32_ble_client, esp32_ble_tracker, binary_sensor, button, switch, number, sensor, text_sensor, lock, cover, climate, select, datetime
 from esphome.components.esp32 import add_idf_sdkconfig_option
 from esphome.components.esp32_ble import BTLoggers
 from esphome.const import (
@@ -16,6 +16,7 @@ from esphome.const import (
     CONF_MODE,
     CONF_NAME,
     CONF_RESTORE_MODE,
+    CONF_TYPE,
     CONF_UNIT_OF_MEASUREMENT,
     ENTITY_CATEGORY_DIAGNOSTIC,
 )
@@ -24,7 +25,7 @@ from esphome import automation
 
 CODEOWNERS = ["@yoziru"]
 DEPENDENCIES = ["esp32_ble_tracker"]
-AUTO_LOAD = ["esp32_ble_client", "binary_sensor", "button", "switch", "number", "sensor", "text_sensor", "lock", "cover", "climate", "select"]
+AUTO_LOAD = ["esp32_ble_client", "binary_sensor", "button", "switch", "number", "sensor", "text_sensor", "lock", "cover", "climate", "select", "datetime"]
 MULTI_CONF = True
 
 tesla_ble_vehicle_ns = cg.esphome_ns.namespace("tesla_ble_vehicle")
@@ -50,6 +51,8 @@ TeslaReleaseChargeCableButton = tesla_ble_vehicle_ns.class_("TeslaReleaseChargeC
 TeslaChargingSwitch = tesla_ble_vehicle_ns.class_("TeslaChargingSwitch", switch.Switch)
 TeslaSteeringWheelHeatSwitch = tesla_ble_vehicle_ns.class_("TeslaSteeringWheelHeatSwitch", switch.Switch)
 TeslaSentryModeSwitch = tesla_ble_vehicle_ns.class_("TeslaSentryModeSwitch", switch.Switch)
+TeslaScheduledChargingSwitch = tesla_ble_vehicle_ns.class_("TeslaScheduledChargingSwitch", switch.Switch)
+TeslaScheduledChargingTime = tesla_ble_vehicle_ns.class_("TeslaScheduledChargingTime", datetime.TimeEntity)
 
 # Custom lock classes
 TeslaDoorsLock = tesla_ble_vehicle_ns.class_("TeslaDoorsLock", lock.Lock)
@@ -229,8 +232,7 @@ TEXT_SENSORS = [
     {"id": "iec61851_state", "name": "IEC 61851", "icon": "mdi:ev-plug-type2", "disabled_by_default": True},
     {"id": "shift_state", "name": "Shift State", "icon": "mdi:car-shift-pattern", "disabled_by_default": True},
     {"id": "charge_limit_reason", "name": "Charge Limit Reason", "icon": "mdi:ev-plug-tesla"},
-    {"id": "scheduled_charging_mode", "name": "Scheduled Charging", "icon": "mdi:calendar-clock"},
-    {"id": "scheduled_charging_time", "name": "Scheduled Charging Time", "icon": "mdi:clock-start"},
+    {"id": "scheduled_charging_mode", "name": "Scheduled Charging Mode", "icon": "mdi:calendar-clock"},
     {"id": "scheduled_departure_time", "name": "Scheduled Departure Time", "icon": "mdi:clock-end"},
     {"id": "steering_wheel_heat_level", "name": "Steering Wheel Heat Level", "icon": "mdi:steering"},
     {"id": "seat_heater_front_left", "name": "Seat Heater Front Left", "icon": "mdi:car-seat-heater"},
@@ -258,6 +260,8 @@ SWITCHES = [
     {"id": "charging", "name": "Charger", "class": TeslaChargingSwitch, "setter": "set_charging_switch", "icon": "mdi:ev-station"},
     {"id": "steering_wheel_heat", "name": "Heated Steering", "class": TeslaSteeringWheelHeatSwitch, "setter": "set_steering_wheel_heat_switch", "icon": "mdi:steering"},
     {"id": "sentry_mode", "name": "Sentry Mode", "class": TeslaSentryModeSwitch, "setter": "set_sentry_mode_switch", "icon": "mdi:shield-car"},
+    # On = "start charging at" the Scheduled Charging Start time
+    {"id": "scheduled_charging", "name": "Scheduled Charging", "class": TeslaScheduledChargingSwitch, "setter": "set_scheduled_charging_switch", "icon": "mdi:calendar-clock"},
 ]
 
 SELECTS = [
@@ -269,6 +273,11 @@ SELECTS = [
         "icon": "mdi:car-defrost-front",
         "options": ["Off", "On", "Fan Only"],
     },
+]
+
+# Time entities: "start charging at" (setting it also turns scheduled charging on)
+TIMES = [
+    {"id": "scheduled_charging_start", "name": "Scheduled Charging Start", "class": TeslaScheduledChargingTime, "setter": "set_scheduled_charging_time_entity", "icon": "mdi:clock-start"},
 ]
 
 # Lock entities (combined sensor + control)
@@ -490,6 +499,13 @@ async def create_select(var, definition, vehicle_id, vehicle_name, device_id=Non
     return _attach(var, sel, definition)
 
 
+async def create_time(var, definition, vehicle_id, vehicle_name, device_id=None):
+    """Create a time entity and register with TeslaBLEVehicle."""
+    config = _base_config(definition, definition["class"], "time", vehicle_id, vehicle_name, device_id)
+    config[CONF_TYPE] = "TIME"
+    return _attach(var, await datetime.new_datetime(config), definition)
+
+
 async def create_lock(var, definition, vehicle_id, vehicle_name, device_id=None):
     """Create a lock and register with TeslaBLEVehicle."""
     config = _base_config(definition, definition["class"], "lock", vehicle_id, vehicle_name, device_id)
@@ -586,6 +602,7 @@ async def to_code(config):
         (BUTTONS, create_button),
         (SWITCHES, create_switch),
         (SELECTS, create_select),
+        (TIMES, create_time),
         (LOCKS, create_lock),
         (COVERS, create_cover),
     ):
