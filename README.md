@@ -197,10 +197,13 @@ Other useful lines:
 [Bluey] 'Honk Horn': car asleep - waking it first
 [Bluey] Awake - sending 'Honk Horn' in 8 s
 [Bluey] First poll after boot - waking the car once to fill sensors
-[Szarik] BLE link params: interval 15.00 ms, latency 0, supervision timeout 6000 ms (requested 15.00 ms / 6000 ms)
 ```
 
-At `DEBUG` level each Tesla message also logs its size and how long it took to leave the ESP32.
+At `DEBUG` level each Tesla message also logs its size and how long it took to leave the ESP32, and each connection logs the BLE parameters the link actually uses:
+
+```text
+[Szarik] BLE link params: interval 15.00 ms, latency 0, supervision timeout 6000 ms (requested 15.00 ms / 6000 ms)
+```
 
 ## External component
 

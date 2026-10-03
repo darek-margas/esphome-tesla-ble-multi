@@ -1606,7 +1606,7 @@ void TeslaBLEClient::log_link_params_if_changed(const char *name) {
   logged_latency_ = params.latency;
   logged_timeout_ = params.timeout;
   // Units: interval 1.25 ms, timeout 10 ms.
-  ESP_LOGI(TAG,
+  ESP_LOGD(TAG,
            "[%s] BLE link params: interval %.2f ms, latency %u, supervision timeout %u ms "
            "(requested %.2f ms / %u ms)",
            name, params.interval * 1.25f, (unsigned) params.latency, (unsigned) params.timeout * 10u,
