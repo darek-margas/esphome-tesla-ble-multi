@@ -449,9 +449,11 @@ void TeslaBLEVehicle::maybe_poll_infotainment_(uint32_t now) {
   // extend the decision inputs here (and gate it behind an opt-in config).
   InfotainmentPollDecision decision =
       poll_policy_.update(now, is_asleep, state_manager_->is_charging(),
-                          state_manager_->is_sentry_mode());
+                          state_manager_->is_sentry_mode(), state_manager_->is_climate_on());
+  if (decision.poll_now && infotainment_ever_polled_)
+    ESP_LOGI(TAG, "[%s] Car woke up - reading its state once", log_name());
 
-  if (!infotainment_ever_polled_ || poll_policy_.should_poll(now, decision.interval_ms)) {
+  if (!infotainment_ever_polled_ || decision.poll_now || poll_policy_.should_poll(now, decision.interval_ms)) {
     TeslaBLE::WakePolicy policy =
         decision.wake_policy == WakePolicy::NO_WAKE_SKIP
             ? TeslaBLE::WakePolicy::NO_WAKE_SKIP

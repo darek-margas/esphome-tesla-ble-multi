@@ -248,6 +248,35 @@ static void test_full_tick_cadence_while_charging() {
   CHECK(p.should_poll(20000 + 10000, d.interval_ms));
 }
 
+static void test_climate_on_counts_as_active() {
+  InfotainmentPollPolicy p;
+  p.update(1000, false, false, false);
+  // Idle past the sleep timeout: backs off
+  CHECK(p.update(1000 + 660000, false, false, false).wake_policy == WakePolicy::NO_WAKE_SKIP);
+  // Climate turned on: fast polling, may wake
+  InfotainmentPollDecision d = p.update(1000 + 670000, false, false, false, true);
+  CHECK(d.wake_policy == WakePolicy::WAKE_IF_NEEDED);
+  CHECK(d.interval_ms == 10000);
+  // Climate off again: a fresh idle window at the awake interval
+  d = p.update(1000 + 680000, false, false, false, false);
+  CHECK(d.wake_policy == WakePolicy::WAKE_IF_NEEDED);
+  CHECK(d.interval_ms == 30000);
+}
+
+static void test_wake_up_requests_one_read() {
+  InfotainmentPollPolicy p;
+  CHECK(!p.update(1000, false, false, false).poll_now);   // awake from the start: no wake event
+  CHECK(!p.update(2000, true, false, false).poll_now);    // fell asleep
+  CHECK(p.update(3000, false, false, false).poll_now);    // woke: read once
+  CHECK(!p.update(4000, false, false, false).poll_now);   // still awake: no repeat
+  // Self-wake blips within 15 min do not trigger another read
+  p.update(5000, true, false, false);
+  CHECK(!p.update(6000, false, false, false).poll_now);
+  // After 15 min a new wake-up reads again
+  p.update(3000 + 900000, true, false, false);
+  CHECK(p.update(3000 + 900001, false, false, false).poll_now);
+}
+
 int main() {
   test_default_intervals();
   test_idle_polling_backs_off_after_timeout();
@@ -268,5 +297,7 @@ int main() {
   test_poll_stays_correct_across_millis_wraparound();
   test_full_tick_cadence_while_charging();
 
+  test_climate_on_counts_as_active();
+  test_wake_up_requests_one_read();
   return test_summary();
 }

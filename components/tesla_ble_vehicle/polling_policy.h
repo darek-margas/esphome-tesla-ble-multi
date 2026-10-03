@@ -13,6 +13,9 @@ enum class WakePolicy : uint8_t { WAKE_IF_NEEDED, NO_WAKE_SKIP };
 struct InfotainmentPollDecision {
   uint32_t interval_ms;
   WakePolicy wake_policy;
+  // Poll now regardless of the interval: the car was just seen waking up
+  // (e.g. climate turned on from the Tesla app) - one read to pick that up.
+  bool poll_now{false};
 };
 
 // Decides the infotainment polling cadence and wake policy from the current
@@ -25,6 +28,11 @@ struct InfotainmentPollDecision {
 //  - Otherwise the car is treated as idle: it is polled gently at the awake
 //    interval, and after sleep_timeout_ms of idle time it backs off to
 //    NO_WAKE_SKIP so the car can fall asleep on its own.
+//  - Climate running counts as activity too: the car cannot sleep while the
+//    HVAC runs, so polling it costs nothing and keeps the climate entity live.
+//  - When the car is seen going from asleep to awake, one poll is requested
+//    right away (poll_now), at most once per WAKE_READ_GAP_MS, so changes made
+//    from the Tesla app show up without waiting for the idle interval.
 //  - Only genuine activity resets the idle timer. A car that is observed
 //    asleep, or briefly blips awake on its own, must not restart the aggressive
 //    window or it would be re-woken every time it tried to sleep (#201/#202).
@@ -52,8 +60,20 @@ public:
   // Record that a poll fired at now_ms.
   void on_poll(uint32_t now_ms) { last_poll_ms_ = now_ms; }
 
-  InfotainmentPollDecision update(uint32_t now_ms, bool is_asleep, bool is_charging, bool is_sentry_mode) {
-    const bool active = is_charging || is_sentry_mode;
+  static constexpr uint32_t WAKE_READ_GAP_MS = 15 * 60 * 1000;
+
+  InfotainmentPollDecision update(uint32_t now_ms, bool is_asleep, bool is_charging, bool is_sentry_mode,
+                                  bool is_climate_on = false) {
+    const bool woke = was_asleep_ && !is_asleep;
+    was_asleep_ = is_asleep;
+    bool poll_now = false;
+    if (woke && (!wake_read_done_ || now_ms - last_wake_read_ms_ >= WAKE_READ_GAP_MS)) {
+      poll_now = true;
+      wake_read_done_ = true;
+      last_wake_read_ms_ = now_ms;
+    }
+
+    const bool active = is_charging || is_sentry_mode || is_climate_on;
     if (active) {
       idle_since_ms_ = now_ms;
     } else if (idle_since_ms_ == 0) {
@@ -69,7 +89,8 @@ public:
       interval_ms = active_interval_ms_;
     }
     return {interval_ms,
-            effective_asleep ? WakePolicy::NO_WAKE_SKIP : WakePolicy::WAKE_IF_NEEDED};
+            effective_asleep ? WakePolicy::NO_WAKE_SKIP : WakePolicy::WAKE_IF_NEEDED,
+            poll_now};
   }
 
 private:
@@ -78,6 +99,9 @@ private:
   uint32_t sleep_timeout_ms_{660000};
   uint32_t idle_since_ms_{0};
   uint32_t last_poll_ms_{0};
+  bool was_asleep_{false};
+  bool wake_read_done_{false};
+  uint32_t last_wake_read_ms_{0};
 };
 
 }  // namespace tesla_ble_vehicle

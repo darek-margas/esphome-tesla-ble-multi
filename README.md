@@ -120,7 +120,7 @@ Per car, under `tesla_ble_vehicle:`:
 | `charging_amps_max` | `32` | Upper limit of the charging amps control |
 | `vcsec_poll_interval` | `10` s | VCSEC status poll. Never wakes the car. With several cars this is also how often the car asks for a BLE turn: use 30-60 s |
 | `infotainment_poll_interval_awake` | `30` s | Infotainment data while awake and idle |
-| `infotainment_poll_interval_active` | `10` s | Infotainment data while charging or in sentry mode |
+| `infotainment_poll_interval_active` | `10` s | Infotainment data while charging, in sentry mode or with climate on |
 | `infotainment_sleep_timeout` | `660` s | After this long idle, polls stop asking infotainment so the car can sleep |
 | `wake_on_boot` | `true` | Wake the car once after the ESP32 boots so every sensor gets a value. `false`: sensors stay empty until the car wakes on its own or you press *Force data update* |
 | `connection_interval` | `15ms` | BLE connection interval (7.5 ms - 4 s). Shorter = faster messages and service discovery. Keep it the same for every car |
@@ -165,7 +165,8 @@ A Tesla advertises over BLE all the time while it is in range, also while asleep
 
 - VCSEC (lock state, sleep state, presence) never wakes a car.
 - Connecting never wakes a car: after connecting, only VCSEC is polled, and the infotainment decision waits for its answer, so a sleeping car is left asleep.
-- Infotainment polls follow the polling policy: active interval while charging or in sentry mode, awake interval otherwise, and after `infotainment_sleep_timeout` idle they no longer ask infotainment, so the car can fall asleep.
+- Infotainment polls follow the polling policy: active interval while charging, in sentry mode or with climate on, awake interval otherwise, and after `infotainment_sleep_timeout` idle they no longer ask infotainment, so the car can fall asleep.
+- When VCSEC sees a car wake up (for example climate turned on from the Tesla app), its state is read once right away, at most once per 15 minutes, so the change shows without waiting for the idle interval.
 - Exception: the first infotainment poll after boot wakes each car once (`wake_on_boot`).
 - *Force data update* always fetches fresh data, waking the car if needed. If the car is not connected it is queued like a command.
 
@@ -407,7 +408,7 @@ Recommended for two cars:
 ```yaml
 vcsec_poll_interval: "60"               # how often each car asks for a turn
 infotainment_poll_interval_awake: "120" # awake, idle
-infotainment_poll_interval_active: "60" # charging / sentry
+infotainment_poll_interval_active: "60" # charging / sentry / climate on
 infotainment_sleep_timeout: "660"       # leave as is: lets the car sleep
 ```
 

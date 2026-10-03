@@ -75,6 +75,7 @@ public:
     void set_scheduled_charging_time(datetime::TimeEntity* time) { scheduled_charging_time_ = time; }
     int scheduled_charging_minutes() const { return scheduled_charging_minutes_; }  // -1 = unknown
     void republish_scheduled_charging();
+    bool is_climate_on() const { return climate_on_; }
     
     // ==========================================================================
     // Lock, Cover, and Climate setters
@@ -208,6 +209,7 @@ private:
     float current_inside_temp_{NAN};
     float target_temp_{21.0f};
     bool climate_on_{false};
+    std::string last_climate_summary_;
 
     // Cached values for estimated power calculation (V * A * phases / 1000)
     // Using NAN/optional sentinel pattern consistent with existing climate temps (NAN) and modern optional for phases.

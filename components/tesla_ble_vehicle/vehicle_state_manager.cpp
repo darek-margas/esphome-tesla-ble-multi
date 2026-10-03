@@ -605,6 +605,22 @@ void VehicleStateManager::update_climate_state(const CarServer_ClimateState& cli
         }
     }
     
+    // What the car reports for the climate entity, logged when it changes
+    // (-1 = field not sent)
+    {
+        char summary[96];
+        snprintf(summary, sizeof(summary), "climate_on=%d keeper=%d defrost=%d auto=%d preconditioning=%d",
+                 climate_state.which_optional_is_climate_on ? climate_state.optional_is_climate_on.is_climate_on : -1,
+                 climate_state.has_climate_keeper_mode ? climate_state.climate_keeper_mode.which_type : -1,
+                 climate_state.has_defrost_mode ? climate_state.defrost_mode.which_type : -1,
+                 climate_state.which_optional_is_auto_conditioning_on ? climate_state.optional_is_auto_conditioning_on.is_auto_conditioning_on : -1,
+                 climate_state.which_optional_is_preconditioning ? climate_state.optional_is_preconditioning.is_preconditioning : -1);
+        if (last_climate_summary_ != summary) {
+            ESP_LOGI(STATE_MANAGER_TAG, "Climate reported: %s", summary);
+            last_climate_summary_ = summary;
+        }
+    }
+
     // Preset (climate keeper / defrost) and fan mode (bioweapon defense)
     const char *preset = state_text::climate_preset(
         climate_state.has_climate_keeper_mode ? climate_state.climate_keeper_mode.which_type : 0,
