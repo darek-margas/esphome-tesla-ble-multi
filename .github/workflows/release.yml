@@ -36,36 +36,15 @@ jobs:
           TAG="v$VERSION"
 
           cat > /tmp/release-notes.md <<'EOF'
-          ## More vehicle data, scheduled charging control, km units
+          ## Fix: climate preset now shows "Normal"
 
-          Most of what the car already sends in the polls we make was decoded by the library and then thrown away. This release exposes it in Home Assistant, adds a scheduled-charging control, and fixes a few states that went stale. No extra BLE traffic: all new values come from polls that already ran.
+          Small fix on top of v2026.10.3.
 
-          ### Units: kilometres
-          Range, Odometer, Charging Rate (and the new range and speed-limit sensors) are now in **km** / **km/h** instead of miles / mph. Home Assistant will ask about the unit change on existing sensors and their statistics - that is expected.
+          The climate entity reads its preset back from the car (Normal / Keep On / Dog Mode / Camp Mode / Defrost), but it stayed blank. Logs from two cars showed why: when no climate keeper mode is active, the car reports the keeper mode as "Unknown" (with defrost "Off"), not "Off". The preset now shows **Normal** in that case. Keep On, Dog Mode and Camp Mode still show when the car reports them, and Defrost when max defrost is on.
 
-          ### New sensors
-          - **Charging:** Usable Battery, Time to Charge Limit, Range Added (this session), Scheduled Charging Mode, Scheduled Charging Pending, Scheduled Departure Time. Estimated Range and Ideal Range are added disabled by default.
-          - **Climate:** Preconditioning, Front / Rear Defroster, Battery Heater, Battery Heater No Power, Passenger Temperature Setting, Steering Wheel Heat Level, Seat Heater Front Left / Right (rear seats disabled by default).
-          - **Closures and modes:** Speed Limit Mode, Speed Limit, Sentry Mode Available (diagnostic, disabled by default).
-          - **Tyres:** low-pressure warning per wheel (soft warnings disabled by default).
+          Confirmed working in v2026.10.3 on the same cars: climate turned on from the Tesla app shows up in Home Assistant on the car's next BLE turn (`Car woke up - reading its state once`), instead of up to 11 minutes later.
 
-          A sensor that stays "unknown" means that car does not send that field over BLE.
-
-          ### Scheduled charging control
-          - **Scheduled Charging Start** (time picker): sets "start charging at" and turns scheduled charging on.
-          - **Scheduled Charging** (switch): turns it on or off, keeping the car's time.
-
-          Both are read back from the car; after each change the charge state is re-read, so a change the car did not accept snaps back.
-
-          ### Fixes and behaviour changes
-          - **Doors, frunk and trunk stay current while the car sleeps.** VCSEC reports every closure on each status poll, also while asleep, but only the charge port was used. Doors, frunk and trunk now follow it too. Covers publish only on change (fewer state updates).
-          - **Climate entity shows what the car really has.** The preset (Normal / Keep On / Dog / Camp / Defrost) and Bioweapon fan mode were write-only; they are now read back from the car.
-          - **Climate turned on from the Tesla app shows up.** After the 11 min idle window an idle car was re-read only every 11 min, so climate started from the app stayed OFF in Home Assistant. Climate running now counts as active (fast polling - the car cannot sleep with HVAC on anyway), and when a car is seen waking up its state is read once right away (at most once per 15 min, so self-wake blips do not keep it awake). The log shows what the car reports for climate when it changes (`Climate reported: ...`).
-          - **Charger Phases and Charger Power Estimated keep the last session's values** after charging stops or the cable is unplugged, and survive a reboot (saved to flash once per charging session, only if changed). Before, the estimate dropped to 0 on unplug and both were unknown after a reboot.
-
-          ### Other
-          - README log examples use generic car names.
-          - Library unchanged: [darek-margas/tesla-ble](https://github.com/darek-margas/tesla-ble) `v5.2.0`. See v2026.10.0 for the multi-car design.
+          See v2026.10.3 for the other changes in this series. Library unchanged: [darek-margas/tesla-ble](https://github.com/darek-margas/tesla-ble) `v5.2.0`.
           EOF
 
           if gh release view "$TAG" >/dev/null 2>&1; then
