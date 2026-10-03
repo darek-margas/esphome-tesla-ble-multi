@@ -361,6 +361,15 @@ reliable, so the cars take turns on the radio:
 
 With a single car configured nothing changes: it keeps its link.
 
+Hand-overs are kept cheap:
+
+- each car's GATT service table is cached in NVS (written once per car), so
+  a reconnect skips service discovery; if a cached table is ever stale the
+  cache entry is cleared and the car reconnects
+- on a planned hand-over the Tesla VCSEC and infotainment sessions are kept,
+  so the next turn does not repeat the session handshake (an unexpected link
+  loss still resets them)
+
 The log shows each hand-over, and presence changes:
 
 ```text

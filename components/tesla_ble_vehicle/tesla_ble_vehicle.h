@@ -184,6 +184,9 @@ public:
 
     // One-link-at-a-time scheduling across all configured cars.
     bool link_turn_allows_connect() const;
+    // BLE link up, notifications registered and the Tesla session layer
+    // connected: commands can be sent right now.
+    bool link_ready() const;
     void note_link_activity();
     // Called for every advertisement from this car's MAC address.
     void note_advert_seen(int rssi);
@@ -224,6 +227,7 @@ private:
     int link_slot_{LinkScheduler::NONE};
     bool ever_ready_{false};
     bool yielding_link_{false};
+    bool link_ready_{false};
     bool turn_requested_{false};
     bool ready_this_turn_{false};
     bool infotainment_ever_polled_{false};
@@ -279,6 +283,7 @@ private:
     void maybe_poll_infotainment_(uint32_t now);
     void register_notify_();
     void schedule_notify_retry_();
+    void on_missing_characteristic_(const char *which);
 
     // Adapters & Managers
     std::shared_ptr<BleAdapterImpl> ble_adapter_;

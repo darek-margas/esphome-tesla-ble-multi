@@ -1,6 +1,7 @@
 import esphome.codegen as cg
 import esphome.config_validation as cv
 from esphome.components import esp32_ble, esp32_ble_client, esp32_ble_tracker, binary_sensor, button, switch, number, sensor, text_sensor, lock, cover, climate, select
+from esphome.components.esp32 import add_idf_sdkconfig_option
 from esphome.components.esp32_ble import BTLoggers
 from esphome.const import (
     CONF_ACCURACY_DECIMALS,
@@ -483,6 +484,9 @@ async def to_code(config):
     # Tesla owns a private low-level BLE client. Using esp32_ble_client directly
     # avoids requiring a user-visible top-level ble_client: entry.
     esp32_ble.register_bt_logger(BTLoggers.GATT, BTLoggers.SMP)
+    # Cache each car's GATT service table in NVS: after a BLE hand-over the
+    # reconnect skips service discovery (written once per car).
+    add_idf_sdkconfig_option("CONFIG_BT_GATTC_CACHE_NVS_FLASH", True)
     cg.add_define("USE_ESP32_BLE_UUID")
 
     var = cg.new_Pvariable(config[CONF_ID])
