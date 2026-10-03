@@ -13,8 +13,6 @@
 namespace esphome {
 namespace tesla_ble_vehicle {
 
-TeslaBLEVehicle *TeslaBLEVehicle::global_infotainment_owner_ = nullptr;
-std::deque<TeslaBLEVehicle::InfotainmentWorkItem> TeslaBLEVehicle::global_infotainment_queue_;
 const char *TeslaBLEVehicle::log_context_ = nullptr;
 std::vector<TeslaBLEVehicle *> TeslaBLEVehicle::link_vehicles_;
 LinkScheduler TeslaBLEVehicle::link_scheduler_;
@@ -474,49 +472,30 @@ void TeslaBLEVehicle::maybe_poll_infotainment_(uint32_t now) {
 
 void TeslaBLEVehicle::enqueue_infotainment_work_(std::function<void()> start, bool interactive,
                                                  std::function<void()> requeue) {
-  InfotainmentWorkItem item{this, std::move(start), interactive, std::move(requeue)};
+  InfotainmentWorkItem item{std::move(start), interactive, std::move(requeue)};
 
-  // Interactive commands should run before queued background polls, while
-  // retaining FIFO order among other interactive commands.
+  // User commands run before queued background polls, FIFO among themselves.
   if (interactive) {
-    auto pos = global_infotainment_queue_.begin();
-    while (pos != global_infotainment_queue_.end() && pos->interactive) ++pos;
-    global_infotainment_queue_.insert(pos, std::move(item));
+    auto pos = infotainment_queue_.begin();
+    while (pos != infotainment_queue_.end() && pos->interactive) ++pos;
+    infotainment_queue_.insert(pos, std::move(item));
   } else {
-    // Background work is queued FIFO per vehicle, but merged round-robin.
-    auto pos = global_infotainment_queue_.begin();
-    while (pos != global_infotainment_queue_.end() && pos->interactive) ++pos;
-
-    size_t own_queued = 0;
-    for (auto it = pos; it != global_infotainment_queue_.end(); ++it) {
-      if (!it->interactive && it->vehicle == this) ++own_queued;
-    }
-
-    size_t other_slots_to_pass = own_queued + 1;
-    if (global_infotainment_owner_ != nullptr &&
-        global_infotainment_owner_ != this &&
-        other_slots_to_pass > 0) {
-      --other_slots_to_pass;
-    }
-
-    auto insert_at = pos;
-    while (insert_at != global_infotainment_queue_.end() &&
-           other_slots_to_pass > 0) {
-      if (!insert_at->interactive && insert_at->vehicle != this)
-        --other_slots_to_pass;
-      ++insert_at;
-    }
-    global_infotainment_queue_.insert(insert_at, std::move(item));
+    infotainment_queue_.push_back(std::move(item));
   }
+  start_next_infotainment_work_();
+}
 
-  if (global_infotainment_owner_ == nullptr && !global_infotainment_queue_.empty()) {
-    auto next = std::move(global_infotainment_queue_.front());
-    global_infotainment_queue_.pop_front();
-    global_infotainment_owner_ = next.vehicle;
-    if (next.start) {
-      LogScope log_scope(next.vehicle);
-      next.start();
-    }
+void TeslaBLEVehicle::start_next_infotainment_work_() {
+  // Waiting work stays queued until the link is ready; a lost link clears it
+  // (cancel_queued_infotainment_work_).
+  if (infotainment_busy_ || infotainment_queue_.empty() || !link_ready())
+    return;
+  auto next = std::move(infotainment_queue_.front());
+  infotainment_queue_.pop_front();
+  infotainment_busy_ = true;
+  if (next.start) {
+    LogScope log_scope(this);
+    next.start();
   }
 }
 
@@ -531,42 +510,17 @@ void TeslaBLEVehicle::defer_release_infotainment_slot_() {
 }
 
 void TeslaBLEVehicle::release_infotainment_slot_() {
-  // Only the current owner may advance the global queue. Disconnect or cleanup
-  // from another vehicle must not steal the slot and start a second command.
-  if (global_infotainment_owner_ != this) {
-    return;
-  }
-
-  global_infotainment_owner_ = nullptr;
-
-  // Skip stale work for vehicles that are no longer connected.
-  while (!global_infotainment_queue_.empty()) {
-    auto next = std::move(global_infotainment_queue_.front());
-    global_infotainment_queue_.pop_front();
-    if (next.vehicle == nullptr || !next.vehicle->vehicle_ ||
-        !next.vehicle->link_ready()) {
-      continue;
-    }
-    global_infotainment_owner_ = next.vehicle;
-    if (next.start) {
-      LogScope log_scope(next.vehicle);
-      next.start();
-    }
-    break;
-  }
+  infotainment_busy_ = false;
+  start_next_infotainment_work_();
 }
 
 void TeslaBLEVehicle::cancel_queued_infotainment_work_() {
+  // Background polls are simply dropped; user commands are not lost.
   std::vector<std::function<void()>> requeue;
-  for (auto it = global_infotainment_queue_.begin(); it != global_infotainment_queue_.end();) {
-    if (it->vehicle == this) {
-      // Background polls are simply dropped; user commands are not lost.
-      if (it->interactive && it->requeue) requeue.push_back(std::move(it->requeue));
-      it = global_infotainment_queue_.erase(it);
-    } else {
-      ++it;
-    }
+  for (auto &item : infotainment_queue_) {
+    if (item.interactive && item.requeue) requeue.push_back(std::move(item.requeue));
   }
+  infotainment_queue_.clear();
   for (auto &again : requeue) again();
 }
 
@@ -1825,6 +1779,7 @@ void TeslaBLEVehicle::handle_connection_established() {
       ESP_LOGD(TAG, "[%s] No VCSEC status after connecting - skipping infotainment this turn", log_name());
     });
     flush_pending_commands_();
+    start_next_infotainment_work_();
   }
 
   this->status_clear_warning();

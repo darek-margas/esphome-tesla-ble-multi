@@ -309,22 +309,22 @@ private:
     ConnectionResetPolicy connection_reset_policy_;
 
     // Sequential infotainment polling. TeslaBLE::Vehicle::infotainment_poll()
-    // starts five logical commands at once; on ESP32 that can congest GATT,
-    // especially with two cars. Keep only one background infotainment command
-    // active per vehicle and leave room for user commands.
+    // starts five logical commands at once; here they are queued and sent one
+    // after another, so a user command can go ahead of the remaining polls.
     struct InfotainmentWorkItem {
-      TeslaBLEVehicle *vehicle;
       std::function<void()> start;
       bool interactive;
       // User commands: re-issues the command if it is dropped before it ran.
       std::function<void()> requeue;
     };
 
-    // One logical infotainment transaction globally. Pending work is queued,
-    // which prevents the first-created BLE client from repeatedly winning a
-    // free-slot race. Interactive work is ordered ahead of background polls.
-    static TeslaBLEVehicle *global_infotainment_owner_;
-    static std::deque<InfotainmentWorkItem> global_infotainment_queue_;
+    // This car's infotainment work: one command at a time (the library sends
+    // one and waits for its answer anyway), user commands ahead of
+    // background polls. Only one car is connected at a time, so there is no
+    // cross-car coordination here.
+    std::deque<InfotainmentWorkItem> infotainment_queue_;
+    bool infotainment_busy_{false};
+    void start_next_infotainment_work_();
 
     uint8_t user_commands_in_flight_{0};
     void enqueue_poll_batch_(TeslaBLE::WakePolicy policy, uint32_t delay_ms = 0);
