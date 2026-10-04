@@ -22,6 +22,26 @@ It runs on ESPHome 2026.9.x with the Tesla BLE library v5.2.0 and is tested with
 
 The original single-car package layout still works. Multi-car configs define the vehicles directly.
 
+## In Home Assistant
+
+Each car is its own device under the ESP32 node (see [Home Assistant sub-devices](#home-assistant-sub-devices)):
+
+<img src="docs/ha-device-overview.png" width="700" alt="ESP32 node with one device per car">
+
+A car's controls: locks, covers, charging, climate (with preset and Bioweapon fan mode read back from the car), scheduled charging start time, sentry mode and buttons:
+
+<img src="docs/ha-car-controls.png" width="700" alt="Car controls">
+
+Sensors and diagnostics of one car. A sensor that stays *Unknown* means that car does not send that value over BLE (for example Estimated Range), or the state does not apply right now (Time to Full when not charging):
+
+<table>
+<tr>
+<td valign="top"><img src="docs/ha-car-sensors.png" width="253" alt="Car sensors"></td>
+<td valign="top"><img src="docs/ha-car-diagnostic.png" width="252" alt="Car diagnostics"><br><br>
+Diagnostics: link signal (BLE RSSI, and the car's advert RSSI while not connected), <em>Force data update</em> to read everything now, pairing and key regeneration, and the result of the last command.</td>
+</tr>
+</table>
+
 ## Example: two cars
 
 Keep VINs and BLE MACs in ESPHome secrets.
@@ -303,6 +323,8 @@ switch:
 
 Turning BLE off disconnects all cars. Turning it back on lets them reconnect in turn.
 
+<img src="docs/ha-parent-device.png" width="700" alt="ESP32 node with BLE Radio, Restart and the connected cars">
+
 ## Pairing
 
 Pair each car separately.
@@ -321,6 +343,10 @@ Pairing already requested - present NFC card on reader
 ```
 
 During the first 35 seconds after Pair, background polling for that car is paused and the car keeps its BLE turn, to give the whitelist request a quiet link.
+
+The request on the car screen looks like this:
+
+<img src="docs/vehicle-pair-request.png" width="500" alt="Pairing request on the car screen">
 
 After pairing, test with something obvious such as **Flash Lights** or **Honk Horn**.
 
