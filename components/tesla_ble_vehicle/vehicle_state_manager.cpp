@@ -53,6 +53,9 @@ static_assert(CarServer_ClimateState_ClimateKeeperMode_Party_tag == state_text::
 static_assert(CarServer_ClimateState_DefrostMode_Off_tag == state_text::kDefrostOff);
 static_assert(CarServer_ClimateState_DefrostMode_Normal_tag == state_text::kDefrostNormal);
 static_assert(CarServer_ClimateState_DefrostMode_Max_tag == state_text::kDefrostMax);
+static_assert(static_cast<int>(CarServer_ClimateState_CopActivationTemp_CopActivationTempLow) == state_text::kCopTempLow);
+static_assert(static_cast<int>(CarServer_ClimateState_CopActivationTemp_CopActivationTempMedium) == state_text::kCopTempMedium);
+static_assert(static_cast<int>(CarServer_ClimateState_CopActivationTemp_CopActivationTempHigh) == state_text::kCopTempHigh);
 static_assert(CarServer_ChargePortLatchState_SNA_tag == state_text::kLatchSNA);
 static_assert(CarServer_ChargePortLatchState_Disengaged_tag == state_text::kLatchDisengaged);
 static_assert(CarServer_ChargePortLatchState_Engaged_tag == state_text::kLatchEngaged);
@@ -543,6 +546,13 @@ void VehicleStateManager::update_climate_state(const CarServer_ClimateState& cli
         if (mode_name != nullptr) {
             cabin_overheat_select_->publish_state(mode_name);
         }
+    }
+
+    // Cabin overheat protection activation temperature
+    if (climate_state.which_optional_cop_activation_temperature && cabin_overheat_temp_select_ != nullptr) {
+        const char *option = state_text::cop_temp_option(
+            static_cast<int>(climate_state.optional_cop_activation_temperature.cop_activation_temperature));
+        if (option != nullptr) cabin_overheat_temp_select_->publish_state(option);
     }
 
     if (climate_state.which_optional_cabin_overheat_protection_actively_cooling) {

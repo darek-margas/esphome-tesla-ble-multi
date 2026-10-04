@@ -70,6 +70,10 @@ TeslaClimate = tesla_ble_vehicle_ns.class_("TeslaClimate", climate.Climate)
 
 # Custom select classes
 TeslaCabinOverheatSelect = tesla_ble_vehicle_ns.class_("TeslaCabinOverheatSelect", select.Select)
+TeslaCabinOverheatTempSelect = tesla_ble_vehicle_ns.class_("TeslaCabinOverheatTempSelect", select.Select)
+TeslaLowPowerModeSwitch = tesla_ble_vehicle_ns.class_("TeslaLowPowerModeSwitch", switch.Switch)
+TeslaKeepAccessoryPowerSwitch = tesla_ble_vehicle_ns.class_("TeslaKeepAccessoryPowerSwitch", switch.Switch)
+TeslaGuestModeSwitch = tesla_ble_vehicle_ns.class_("TeslaGuestModeSwitch", switch.Switch)
 
 # Custom number classes
 TeslaChargingAmpsNumber = tesla_ble_vehicle_ns.class_("TeslaChargingAmpsNumber", number.Number)
@@ -273,6 +277,10 @@ SWITCHES = [
     {"id": "sentry_mode", "name": "Sentry Mode", "class": TeslaSentryModeSwitch, "setter": "set_sentry_mode_switch", "icon": "mdi:shield-car"},
     # On = "start charging at" the Scheduled Charging Start time
     {"id": "scheduled_charging", "name": "Scheduled Charging", "class": TeslaScheduledChargingSwitch, "setter": "set_scheduled_charging_switch", "icon": "mdi:calendar-clock"},
+    # Not reported by the car over BLE: show the last state that was set (assumed state)
+    {"id": "low_power_mode", "name": "Low Power Mode", "class": TeslaLowPowerModeSwitch, "setter": None, "icon": "mdi:leaf"},
+    {"id": "keep_accessory_power", "name": "Keep Accessory Power", "class": TeslaKeepAccessoryPowerSwitch, "setter": None, "icon": "mdi:power-socket"},
+    {"id": "guest_mode", "name": "Guest Mode", "class": TeslaGuestModeSwitch, "setter": None, "icon": "mdi:account-key"},
 ]
 
 SELECTS = [
@@ -283,6 +291,14 @@ SELECTS = [
         "setter": "set_cabin_overheat_select",
         "icon": "mdi:car-defrost-front",
         "options": ["Off", "On", "Fan Only"],
+    },
+    {
+        "id": "cabin_overheat_temp",
+        "name": "Cabin Overheat Temperature",
+        "class": TeslaCabinOverheatTempSelect,
+        "setter": "set_cabin_overheat_temp_select",
+        "icon": "mdi:thermometer-alert",
+        "options": ["30 °C", "35 °C", "40 °C"],
     },
 ]
 

@@ -71,6 +71,7 @@ public:
     }
     void set_charging_limit_number(number::Number* number) { charging_limit_number_ = number; }
     void set_cabin_overheat_select(select::Select* sel) { cabin_overheat_select_ = sel; }
+    void set_cabin_overheat_temp_select(select::Select* sel) { cabin_overheat_temp_select_ = sel; }
     void set_scheduled_charging_switch(switch_::Switch* sw) { scheduled_charging_switch_ = sw; }
     void set_scheduled_charging_time(datetime::TimeEntity* time) { scheduled_charging_time_ = time; }
     int scheduled_charging_minutes() const { return scheduled_charging_minutes_; }  // -1 = unknown
@@ -189,6 +190,7 @@ private:
     number::Number* charging_amps_number_{nullptr};
     number::Number* charging_limit_number_{nullptr};
     select::Select* cabin_overheat_select_{nullptr};
+    select::Select* cabin_overheat_temp_select_{nullptr};
     switch_::Switch* scheduled_charging_switch_{nullptr};
     datetime::TimeEntity* scheduled_charging_time_{nullptr};
     int scheduled_charging_minutes_{-1};

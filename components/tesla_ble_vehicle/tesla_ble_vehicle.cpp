@@ -184,6 +184,8 @@ void TeslaBLEVehicle::configure_pending_sensors() {
     state_manager_->set_charging_limit_number(pending_charging_limit_number_);
   if (pending_cabin_overheat_select_)
     state_manager_->set_cabin_overheat_select(pending_cabin_overheat_select_);
+  if (pending_cabin_overheat_temp_select_)
+    state_manager_->set_cabin_overheat_temp_select(pending_cabin_overheat_temp_select_);
   if (pending_scheduled_charging_switch_)
     state_manager_->set_scheduled_charging_switch(pending_scheduled_charging_switch_);
   if (pending_scheduled_charging_time_)
@@ -845,6 +847,12 @@ void TeslaBLEVehicle::set_scheduled_charging_time_entity(datetime::TimeEntity *t
   pending_scheduled_charging_time_ = time;
   if (state_manager_)
     state_manager_->set_scheduled_charging_time(time);
+}
+
+void TeslaBLEVehicle::set_cabin_overheat_temp_select(select::Select *sel) {
+  pending_cabin_overheat_temp_select_ = sel;
+  if (state_manager_)
+    state_manager_->set_cabin_overheat_temp_select(sel);
 }
 
 void TeslaBLEVehicle::set_cabin_overheat_select(select::Select *sel) {
@@ -1585,6 +1593,60 @@ void TeslaBLEVehicle::send_scheduled_charging_(bool enabled, int minutes) {
         // switch / time back to what the car really has.
         schedule_state_refresh_(ControlStateRefresh::CHARGE_STATE);
       });
+}
+
+void TeslaBLEVehicle::set_cabin_overheat_temp(int level) {
+  const char *option = state_text::cop_temp_option(level);
+  if (option == nullptr) {
+    ESP_LOGW(TAG, "Invalid cabin overheat protection temperature level: %d", level);
+    return;
+  }
+  ESP_LOGI(TAG, "Cabin overheat protection temperature %s requested", option);
+  const int32_t value = level;
+  send_command_with_tracking(
+      UniversalMessage_Domain_DOMAIN_INFOTAINMENT, std::string("Overheat Temp ") + option,
+      [value](TeslaBLE::Client *client, uint8_t *buff, size_t *len) {
+        return client->build_car_server_vehicle_action_message(
+            buff, len, CarServer_VehicleAction_setCopTempAction_tag, &value);
+      },
+      TeslaBLE::WakePolicy::WAKE_IF_NEEDED,
+      [this](bool succeeded) {
+        // Read back the climate state: shows the new level, or puts the
+        // select back if the car did not take it
+        schedule_state_refresh_(ControlStateRefresh::CLIMATE_STATE);
+      });
+}
+
+void TeslaBLEVehicle::send_assumed_switch_(const char *name_on, const char *name_off, int32_t action_tag,
+                                           bool enable, switch_::Switch *sw) {
+  const char *name = enable ? name_on : name_off;
+  ESP_LOGI(TAG, "%s requested", name);
+  send_command_with_tracking(
+      UniversalMessage_Domain_DOMAIN_INFOTAINMENT, name,
+      [action_tag, enable](TeslaBLE::Client *client, uint8_t *buff, size_t *len) {
+        return client->build_car_server_vehicle_action_message(buff, len, action_tag, &enable);
+      },
+      TeslaBLE::WakePolicy::WAKE_IF_NEEDED,
+      [sw, enable](bool succeeded) {
+        // The car does not report these modes: show what was set, or keep the
+        // previous state if the command failed
+        if (sw == nullptr) return;
+        sw->publish_state(succeeded ? enable : sw->state);
+      });
+}
+
+void TeslaBLEVehicle::set_low_power_mode(bool enable, switch_::Switch *sw) {
+  send_assumed_switch_("Low Power Mode On", "Low Power Mode Off",
+                       CarServer_VehicleAction_setLowPowerModeAction_tag, enable, sw);
+}
+
+void TeslaBLEVehicle::set_keep_accessory_power(bool enable, switch_::Switch *sw) {
+  send_assumed_switch_("Keep Accessory Power On", "Keep Accessory Power Off",
+                       CarServer_VehicleAction_setKeepAccessoryPowerModeAction_tag, enable, sw);
+}
+
+void TeslaBLEVehicle::set_guest_mode(bool enable, switch_::Switch *sw) {
+  send_assumed_switch_("Guest Mode On", "Guest Mode Off", CarServer_VehicleAction_guestModeAction_tag, enable, sw);
 }
 
 void TeslaBLEVehicle::set_cabin_overheat_protection(int mode) {

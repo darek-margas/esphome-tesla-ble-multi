@@ -302,6 +302,30 @@ inline std::optional<LatchLock> charge_port_latch_lock(int latch_tag, std::optio
   }
 }
 
+// Cabin overheat protection activation temperature (ClimateState.CopActivationTemp)
+constexpr int kCopTempLow = 1;
+constexpr int kCopTempMedium = 2;
+constexpr int kCopTempHigh = 3;
+
+inline const char *cop_temp_option(int level) {
+  switch (level) {
+    case kCopTempLow:
+      return "30 \u00b0C";
+    case kCopTempMedium:
+      return "35 \u00b0C";
+    case kCopTempHigh:
+      return "40 \u00b0C";
+    default:
+      return nullptr;
+  }
+}
+
+inline std::optional<int> cop_temp_level(const std::string &option) {
+  for (int level = kCopTempLow; level <= kCopTempHigh; level++)
+    if (option == cop_temp_option(level)) return level;
+  return std::nullopt;
+}
+
 // Climate entity preset from the car's climate keeper and defrost state, using
 // the preset names TeslaClimate offers. 0 = field not reported. nullptr when
 // the state does not tell (the entity keeps its current preset).

@@ -30,6 +30,7 @@
 #include "storage_adapter_impl.h"
 #include <vehicle.h>
 #include "vehicle_state_manager.h"
+#include "state_text.h"
 
 namespace esphome {
 namespace tesla_ble_vehicle {
@@ -108,6 +109,7 @@ public:
     void set_charging_amps_number(number::Number *number);
     void set_charging_limit_number(number::Number *number);
     void set_cabin_overheat_select(select::Select *sel);
+    void set_cabin_overheat_temp_select(select::Select *sel);
     void set_scheduled_charging_switch(switch_::Switch *sw);
     void set_scheduled_charging_time_entity(datetime::TimeEntity *time);
 
@@ -161,6 +163,10 @@ public:
     void set_bioweapon_mode(bool enable);
     void set_preconditioning_max(bool enable);  // Defrost
     void set_cabin_overheat_protection(int mode);  // 0=Off, 1=On, 2=Fan Only
+    void set_cabin_overheat_temp(int level);  // 1=Low (30 C), 2=Medium (35 C), 3=High (40 C)
+    void set_low_power_mode(bool enable, switch_::Switch *sw);
+    void set_keep_accessory_power(bool enable, switch_::Switch *sw);
+    void set_guest_mode(bool enable, switch_::Switch *sw);
     // Scheduled charging ("start charging at"): the switch keeps the car's
     // time; setting the time also enables it. minutes = after midnight.
     void set_scheduled_charging(bool enabled);
@@ -393,6 +399,9 @@ private:
     number::Number *pending_charging_amps_number_{nullptr};
     number::Number *pending_charging_limit_number_{nullptr};
     select::Select *pending_cabin_overheat_select_{nullptr};
+    select::Select *pending_cabin_overheat_temp_select_{nullptr};
+    void send_assumed_switch_(const char *name_on, const char *name_off, int32_t action_tag, bool enable,
+                              switch_::Switch *sw);
     switch_::Switch *pending_scheduled_charging_switch_{nullptr};
     datetime::TimeEntity *pending_scheduled_charging_time_{nullptr};
     void send_scheduled_charging_(bool enabled, int minutes);
@@ -532,6 +541,32 @@ DEFINE_TESLA_SWITCH(TeslaChargingSwitch, set_charging_state)
 DEFINE_TESLA_SWITCH(TeslaSteeringWheelHeatSwitch, set_steering_wheel_heat)
 DEFINE_TESLA_SWITCH(TeslaSentryModeSwitch, set_sentry_mode)
 DEFINE_TESLA_SWITCH(TeslaScheduledChargingSwitch, set_scheduled_charging)
+
+// Modes the car does not report over BLE: the switch shows the last state
+// that was set successfully (assumed state, both buttons shown).
+#define DEFINE_TESLA_ASSUMED_SWITCH(ClassName, ParentMethod) \
+    class ClassName : public TeslaSwitchBase { \
+    public: \
+        bool assumed_state() override { return true; } \
+    protected: \
+        void write_state(bool state) override { \
+            if (parent_) parent_->ParentMethod(state, this); \
+        } \
+    };
+
+DEFINE_TESLA_ASSUMED_SWITCH(TeslaLowPowerModeSwitch, set_low_power_mode)
+DEFINE_TESLA_ASSUMED_SWITCH(TeslaKeepAccessoryPowerSwitch, set_keep_accessory_power)
+DEFINE_TESLA_ASSUMED_SWITCH(TeslaGuestModeSwitch, set_guest_mode)
+
+// Cabin overheat protection activation temperature
+class TeslaCabinOverheatTempSelect : public WithParent<select::Select> {
+protected:
+    void control(const std::string &value) override {
+        if (!parent_) return;
+        auto level = state_text::cop_temp_level(value);
+        if (level.has_value()) parent_->set_cabin_overheat_temp(*level);
+    }
+};
 
 // "Start charging at" time; read back from the car's charge state
 class TeslaScheduledChargingTime : public WithParent<datetime::TimeEntity> {

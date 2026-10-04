@@ -194,6 +194,16 @@ static void test_charge_port_latch_lock() {
   CHECK(charge_port_latch_lock(kLatchDisengaged, true, true) == L::UNLOCKED);
 }
 
+static void test_cop_temp() {
+  CHECK_STR(std::string(cop_temp_option(kCopTempLow)), "30 \u00b0C");
+  CHECK_STR(std::string(cop_temp_option(kCopTempHigh)), "40 \u00b0C");
+  CHECK(cop_temp_option(0) == nullptr);
+  CHECK(cop_temp_level("35 \u00b0C") == std::optional<int>(kCopTempMedium));
+  CHECK(!cop_temp_level("50 \u00b0C").has_value());
+  for (int level = kCopTempLow; level <= kCopTempHigh; level++)
+    CHECK(cop_temp_level(cop_temp_option(level)) == std::optional<int>(level));
+}
+
 int main() {
   test_sleep_status();
   test_lock_status();
@@ -214,6 +224,7 @@ int main() {
   test_closure_open();
   test_steering_wheel_heat_level();
   test_charge_port_latch_lock();
+  test_cop_temp();
 
   return test_summary();
 }
