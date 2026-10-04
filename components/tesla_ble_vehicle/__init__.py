@@ -174,15 +174,17 @@ BINARY_SENSORS = [
     # Drive sensors
     {"id": "parking_brake", "name": "Parking Brake", "icon": "mdi:car-brake-parking"},
     
-    # Individual closure sensors (disabled by default since covers/locks show aggregate state)
-    {"id": "door_driver_front", "name": "Door Driver Front", "icon": "mdi:car-door", "device_class": "door", "disabled_by_default": True},
-    {"id": "door_driver_rear", "name": "Door Driver Rear", "icon": "mdi:car-door", "device_class": "door", "disabled_by_default": True},
-    {"id": "door_passenger_front", "name": "Door Passenger Front", "icon": "mdi:car-door", "device_class": "door", "disabled_by_default": True},
-    {"id": "door_passenger_rear", "name": "Door Passenger Rear", "icon": "mdi:car-door", "device_class": "door", "disabled_by_default": True},
-    {"id": "window_driver_front", "name": "Window Driver Front", "icon": "mdi:car-door", "device_class": "window", "disabled_by_default": True},
-    {"id": "window_driver_rear", "name": "Window Driver Rear", "icon": "mdi:car-door", "device_class": "window", "disabled_by_default": True},
-    {"id": "window_passenger_front", "name": "Window Passenger Front", "icon": "mdi:car-door", "device_class": "window", "disabled_by_default": True},
-    {"id": "window_passenger_rear", "name": "Window Passenger Rear", "icon": "mdi:car-door", "device_class": "window", "disabled_by_default": True},
+    # Individual closures. No fixed icon: Home Assistant shows open/closed door
+    # and window icons and colours them by state. Doors follow VCSEC (current
+    # while asleep); windows and sunroof follow the infotainment poll.
+    {"id": "door_driver_front", "name": "Door Driver Front", "device_class": "door"},
+    {"id": "door_driver_rear", "name": "Door Driver Rear", "device_class": "door"},
+    {"id": "door_passenger_front", "name": "Door Passenger Front", "device_class": "door"},
+    {"id": "door_passenger_rear", "name": "Door Passenger Rear", "device_class": "door"},
+    {"id": "window_driver_front", "name": "Window Driver Front", "device_class": "window"},
+    {"id": "window_driver_rear", "name": "Window Driver Rear", "device_class": "window"},
+    {"id": "window_passenger_front", "name": "Window Passenger Front", "device_class": "window"},
+    {"id": "window_passenger_rear", "name": "Window Passenger Rear", "device_class": "window"},
     {"id": "sunroof", "name": "Sunroof", "icon": "mdi:car-select", "device_class": "window", "disabled_by_default": True},
 
 ]
@@ -222,7 +224,7 @@ SENSORS = [
     {"id": "speed_limit", "name": "Speed Limit", "icon": "mdi:speedometer-slow", "device_class": "speed", "unit": "km/h", "accuracy_decimals": 0, "state_class": "measurement"},
 
     # Drive state sensors
-    {"id": "odometer", "name": "Odometer", "icon": "mdi:counter", "device_class": "distance", "unit": "km", "disabled_by_default": True, "state_class": "total_increasing"},
+    {"id": "odometer", "name": "Odometer", "icon": "mdi:counter", "device_class": "distance", "unit": "km", "state_class": "total_increasing"},
     
     # Tire pressure sensors
     {"id": "tpms_front_left", "name": "TPMS Front Left", "icon": "mdi:car-tire-alert", "device_class": "pressure", "unit": "bar", "accuracy_decimals": 1, "state_class": "measurement"},
