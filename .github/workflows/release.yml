@@ -36,21 +36,26 @@ jobs:
           TAG="v$VERSION"
 
           cat > /tmp/release-notes.md <<'EOF'
-          ## Smarter icons and README screenshots
+          ## Fix: locks stuck on Locking / Unlocking; no doubled car names
 
-          Small follow-up to v2026.10.4: icons and documentation only. No change to the BLE link, polling or what is read from the cars.
+          Two fixes on top of v2026.10.4.1.
 
-          ### Icons
-          - **TPMS pressure sensors:** plain tyre (`mdi:tire`) instead of the tyre-with-alert icon, which looked like a warning even with correct pressure. The alert tyre stays on the TPMS warning sensors.
-          - **Battery Heater:** heating element (`mdi:heating-coil`) instead of the battery-health icon.
-          - **Estimated Range / Ideal Range:** their own icons (`mdi:map-marker-path`, `mdi:map-marker-check`), so they are told apart from Range.
+          ### Charge Port Latch (and Doors) no longer stick on Locking / Unlocking
+          The **Charge Port Latch** lock moves the charge port flap (Lock closes it, Unlock opens it and releases a cable), but its state comes from the cable latch. After a click it showed *Locking* / *Unlocking* and waited for a poll to report something else, which went wrong two ways:
+          - nothing re-read the state after the command, and with an idle car the next charge poll can be 11 minutes away;
+          - with no cable plugged in the car reports the latch as "not available", which was ignored - so the entity stayed *Locking* / *Unlocking* for good while the flap had long finished moving.
 
-          Icons show on enabled entities; Home Assistant's list of disabled/hidden entities shows its status marker instead.
+          Now:
+          - after a lock / unlock command the state is read again (charge state after 1.5 s and 8 s for the latch, VCSEC after 2 s for the doors). If the command fails or nothing new arrives within 20 s, the entity returns to the last state the car reported.
+          - the latch shows *Locked* (cable held), *Unlocked* (cable free) or *Jammed*; with **no cable** it follows the charge port flap: closed = *Locked*, open = *Unlocked*.
 
-          ### README
-          - A small preview next to the intro shows a car in Home Assistant (controls, sensors, diagnostics, devices); it links to the full-size screenshots.
-          - Current screenshots in their sections: one device per car under the ESP32 node (*Home Assistant sub-devices*), a car's controls, sensors and diagnostics (*A car in Home Assistant*), the ESP32 node page (*Parent device controls*, MAC blurred) and the pairing request on the car screen (*Pairing*).
-          - The outdated screenshots from the original single-car project are removed.
+          ### No doubled car names
+          With a Home Assistant sub-device per car (`device_id`), Home Assistant puts the device name in front of every entity name, and the entity name already started with the car name - giving names like "Car One Car One Charge Port Latch". Entities on a car's own device are now named without the car name ("Car One Charge Port Latch"). Without `device_id` nothing changes. ESPHome keys entities per device, so equal names on two cars do not collide.
+
+          **After updating (only with `device_id`):** the entity names are part of each entity's identity, so Home Assistant creates **new entities** with shorter IDs (for example `lock.car_one_charge_port_latch`) and the old ones show as unavailable.
+          - Delete the old, unavailable entities (Settings → Entities, filter by status).
+          - Update automations, scripts and dashboards that use the old entity IDs - or, after deleting an old entity, rename the new entity's ID back to the old one.
+          - History starts fresh on the new entities.
 
           Library unchanged: [darek-margas/tesla-ble](https://github.com/darek-margas/tesla-ble) `v5.2.0`.
           EOF
