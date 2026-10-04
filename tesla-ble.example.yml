@@ -41,22 +41,23 @@ dashboard_import:
 #     continuous: true          # required: finds cars and detects presence
 #
 # tesla_ble_vehicle:
-#   - id: orka
-#     name: Orka
-#     vin: !secret tesla_vin_orka
-#     ble_mac_address: !secret ble_mac_address_orka
+#   - id: car_one
+#     name: Car One
+#     vin: !secret tesla_vin_car_one
+#     ble_mac_address: !secret ble_mac_address_car_one
 #     vcsec_poll_interval: "60"               # also how often this car asks for a BLE turn
 #     infotainment_poll_interval_awake: "120"
 #     infotainment_poll_interval_active: "60"
 #     infotainment_sleep_timeout: "660"
+#     wake_on_boot: true              # per car: wake it once after the ESP32 boots to fill sensors
 #     # Optional, shown with their defaults:
-#     # wake_on_boot: true          # wake the car once after boot to fill sensors
 #     # connection_interval: 15ms   # BLE link interval, same for every car
 #     # supervision_timeout: 6s     # BLE link timeout
 #   - id: car_two
 #     name: Car Two
 #     vin: !secret tesla_vin_car_two
 #     ble_mac_address: !secret ble_mac_address_car_two
+#     wake_on_boot: false             # e.g. a car you rarely use: do not wake it on every ESP32 reboot
 #     vcsec_poll_interval: "60"
 #     infotainment_poll_interval_awake: "120"
 #     infotainment_poll_interval_active: "60"

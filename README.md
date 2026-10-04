@@ -74,8 +74,9 @@ tesla_ble_vehicle:
     infotainment_poll_interval_active: ${infotainment_poll_interval_active}
     infotainment_sleep_timeout: ${infotainment_sleep_timeout}
 
+    wake_on_boot: true            # per car, default true: wake once after boot to fill sensors
+
     # Optional, shown with their defaults:
-    # wake_on_boot: true          # wake the car once after boot to fill sensors
     # connection_interval: 15ms   # BLE link interval
     # supervision_timeout: 6s     # BLE link timeout
 
@@ -85,6 +86,7 @@ tesla_ble_vehicle:
 
     vin: !secret tesla_vin_car_two
     ble_mac_address: !secret ble_mac_address_car_two
+    wake_on_boot: false           # this car is not woken after an ESP32 reboot
 
     role: DRIVER
     charging_amps_max: ${charging_amps_max}
@@ -126,7 +128,13 @@ Per car, under `tesla_ble_vehicle:`:
 | `connection_interval` | `15ms` | BLE connection interval (7.5 ms - 4 s). Shorter = faster messages and service discovery. Keep it the same for every car |
 | `supervision_timeout` | `6s` | BLE link timeout (100 ms - 32 s, must be more than twice the interval) |
 
-The defaults of the last three suit almost every setup; you normally leave them out.
+The defaults of the last two suit almost every setup; you normally leave them out.
+
+### Waking a car after boot (`wake_on_boot`)
+
+After the ESP32 boots it knows nothing about the cars. VCSEC (locked, asleep, doors, charge port) is read without waking anything, but charge, climate, tyres and the rest come from the infotainment system, which only answers while the car is awake. With `wake_on_boot: true` (the default) the first infotainment poll after boot wakes the car once, so every sensor has a value within a minute or two. After that the normal policy applies and the car is never woken by polling again.
+
+The option is per car. Set `wake_on_boot: false` on a car you would rather not disturb - for example one that is rarely used, parked far from the ESP32, or where every wake costs battery you care about. Its infotainment sensors then stay empty after a reboot until the car wakes on its own (you unlock it, it starts charging, you use the app) or you press *Force data update*. VCSEC-based entities (Asleep, Doors lock, door/trunk/frunk state, charge port) fill in right away either way.
 
 ## How it works
 
