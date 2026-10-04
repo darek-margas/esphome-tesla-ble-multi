@@ -151,7 +151,7 @@ BINARY_SENSORS = [
     {"id": "preconditioning", "name": "Preconditioning", "icon": "mdi:car-defrost-front", "device_class": "running"},
     {"id": "front_defroster", "name": "Front Defroster", "icon": "mdi:car-defrost-front", "device_class": "running"},
     {"id": "rear_defroster", "name": "Rear Defroster", "icon": "mdi:car-defrost-rear", "device_class": "running"},
-    {"id": "battery_heater", "name": "Battery Heater", "icon": "mdi:battery-heart-variant", "device_class": "running"},
+    {"id": "battery_heater", "name": "Battery Heater", "icon": "mdi:heating-coil", "device_class": "running"},
     {"id": "battery_heater_no_power", "name": "Battery Heater No Power", "icon": "mdi:battery-alert", "device_class": "problem"},
     # Seat heaters: Running when heating at any level (level in the text sensors)
     {"id": "seat_heater_front_left", "name": "Seat Heater Front Left", "icon": "mdi:car-seat-heater", "device_class": "running"},
@@ -202,8 +202,8 @@ SENSORS = [
     # Charge state sensors
     {"id": "battery_level", "name": "Battery", "unit": "%", "device_class": "battery", "state_class": "measurement"},
     {"id": "range", "name": "Range", "icon": "mdi:map-marker-distance", "device_class": "distance", "unit": "km", "state_class": "measurement"},
-    {"id": "est_battery_range", "name": "Estimated Range", "icon": "mdi:map-marker-distance", "device_class": "distance", "unit": "km", "disabled_by_default": True, "state_class": "measurement"},
-    {"id": "ideal_battery_range", "name": "Ideal Range", "icon": "mdi:map-marker-distance", "device_class": "distance", "unit": "km", "disabled_by_default": True, "state_class": "measurement"},
+    {"id": "est_battery_range", "name": "Estimated Range", "icon": "mdi:map-marker-path", "device_class": "distance", "unit": "km", "disabled_by_default": True, "state_class": "measurement"},
+    {"id": "ideal_battery_range", "name": "Ideal Range", "icon": "mdi:map-marker-check", "device_class": "distance", "unit": "km", "disabled_by_default": True, "state_class": "measurement"},
     {"id": "usable_battery_level", "name": "Usable Battery", "unit": "%", "device_class": "battery", "state_class": "measurement"},
     {"id": "charger_power", "name": "Charger Power", "icon": "mdi:flash", "device_class": "power", "unit": "kW", "state_class": "measurement"},
     {"id": "charger_voltage", "name": "Charger Voltage", "icon": "mdi:lightning-bolt", "device_class": "voltage", "unit": "V", "state_class": "measurement"},
@@ -232,10 +232,10 @@ SENSORS = [
     {"id": "odometer", "name": "Odometer", "icon": "mdi:counter", "device_class": "distance", "unit": "km", "state_class": "total_increasing"},
     
     # Tire pressure sensors
-    {"id": "tpms_front_left", "name": "TPMS Front Left", "icon": "mdi:car-tire-alert", "device_class": "pressure", "unit": "bar", "accuracy_decimals": 1, "state_class": "measurement"},
-    {"id": "tpms_front_right", "name": "TPMS Front Right", "icon": "mdi:car-tire-alert", "device_class": "pressure", "unit": "bar", "accuracy_decimals": 1, "state_class": "measurement"},
-    {"id": "tpms_rear_left", "name": "TPMS Rear Left", "icon": "mdi:car-tire-alert", "device_class": "pressure", "unit": "bar", "accuracy_decimals": 1, "state_class": "measurement"},
-    {"id": "tpms_rear_right", "name": "TPMS Rear Right", "icon": "mdi:car-tire-alert", "device_class": "pressure", "unit": "bar", "accuracy_decimals": 1, "state_class": "measurement"},
+    {"id": "tpms_front_left", "name": "TPMS Front Left", "icon": "mdi:tire", "device_class": "pressure", "unit": "bar", "accuracy_decimals": 1, "state_class": "measurement"},
+    {"id": "tpms_front_right", "name": "TPMS Front Right", "icon": "mdi:tire", "device_class": "pressure", "unit": "bar", "accuracy_decimals": 1, "state_class": "measurement"},
+    {"id": "tpms_rear_left", "name": "TPMS Rear Left", "icon": "mdi:tire", "device_class": "pressure", "unit": "bar", "accuracy_decimals": 1, "state_class": "measurement"},
+    {"id": "tpms_rear_right", "name": "TPMS Rear Right", "icon": "mdi:tire", "device_class": "pressure", "unit": "bar", "accuracy_decimals": 1, "state_class": "measurement"},
 ]
 
 TEXT_SENSORS = [
