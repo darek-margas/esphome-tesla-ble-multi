@@ -279,11 +279,15 @@ inline std::optional<bool> closure_open(int state) {
 
 // Charge Port Latch lock entity state from the latch and the charge port door.
 enum class LatchLock { UNLOCKED, LOCKED, JAMMED };
-// Engaged = cable held, Disengaged = cable free, Blocking = jammed. SNA (no
-// cable / not available) follows the charge port door, which is what the
-// lock / unlock commands move then: closed = locked, open = unlocked.
-// Nothing when neither tells.
-inline std::optional<LatchLock> charge_port_latch_lock(int latch_tag, std::optional<bool> door_open) {
+// Engaged = cable held, Disengaged = cable free, Blocking = jammed. With no
+// cable (not connected, or latch SNA) it follows the charge port door, which
+// is what the lock / unlock commands move then: closed = locked, open =
+// unlocked - the car briefly reports the pin as engaged while the flap moves,
+// so the latch is ignored without a cable. Nothing when neither tells.
+inline std::optional<LatchLock> charge_port_latch_lock(int latch_tag, std::optional<bool> door_open,
+                                                       std::optional<bool> cable_connected = std::nullopt) {
+  if (cable_connected.has_value() && !*cable_connected && door_open.has_value())
+    return *door_open ? LatchLock::UNLOCKED : LatchLock::LOCKED;
   switch (latch_tag) {
     case kLatchEngaged:
       return LatchLock::LOCKED;

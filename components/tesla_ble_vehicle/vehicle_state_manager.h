@@ -218,6 +218,7 @@ private:
     bool sentry_mode_available_{true};
     int latch_tag_{0};
     std::optional<bool> charge_port_door_open_;
+    std::optional<bool> cable_connected_;
     lock::LockState latch_lock_state_{lock::LOCK_STATE_NONE};
     std::optional<bool> doors_unlocked_;
     void update_charge_port_latch_lock_();

@@ -186,6 +186,12 @@ static void test_charge_port_latch_lock() {
   CHECK(charge_port_latch_lock(kLatchSNA, true) == L::UNLOCKED);
   CHECK(charge_port_latch_lock(0, true) == L::UNLOCKED);
   CHECK(!charge_port_latch_lock(kLatchSNA, std::nullopt).has_value());
+  // No cable: the latch pin briefly reads engaged while the flap opens - follow the flap
+  CHECK(charge_port_latch_lock(kLatchEngaged, true, false) == L::UNLOCKED);
+  CHECK(charge_port_latch_lock(kLatchEngaged, false, false) == L::LOCKED);
+  // Cable connected: the latch decides
+  CHECK(charge_port_latch_lock(kLatchEngaged, true, true) == L::LOCKED);
+  CHECK(charge_port_latch_lock(kLatchDisengaged, true, true) == L::UNLOCKED);
 }
 
 int main() {

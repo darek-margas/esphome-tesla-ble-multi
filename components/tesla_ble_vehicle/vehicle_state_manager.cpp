@@ -254,6 +254,7 @@ void VehicleStateManager::update_charge_state(const CarServer_ChargeState& charg
         // Update charger connected binary sensor
         const bool charger_connected = state_text::charger_connected(charge_state.charging_state.which_type);
         publish_binary_sensor("charger", charger_connected);
+        cable_connected_ = charger_connected;
         if (!charger_connected) {
             // No cable: clear cached estimate inputs so a later reconnect without voltage doesn't reuse stale AC voltage.
             // The sensors keep showing the last charging session's values.
@@ -833,8 +834,9 @@ void VehicleStateManager::update_charge_flap_open(bool open) {
     publish_cover_open(charge_port_door_cover_, open);
     charge_port_door_open_ = open;
     // Without a cable the latch lock follows the door
-    if (latch_tag_ != state_text::kLatchEngaged && latch_tag_ != state_text::kLatchDisengaged &&
-        latch_tag_ != state_text::kLatchBlocking)
+    if ((cable_connected_.has_value() && !*cable_connected_) ||
+        (latch_tag_ != state_text::kLatchEngaged && latch_tag_ != state_text::kLatchDisengaged &&
+         latch_tag_ != state_text::kLatchBlocking))
         update_charge_port_latch_lock_();
 }
 
@@ -917,7 +919,7 @@ void VehicleStateManager::republish_scheduled_charging() {
 }
 
 void VehicleStateManager::update_charge_port_latch_lock_() {
-    auto st = state_text::charge_port_latch_lock(latch_tag_, charge_port_door_open_);
+    auto st = state_text::charge_port_latch_lock(latch_tag_, charge_port_door_open_, cable_connected_);
     if (!st.has_value()) return;
     latch_lock_state_ = *st == state_text::LatchLock::LOCKED   ? lock::LOCK_STATE_LOCKED
                       : *st == state_text::LatchLock::UNLOCKED ? lock::LOCK_STATE_UNLOCKED
