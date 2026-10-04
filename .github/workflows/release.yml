@@ -36,25 +36,41 @@ jobs:
           TAG="v$VERSION"
 
           cat > /tmp/release-notes.md <<'EOF'
-          ## Charge Port Latch settles reliably; car name in lock / cover log lines
+          ## Scheduled departure, Cabin Overheat temperature, Low Power / Keep Accessory / Guest Mode
 
-          Follow-up to v2026.10.4.2, from testing the Charge Port Latch on a car without a cable.
+          New controls that were missing compared with the Tesla app. They need new actions in the Tesla BLE library, so this release moves to the library fork **[darek-margas/tesla-ble](https://github.com/darek-margas/tesla-ble) `v5.2.0-dm.2`**.
 
-          ### The car keeps its BLE turn 10 s after a command
-          After a lock / unlock the state is read again 1.5 s and 8 s later to confirm it. In a log the car handed the BLE link to the other car before the 8 s read, so a wrong early reading stayed on screen until that car's next turn. After any command sent from Home Assistant the car now keeps its turn for 10 s (the 60 s maximum turn still applies), so the follow-up reads always run.
+          ### ⚠️ Change your YAML: library `v5.2.0-dm.2`
+          If your config pins the library itself (instead of using `packages/board.yml`), change it to:
 
-          ### Charge Port Latch follows the flap when no cable is connected
-          Right after the flap opened, the car briefly reported the latch pin as engaged - with no cable - so the lock showed *Locked* although the flap was open. Without a cable the latch means nothing, so whenever the charging state says no cable is connected, the lock now follows the charge port flap: open = *Unlocked*, closed = *Locked*. With a cable plugged in, the real latch still decides (*Locked* = cable held, *Unlocked* = cable free, *Jammed*).
-
-          ### Lock and cover changes logged with the car name
-          Since v2026.10.4.2 entity names on a car's own device leave out the car name, so the `[S]` state lines in the ESPHome log viewer (printed by the viewer from the entity name) no longer say which car. The firmware now logs each change of the Doors and Charge Port Latch locks and the Trunk, Frunk, Windows and Charge Port Door covers with the car name, once per change:
-
-          ```text
-          [Szarik] Charge Port Door: OPEN
-          [Szarik] Charge Port Latch: UNLOCKED
+          ```yaml
+          external_components:
+            - source:
+                type: git
+                url: https://github.com/darek-margas/tesla-ble.git
+                ref: v5.2.0-dm.2   # roll back: v5.2.0-dm.1
           ```
 
-          Library unchanged: [darek-margas/tesla-ble](https://github.com/darek-margas/tesla-ble) `v5.2.0`.
+          An older library now fails the build with a clear error at `set_scheduled_departure` instead of building firmware where the new controls do nothing (seen as `Unsupported vehicle action type: 66` in the log).
+
+          ### Cabin Overheat Protection: one select with the temperature
+          As in the Tesla app, a single select: **Off / Fan Only / On 30 °C / On 35 °C / On 40 °C**, read back from the car. The icon is now a snowflake thermometer (cooling) instead of the defroster, also on *Cabin Overheat Active*. The separate *Cabin Overheat Temperature* select is gone.
+
+          ### Scheduled departure
+          - **Scheduled Departure** (switch)
+          - **Scheduled Departure Time** (time picker; setting a time also turns departure on)
+          - **Departure Preconditioning** and **Departure Off-Peak Charging** (Off / All Week / Weekdays)
+          - **Off-Peak End Time** (time picker)
+
+          All of these are read back from the car's charge state. Each change sends the whole schedule, built from what the car last reported, then reads it back. The old *Scheduled Departure Time* text sensor is replaced by the time picker. *Not yet tested on the cars; please report if something does not stick.*
+
+          ### Low Power Mode, Keep Accessory Power, Guest Mode
+          New switches. The car does not report these over BLE, so they are **assumed state**: Home Assistant shows what was last sent, with separate On / Off buttons.
+
+          ### Clean up in Home Assistant
+          These entities are now *unavailable* and can be deleted: **Cabin Overheat Temperature** and the old **Scheduled Departure Time** text sensor.
+
+          Library: [darek-margas/tesla-ble](https://github.com/darek-margas/tesla-ble) `v5.2.0-dm.2` (upstream yoziru v5.2.0 plus guest mode, cabin overheat temperature, low power / keep accessory power and scheduled departure).
           EOF
 
           if gh release view "$TAG" >/dev/null 2>&1; then
