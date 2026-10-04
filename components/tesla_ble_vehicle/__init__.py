@@ -1,6 +1,6 @@
 import esphome.codegen as cg
 import esphome.config_validation as cv
-from esphome.components import esp32_ble, esp32_ble_client, esp32_ble_tracker, binary_sensor, button, switch, number, sensor, text_sensor, lock, cover, climate, select, datetime
+from esphome.components import esp32_ble, esp32_ble_client, esp32_ble_tracker, binary_sensor, button, switch, number, sensor, text_sensor, lock, cover, climate, select, datetime, media_player
 from esphome.components.esp32 import add_idf_sdkconfig_option
 from esphome.components.esp32_ble import BTLoggers
 from esphome.const import (
@@ -26,7 +26,7 @@ from esphome import automation
 
 CODEOWNERS = ["@yoziru"]
 DEPENDENCIES = ["esp32_ble_tracker"]
-AUTO_LOAD = ["esp32_ble_client", "binary_sensor", "button", "switch", "number", "sensor", "text_sensor", "lock", "cover", "climate", "select", "datetime"]
+AUTO_LOAD = ["esp32_ble_client", "binary_sensor", "button", "switch", "number", "sensor", "text_sensor", "lock", "cover", "climate", "select", "datetime", "media_player"]
 MULTI_CONF = True
 
 tesla_ble_vehicle_ns = cg.esphome_ns.namespace("tesla_ble_vehicle")
@@ -47,6 +47,8 @@ TeslaFlashLightsButton = tesla_ble_vehicle_ns.class_("TeslaFlashLightsButton", b
 TeslaHonkHornButton = tesla_ble_vehicle_ns.class_("TeslaHonkHornButton", button.Button)
 TeslaUnlatchDriverDoorButton = tesla_ble_vehicle_ns.class_("TeslaUnlatchDriverDoorButton", button.Button)
 TeslaReleaseChargeCableButton = tesla_ble_vehicle_ns.class_("TeslaReleaseChargeCableButton", button.Button)
+TeslaMediaNextTrackButton = tesla_ble_vehicle_ns.class_("TeslaMediaNextTrackButton", button.Button)
+TeslaMediaPreviousTrackButton = tesla_ble_vehicle_ns.class_("TeslaMediaPreviousTrackButton", button.Button)
 
 # Custom switch classes - generated via macro in C++, just reference here
 TeslaChargingSwitch = tesla_ble_vehicle_ns.class_("TeslaChargingSwitch", switch.Switch)
@@ -72,6 +74,9 @@ TeslaChargePortDoorCover = tesla_ble_vehicle_ns.class_("TeslaChargePortDoorCover
 
 # Custom climate class
 TeslaClimate = tesla_ble_vehicle_ns.class_("TeslaClimate", climate.Climate)
+
+# Custom media player class
+TeslaMediaPlayer = tesla_ble_vehicle_ns.class_("TeslaMediaPlayer", media_player.MediaPlayer)
 
 # Custom select classes
 TeslaCabinOverheatSelect = tesla_ble_vehicle_ns.class_("TeslaCabinOverheatSelect", select.Select)
@@ -259,6 +264,10 @@ TEXT_SENSORS = [
     {"id": "seat_heater_rear_center_level", "name": "Seat Heater Rear Center Level", "icon": "mdi:car-seat-heater", "disabled_by_default": True},
     {"id": "seat_heater_rear_right_level", "name": "Seat Heater Rear Right Level", "icon": "mdi:car-seat-heater", "disabled_by_default": True},
     {"id": "last_command", "name": "Last Command", "icon": "mdi:history", "entity_category": "diagnostic", "disabled_by_default": True, "setter": "set_last_command_text_sensor"},
+    # Now playing (the media player entity carries no titles); empty while nothing plays
+    {"id": "media_title", "name": "Media Title", "icon": "mdi:music-note"},
+    {"id": "media_artist", "name": "Media Artist", "icon": "mdi:account-music"},
+    {"id": "media_source", "name": "Media Source", "icon": "mdi:radio"},
 ]
 
 BUTTONS = [
@@ -272,6 +281,9 @@ BUTTONS = [
     # Vehicle controls
     {"id": "flash_lights", "name": "Flash Lights", "class": TeslaFlashLightsButton, "setter": None, "icon": "mdi:car-light-high"},
     {"id": "honk_horn", "name": "Sound Horn", "class": TeslaHonkHornButton, "setter": None, "icon": "mdi:bullhorn"},
+    # Track skip: Home Assistant does not offer next/previous on ESPHome media players
+    {"id": "media_next_track", "name": "Media Next Track", "class": TeslaMediaNextTrackButton, "setter": None, "icon": "mdi:skip-next"},
+    {"id": "media_previous_track", "name": "Media Previous Track", "class": TeslaMediaPreviousTrackButton, "setter": None, "icon": "mdi:skip-previous"},
 ]
 
 SWITCHES = [
@@ -344,6 +356,15 @@ CLIMATE = {
     "name": "Climate",
     "class": TeslaClimate,
     "setter": "set_climate",
+}
+
+# Media player entity: play/pause and volume; Off while the car is asleep
+MEDIA_PLAYER = {
+    "id": "media",
+    "name": "Media",
+    "class": TeslaMediaPlayer,
+    "setter": "set_media_player",
+    "icon": "mdi:car-speaker",
 }
 
 NUMBERS = [
@@ -586,6 +607,14 @@ async def create_climate_entity(var, definition, vehicle_id, vehicle_name, devic
     return _attach(var, clm, definition)
 
 
+async def create_media_player(var, definition, vehicle_id, vehicle_name, device_id=None):
+    """Create the media player entity and register with TeslaBLEVehicle."""
+    config = _base_config(definition, definition["class"], "media_player", vehicle_id, vehicle_name, device_id)
+    player = cg.new_Pvariable(config[CONF_ID])
+    await media_player.register_media_player(player, config)
+    return _attach(var, player, definition)
+
+
 # =============================================================================
 # CODE GENERATION
 # =============================================================================
@@ -665,6 +694,7 @@ async def to_code(config):
         await create_number(var, definition, config, vehicle_id, vehicle_name, device_id)
 
     await create_climate_entity(var, CLIMATE, vehicle_id, vehicle_name, device_id)
+    await create_media_player(var, MEDIA_PLAYER, vehicle_id, vehicle_name, device_id)
 
 
 # =============================================================================

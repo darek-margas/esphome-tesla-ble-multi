@@ -139,6 +139,8 @@ public:
     void update_ble_rssi(float rssi);
     void update_present(bool present);
     void update_ble_advert_rssi(float rssi);  // NAN when not heard
+    // Now playing; empty strings clear them (car asleep / nothing reported)
+    void update_media_text(const std::string& title, const std::string& artist, const std::string& source);
     
     // ==========================================================================
     // Connection state management

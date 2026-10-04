@@ -83,6 +83,15 @@ static_assert(static_cast<int>(CarServer_ChargeState_ChargeLimitReason_ChargeLim
 static_assert(static_cast<int>(CarServer_ChargeState_ChargeLimitReason_ChargeLimitReasonBattTempLow) == state_text::kLimitBattTempLow);
 static_assert(static_cast<int>(CarServer_ChargeState_ChargeLimitReason_ChargeLimitReasonHighSoc) == state_text::kLimitHighSoc);
 static_assert(static_cast<int>(CarServer_ChargeState_ChargeLimitReason_ChargeLimitReasonCabin) == state_text::kLimitCabin);
+static_assert(static_cast<int>(CarServer_MediaPlaybackStatus_Stopped) == state_text::kMediaStopped);
+static_assert(static_cast<int>(CarServer_MediaPlaybackStatus_Playing) == state_text::kMediaPlaying);
+static_assert(static_cast<int>(CarServer_MediaPlaybackStatus_Paused) == state_text::kMediaPaused);
+static_assert(static_cast<int>(CarServer_MediaSourceType_MediaSourceType_AM) == 1);
+static_assert(static_cast<int>(CarServer_MediaSourceType_MediaSourceType_Bluetooth) == 8);
+static_assert(static_cast<int>(CarServer_MediaSourceType_MediaSourceType_Spotify) == 12);
+static_assert(static_cast<int>(CarServer_MediaSourceType_MediaSourceType_MediaFile) == 16);
+static_assert(static_cast<int>(CarServer_MediaSourceType_MediaSourceType_Browser) == 28);
+static_assert(static_cast<int>(CarServer_MediaSourceType_MediaSourceType_Search) == 35);
 
 VehicleStateManager::VehicleStateManager(TeslaBLEVehicle* parent)
     : parent_(parent) {}
@@ -1000,6 +1009,13 @@ void VehicleStateManager::update_present(bool present) {
 
 void VehicleStateManager::update_ble_advert_rssi(float rssi) {
     publish_sensor("ble_advert_rssi", rssi);
+}
+
+void VehicleStateManager::update_media_text(const std::string& title, const std::string& artist,
+                                            const std::string& source) {
+    publish_text_sensor("media_title", title);
+    publish_text_sensor("media_artist", artist);
+    publish_text_sensor("media_source", source);
 }
 
 // =============================================================================

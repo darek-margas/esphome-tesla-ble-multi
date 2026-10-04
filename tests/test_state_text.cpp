@@ -233,6 +233,49 @@ static void test_departure_policy() {
   CHECK(!departure_policy("Weekends").has_value());
 }
 
+static void test_media_play_state() {
+  // Asleep: no media state to read
+  CHECK(media_play_state(true, kMediaPlaying) == MediaPlay::OFF);
+  CHECK(media_play_state(true, std::nullopt) == MediaPlay::OFF);
+  CHECK(media_play_state(false, kMediaPlaying) == MediaPlay::PLAYING);
+  CHECK(media_play_state(false, kMediaPaused) == MediaPlay::PAUSED);
+  CHECK(media_play_state(false, kMediaStopped) == MediaPlay::IDLE);
+  CHECK(media_play_state(false, std::nullopt) == MediaPlay::IDLE);
+  CHECK(media_play_state(false, 99) == MediaPlay::IDLE);
+}
+
+static void test_media_volume() {
+  // The car may report a maximum above 10, but only accepts 0-10
+  CHECK(media_volume_max(std::nullopt) == kMediaVolumeLimit);
+  CHECK(media_volume_max(10.333f) == kMediaVolumeLimit);
+  CHECK(media_volume_max(0.0f) == kMediaVolumeLimit);
+  CHECK(media_volume_max(8.0f) == 8.0f);
+
+  CHECK(media_volume_fraction(5.0f, 10.0f) == 0.5f);
+  CHECK(media_volume_fraction(10.333f, 10.0f) == 1.0f);
+  CHECK(media_volume_fraction(-1.0f, 10.0f) == 0.0f);
+  CHECK(media_volume_fraction(3.0f, 0.0f) == 0.0f);
+
+  CHECK(media_volume_absolute(0.5f, 10.0f) == 5.0f);
+  CHECK(media_volume_absolute(1.5f, 10.0f) == 10.0f);
+  CHECK(media_volume_absolute(-0.1f, 10.0f) == 0.0f);
+  // Round trip stays within what the car accepts
+  for (float f : {0.0f, 0.25f, 0.5f, 1.0f}) {
+    float absolute = media_volume_absolute(f, media_volume_max(10.333f));
+    CHECK(absolute >= 0.0f && absolute <= kMediaVolumeLimit);
+    CHECK(media_volume_fraction(absolute, media_volume_max(10.333f)) == f);
+  }
+}
+
+static void test_media_source() {
+  CHECK_OPT(media_source(12), std::string("Spotify"));
+  CHECK_OPT(media_source(8), std::string("Bluetooth"));
+  CHECK_OPT(media_source(2), std::string("FM"));
+  CHECK(!media_source(0).has_value());  // None
+  CHECK(!media_source(4).has_value());  // not defined by the protocol
+  CHECK(!media_source(99).has_value());
+}
+
 int main() {
   test_sleep_status();
   test_lock_status();
@@ -256,6 +299,9 @@ int main() {
   test_cop_temp();
   test_cop_option();
   test_departure_policy();
+  test_media_play_state();
+  test_media_volume();
+  test_media_source();
 
   return test_summary();
 }

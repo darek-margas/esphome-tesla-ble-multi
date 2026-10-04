@@ -6,7 +6,7 @@ Control more than one Tesla from one ESP32 over BLE.
 
 This is a multi-car fork of [yoziru/esphome-tesla-ble](https://github.com/yoziru/esphome-tesla-ble). Each car gets its own BLE client, key, sessions and Home Assistant sub-device, so one ESP32 serves several cars instead of needing one ESP32 per car.
 
-It runs on ESPHome 2026.9.x with the Tesla BLE library from [our fork](#tesla-ble-library) (`v5.2.0-dm.2`) and is tested with two cars on a classic ESP32 (Shelly Plus 1).
+It runs on ESPHome 2026.9.x with the Tesla BLE library from [our fork](#tesla-ble-library) (`v5.2.0-dm.3`) and is tested with two cars on a classic ESP32 (Shelly Plus 1).
 
 ## What works
 
@@ -18,6 +18,7 @@ It runs on ESPHome 2026.9.x with the Tesla BLE library from [our fork](#tesla-bl
 - Charging controls and limits, scheduled charging start and scheduled departure (with preconditioning and off-peak charging)
 - Climate (preset and Bioweapon mode read back), cabin overheat protection with its temperature
 - Low power mode, keep accessory power, guest mode
+- Media player: play / pause, volume and track skip, with now playing (title, artist, source)
 - Honk / flash, sentry mode
 - Vehicle, charging, climate, drive, closure and TPMS sensors
 - `Present` binary sensor per car, based on the car's BLE adverts
@@ -247,7 +248,7 @@ esp32:
     components:
       - name: tesla-ble
         source: https://github.com/darek-margas/tesla-ble.git
-        ref: v5.2.0-dm.2  # our fork: v5.2.0 + low power, keep accessory power, guest mode, overheat temperature, scheduled departure (roll back: v5.2.0-dm.1)
+        ref: v5.2.0-dm.3  # our fork: v5.2.0 + low power, keep accessory power, guest mode, overheat temperature, scheduled departure, media (roll back: v5.2.0-dm.2)
 ```
 
 ### Tesla BLE library
@@ -255,16 +256,17 @@ esp32:
 The library is built from [darek-margas/tesla-ble](https://github.com/darek-margas/tesla-ble), a fork of [yoziru/tesla-ble](https://github.com/yoziru/tesla-ble):
 
 - branch `main` mirrors upstream (synced with GitHub's *Sync fork*);
-- branch `multicar` (default) = `main` + the commands this component needs that upstream does not have yet: guest mode, cabin overheat protection temperature and scheduled departure (low power mode and keep accessory power come from upstream `main`);
+- branch `multicar` (default) = `main` + the commands this component needs that upstream does not have yet: guest mode, cabin overheat protection temperature, scheduled departure, media volume and the media state read (low power mode and keep accessory power come from upstream `main`);
 - tags `v5.2.0-dm.N` are created by the fork's release workflow after its tests pass.
 
 | `ref` | Contents |
 |---|---|
-| `v5.2.0-dm.2` | current: everything below + scheduled departure |
+| `v5.2.0-dm.3` | current: everything below + media controls and media state (artist, title) |
+| `v5.2.0-dm.2` | everything below + scheduled departure |
 | `v5.2.0-dm.1` | guest mode, overheat temperature, low power, keep accessory power |
 | `v5.2.0` | upstream release (the new controls fail to build with it) |
 
-**If your own YAML declares the `tesla-ble` component** (as in the example above), set `source` to the fork and `ref: v5.2.0-dm.2`. With an older ref the build stops with an error at `set_scheduled_departure` - that is the check telling you the library is too old. Upstream changes are synced into the fork deliberately, so a new upstream release cannot break this build unannounced.
+**If your own YAML declares the `tesla-ble` component** (as in the example above), set `source` to the fork and `ref: v5.2.0-dm.3`. With an older ref the build stops with an error at `set_media_state_callback` - that is the check telling you the library is too old. Upstream changes are synced into the fork deliberately, so a new upstream release cannot break this build unannounced.
 
 The component enables the ESP-IDF GATT client cache (`CONFIG_BT_GATTC_CACHE_NVS_FLASH`) itself; nothing to add.
 
@@ -442,6 +444,7 @@ Controls: locks, covers, charging, climate (preset and Bioweapon fan mode are re
 - **Scheduled Charging** (switch) + **Scheduled Charging Start** (time): start charging at a time.
 - **Scheduled Departure** (switch), **Scheduled Departure Time** (time), **Departure Preconditioning** and **Departure Off-Peak Charging** (*Off / All Week / Weekdays*), **Off-Peak End Time** (time): depart by a time. Setting a time also turns its schedule on; start-at and depart-by are alternatives in the car. All read back from the car.
 - **Low Power Mode**, **Keep Accessory Power**, **Guest Mode** (guest mode needs car software 2024.14+): the car does not report these modes over BLE, so the switches show the last state that was set successfully (Home Assistant shows on and off buttons).
+- **Media** (media player): play / pause and volume of the car's media, read back from the car. ESPHome media players carry no titles and Home Assistant does not offer next / previous for them, so these are separate entities: **Media Title**, **Media Artist** and **Media Source** (empty while nothing plays) and the **Media Next Track** / **Media Previous Track** buttons. The media state is read with each infotainment poll while the car is awake, and shortly after every media command. While the car sleeps the player shows *Off* (ESPHome cannot mark one entity unavailable), and media commands are not sent: they never wake the car.
 
 <img src="docs/ha-car-controls.png" width="700" alt="Car controls">
 

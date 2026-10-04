@@ -18,6 +18,7 @@
 #include <esphome/components/climate/climate.h>
 #include <esphome/components/select/select.h>
 #include <esphome/components/datetime/time_entity.h>
+#include <esphome/components/media_player/media_player.h>
 #include <esphome/core/component.h>
 #include <esphome/core/automation.h>
 #include <esphome/core/preferences.h>
@@ -192,7 +193,16 @@ public:
     void set_sentry_mode(bool enable);
     void vent_windows();
     void close_windows();
-    
+
+    // Media (Infotainment). The player shows playback and volume; artist,
+    // title and source go to text sensors (ESPHome's media player carries no
+    // metadata), next/previous to buttons (Home Assistant does not offer them
+    // for ESPHome media players).
+    void set_media_player(media_player::MediaPlayer *player) { media_player_ = player; }
+    void media_control(const media_player::MediaPlayerCall &call);
+    void media_next_track();
+    void media_previous_track();
+
     // Command tracking sensors
     void set_last_command_text_sensor(text_sensor::TextSensor *sensor) { last_command_sensor_ = sensor; }
 
@@ -432,7 +442,15 @@ private:
     datetime::TimeEntity *off_peak_end_entity_{nullptr};
     select::Select *departure_precondition_select_{nullptr};
     select::Select *departure_off_peak_select_{nullptr};
-    
+
+    // Media player, as last reported by the car
+    media_player::MediaPlayer *media_player_{nullptr};
+    float media_volume_max_{state_text::kMediaVolumeLimit};
+    void handle_media_state_(const CarServer_MediaState &media, const TeslaBLE::MediaNowPlaying &now_playing);
+    void publish_media_off_();
+    void send_media_command_(const char *name, int32_t action_tag, CarServer_MediaUpdateVolume volume);
+    void send_media_command_(const char *name, int32_t action_tag);
+
     // Pending locks
     lock::Lock *pending_doors_lock_{nullptr};
     lock::Lock *pending_charge_port_latch_lock_{nullptr};
@@ -547,6 +565,8 @@ DEFINE_TESLA_BUTTON(TeslaFlashLightsButton, flash_lights)
 DEFINE_TESLA_BUTTON(TeslaHonkHornButton, honk_horn)
 DEFINE_TESLA_BUTTON(TeslaUnlatchDriverDoorButton, unlatch_driver_door)
 DEFINE_TESLA_BUTTON(TeslaReleaseChargeCableButton, unlock_charge_port)
+DEFINE_TESLA_BUTTON(TeslaMediaNextTrackButton, media_next_track)
+DEFINE_TESLA_BUTTON(TeslaMediaPreviousTrackButton, media_previous_track)
 
 // =============================================================================
 // Generic Tesla Switch - use DEFINE_TESLA_SWITCH macro for each switch type
@@ -720,6 +740,32 @@ public:
     // nullptr leaves the current value unchanged.
     void update_state(bool is_on, float current_temp, float target_temp,
                       const char *preset = nullptr, const char *fan_mode = nullptr);
+};
+
+// =============================================================================
+// Media player - playback and volume of the car's media
+// =============================================================================
+
+class TeslaMediaPlayer : public WithParent<media_player::MediaPlayer> {
+public:
+    media_player::MediaPlayerTraits get_traits() override {
+        media_player::MediaPlayerTraits traits;
+        // Not URL playback, browsing, stop, mute or announcements (the
+        // defaults); the car does play/pause, track skip and volume.
+        traits.clear_feature_flags(media_player::BASE_MEDIA_PLAYER_FEATURES);
+        traits.add_feature_flags(media_player::MediaPlayerEntityFeature::PAUSE |
+                                 media_player::MediaPlayerEntityFeature::PLAY |
+                                 media_player::MediaPlayerEntityFeature::VOLUME_SET |
+                                 media_player::MediaPlayerEntityFeature::VOLUME_STEP |
+                                 media_player::MediaPlayerEntityFeature::NEXT_TRACK |
+                                 media_player::MediaPlayerEntityFeature::PREVIOUS_TRACK);
+        return traits;
+    }
+
+protected:
+    void control(const media_player::MediaPlayerCall &call) override {
+        if (parent_) parent_->media_control(call);
+    }
 };
 
 // =============================================================================

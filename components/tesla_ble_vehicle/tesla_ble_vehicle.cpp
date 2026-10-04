@@ -10,13 +10,13 @@
 #include <esphome/core/helpers.h>
 #include <tb_utils.h>
 
-// The guest mode / overheat temperature / low power / scheduled departure
-// commands need the darek-margas tesla-ble fork v5.2.0-dm.2 or newer. With an older library the
+// The guest mode / overheat temperature / low power / scheduled departure /
+// media commands need the darek-margas tesla-ble fork v5.2.0-dm.3 or newer. With an older library the
 // messages still compile (same protocol definitions) but the library refuses
 // to build them at run time ("Unsupported vehicle action type"), so fail the
-// build instead. Fix: set the tesla-ble ref in your YAML to v5.2.0-dm.2.
-static_assert(std::is_member_function_pointer<decltype(&TeslaBLE::Vehicle::set_scheduled_departure)>::value,
-              "tesla-ble library too old: use ref v5.2.0-dm.2 (darek-margas fork) or newer");
+// build instead. Fix: set the tesla-ble ref in your YAML to v5.2.0-dm.3.
+static_assert(std::is_member_function_pointer<decltype(&TeslaBLE::Vehicle::set_media_state_callback)>::value,
+              "tesla-ble library too old: use ref v5.2.0-dm.3 (darek-margas fork) or newer");
 
 namespace esphome {
 namespace tesla_ble_vehicle {
@@ -127,6 +127,8 @@ void TeslaBLEVehicle::initialize_managers() {
   vehicle_->set_vehicle_status_callback([this](const VCSEC_VehicleStatus &s) {
     if (state_manager_)
       state_manager_->update_vehicle_status(s);
+    if (state_manager_ && state_manager_->is_asleep())
+      publish_media_off_();
     // First VCSEC status after connecting: the sleep state is known now, so
     // the infotainment decision cannot wake a sleeping car by accident.
     if (infotainment_check_pending_) {
@@ -161,6 +163,11 @@ void TeslaBLEVehicle::initialize_managers() {
       [this](const CarServer_ClosuresState &s) {
         if (state_manager_)
           state_manager_->update_closures_state(s);
+      });
+
+  vehicle_->set_media_state_callback(
+      [this](const CarServer_MediaState &s, const TeslaBLE::MediaNowPlaying &now_playing) {
+        handle_media_state_(s, now_playing);
       });
 
   ESP_LOGD(TAG, "All components initialized");
@@ -210,6 +217,11 @@ void TeslaBLEVehicle::configure_pending_sensors() {
     state_manager_->set_charge_port_door_cover(pending_charge_port_door_cover_);
   if (pending_climate_)
     state_manager_->set_climate(pending_climate_);
+  // Off until the car reports its media state (it only does while awake)
+  if (media_player_ != nullptr) {
+    media_player_->state = media_player::MEDIA_PLAYER_STATE_OFF;
+    media_player_->publish_state();
+  }
 
   // Lock and cover changes logged with the car name: the [S] state lines
   // in the ESPHome log viewer only carry the entity name.
@@ -639,6 +651,13 @@ void TeslaBLEVehicle::enqueue_poll_batch_(TeslaBLE::WakePolicy policy, uint32_t 
     for (uint8_t offset = 0; offset < POLL_COUNT; ++offset) {
       const PollSpec &poll = polls[(start + offset) % POLL_COUNT];
       enqueue_poll_job_(poll.name, poll.data_type, policy);
+    }
+    // Media only while the car is awake: it has nothing to report asleep, and
+    // this poll must never be the one that keeps it awake
+    if (media_player_ != nullptr && state_manager_ && !state_manager_->is_asleep()) {
+      ++poll_batch_remaining_;
+      enqueue_poll_job_("Media State Poll", CarServer_GetVehicleData_getMediaState_tag,
+                        TeslaBLE::WakePolicy::NO_WAKE_SKIP);
     }
   };
 
@@ -1121,6 +1140,9 @@ void TeslaBLEVehicle::schedule_state_refresh_(ControlStateRefresh refresh) {
     case ControlStateRefresh::CLOSURES_STATE:
       timeout_name = "closures-state-refresh";
       break;
+    case ControlStateRefresh::MEDIA_STATE:
+      timeout_name = "media-state-refresh";
+      break;
     case ControlStateRefresh::NONE:
       return;
   }
@@ -1137,6 +1159,9 @@ void TeslaBLEVehicle::schedule_state_refresh_(ControlStateRefresh refresh) {
         break;
       case ControlStateRefresh::CLOSURES_STATE:
         vehicle_->closures_state_poll(TeslaBLE::WakePolicy::NO_WAKE_SKIP);
+        break;
+      case ControlStateRefresh::MEDIA_STATE:
+        vehicle_->media_state_poll(TeslaBLE::WakePolicy::NO_WAKE_SKIP);
         break;
       case ControlStateRefresh::NONE:
         break;
@@ -1761,6 +1786,149 @@ void TeslaBLEVehicle::set_keep_accessory_power(bool enable, switch_::Switch *sw)
 
 void TeslaBLEVehicle::set_guest_mode(bool enable, switch_::Switch *sw) {
   send_assumed_switch_("Guest Mode On", "Guest Mode Off", CarServer_VehicleAction_guestModeAction_tag, enable, sw);
+}
+
+// =============================================================================
+// Media
+// =============================================================================
+
+static media_player::MediaPlayerState to_media_player_state(state_text::MediaPlay play) {
+  switch (play) {
+    case state_text::MediaPlay::PLAYING:
+      return media_player::MEDIA_PLAYER_STATE_PLAYING;
+    case state_text::MediaPlay::PAUSED:
+      return media_player::MEDIA_PLAYER_STATE_PAUSED;
+    case state_text::MediaPlay::IDLE:
+      return media_player::MEDIA_PLAYER_STATE_IDLE;
+    case state_text::MediaPlay::OFF:
+      break;
+  }
+  return media_player::MEDIA_PLAYER_STATE_OFF;
+}
+
+void TeslaBLEVehicle::handle_media_state_(const CarServer_MediaState &media,
+                                          const TeslaBLE::MediaNowPlaying &now_playing) {
+  const bool asleep = state_manager_ && state_manager_->is_asleep();
+  if (media.which_optional_audio_volume_max)
+    media_volume_max_ = state_text::media_volume_max(media.optional_audio_volume_max.audio_volume_max);
+
+  std::optional<int> status;
+  if (media.which_optional_media_playback_status)
+    status = static_cast<int>(media.optional_media_playback_status.media_playback_status);
+  const auto play = state_text::media_play_state(asleep, status);
+
+  if (media_player_ != nullptr) {
+    const auto state = to_media_player_state(play);
+    float volume = media_player_->volume;
+    if (media.which_optional_audio_volume)
+      volume = state_text::media_volume_fraction(media.optional_audio_volume.audio_volume, media_volume_max_);
+    if (state != media_player_->state || volume != media_player_->volume) {
+      media_player_->state = state;
+      media_player_->volume = volume;
+      media_player_->publish_state();
+    }
+  }
+
+  if (state_manager_) {
+    std::string source;
+    if (media.which_optional_now_playing_source) {
+      auto text = state_text::media_source(static_cast<int>(media.optional_now_playing_source.now_playing_source));
+      if (text.has_value()) source = *text;
+    }
+    // Nothing playing: no stale title from the last song
+    const bool active = play == state_text::MediaPlay::PLAYING || play == state_text::MediaPlay::PAUSED;
+    state_manager_->update_media_text(active ? now_playing.title : "", active ? now_playing.artist : "",
+                                      play == state_text::MediaPlay::OFF ? "" : source);
+  }
+}
+
+void TeslaBLEVehicle::publish_media_off_() {
+  if (media_player_ != nullptr && media_player_->state != media_player::MEDIA_PLAYER_STATE_OFF) {
+    media_player_->state = media_player::MEDIA_PLAYER_STATE_OFF;
+    media_player_->publish_state();
+  }
+  if (state_manager_)
+    state_manager_->update_media_text("", "", "");
+}
+
+void TeslaBLEVehicle::send_media_command_(const char *name, int32_t action_tag, CarServer_MediaUpdateVolume volume) {
+  if (state_manager_ && state_manager_->is_asleep()) {
+    // Media controls are for someone in the car: never wake it for them
+    ESP_LOGW(TAG, "[%s] %s: the car is asleep - not sending", log_name(), name);
+    return;
+  }
+  ESP_LOGI(TAG, "[%s] %s requested", log_name(), name);
+  send_command_with_tracking(
+      UniversalMessage_Domain_DOMAIN_INFOTAINMENT, name,
+      [action_tag, volume](TeslaBLE::Client *client, uint8_t *buff, size_t *len) {
+        return client->build_car_server_vehicle_action_message(
+            buff, len, action_tag,
+            action_tag == CarServer_VehicleAction_mediaUpdateVolume_tag ? &volume : nullptr);
+      },
+      TeslaBLE::WakePolicy::NO_WAKE_SKIP,
+      [this](bool succeeded) {
+        // Read back what the car now plays (state, volume, title)
+        if (succeeded) schedule_state_refresh_(ControlStateRefresh::MEDIA_STATE);
+      });
+}
+
+void TeslaBLEVehicle::send_media_command_(const char *name, int32_t action_tag) {
+  send_media_command_(name, action_tag, CarServer_MediaUpdateVolume_init_default);
+}
+
+void TeslaBLEVehicle::media_next_track() {
+  send_media_command_("Media Next Track", CarServer_VehicleAction_mediaNextTrack_tag);
+}
+
+void TeslaBLEVehicle::media_previous_track() {
+  send_media_command_("Media Previous Track", CarServer_VehicleAction_mediaPreviousTrack_tag);
+}
+
+void TeslaBLEVehicle::media_control(const media_player::MediaPlayerCall &call) {
+  if (call.get_volume().has_value()) {
+    CarServer_MediaUpdateVolume volume = CarServer_MediaUpdateVolume_init_default;
+    volume.which_media_volume = CarServer_MediaUpdateVolume_volume_absolute_float_tag;
+    volume.media_volume.volume_absolute_float =
+        state_text::media_volume_absolute(*call.get_volume(), media_volume_max_);
+    send_media_command_("Media Volume", CarServer_VehicleAction_mediaUpdateVolume_tag, volume);
+  }
+  if (!call.get_command().has_value())
+    return;
+
+  const bool playing = media_player_ != nullptr && media_player_->state == media_player::MEDIA_PLAYER_STATE_PLAYING;
+  CarServer_MediaUpdateVolume step = CarServer_MediaUpdateVolume_init_default;
+  step.which_media_volume = CarServer_MediaUpdateVolume_volume_delta_tag;
+  switch (*call.get_command()) {
+    // The car has one play/pause toggle: send it only when it changes something
+    case media_player::MEDIA_PLAYER_COMMAND_PLAY:
+      if (!playing) send_media_command_("Media Play", CarServer_VehicleAction_mediaPlayAction_tag);
+      break;
+    case media_player::MEDIA_PLAYER_COMMAND_PAUSE:
+    case media_player::MEDIA_PLAYER_COMMAND_STOP:
+      if (playing) send_media_command_("Media Pause", CarServer_VehicleAction_mediaPlayAction_tag);
+      break;
+    case media_player::MEDIA_PLAYER_COMMAND_TOGGLE:
+      send_media_command_("Media Play/Pause", CarServer_VehicleAction_mediaPlayAction_tag);
+      break;
+    case media_player::MEDIA_PLAYER_COMMAND_NEXT:
+      media_next_track();
+      break;
+    case media_player::MEDIA_PLAYER_COMMAND_PREVIOUS:
+      media_previous_track();
+      break;
+    case media_player::MEDIA_PLAYER_COMMAND_VOLUME_UP:
+      step.media_volume.volume_delta = 1;
+      send_media_command_("Media Volume Up", CarServer_VehicleAction_mediaUpdateVolume_tag, step);
+      break;
+    case media_player::MEDIA_PLAYER_COMMAND_VOLUME_DOWN:
+      step.media_volume.volume_delta = -1;
+      send_media_command_("Media Volume Down", CarServer_VehicleAction_mediaUpdateVolume_tag, step);
+      break;
+    default:
+      ESP_LOGW(TAG, "[%s] Media command %d is not supported by the car", log_name(),
+               static_cast<int>(*call.get_command()));
+      break;
+  }
 }
 
 void TeslaBLEVehicle::set_cabin_overheat_protection(int mode) {

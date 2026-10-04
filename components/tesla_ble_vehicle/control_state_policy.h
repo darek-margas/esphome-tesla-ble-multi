@@ -11,7 +11,7 @@ enum class ControlStateCommand {
   SET_SENTRY_MODE,
 };
 
-enum class ControlStateRefresh { NONE, CHARGE_STATE, CLIMATE_STATE, CLOSURES_STATE };
+enum class ControlStateRefresh { NONE, CHARGE_STATE, CLIMATE_STATE, CLOSURES_STATE, MEDIA_STATE };
 
 struct ControlStateDecision {
   bool publish_requested_state;

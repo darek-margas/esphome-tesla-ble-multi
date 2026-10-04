@@ -431,6 +431,92 @@ inline std::optional<std::string> steering_wheel_heat_level(int level) {
   }
 }
 
+// CarServer_MediaPlaybackStatus
+constexpr int kMediaStopped = 0;
+constexpr int kMediaPlaying = 1;
+constexpr int kMediaPaused = 2;
+
+// What the media player entity shows. OFF while the car is asleep: the car
+// has no media state to read then (ESPHome has no per-entity "unavailable").
+enum class MediaPlay { OFF, IDLE, PLAYING, PAUSED };
+
+inline MediaPlay media_play_state(bool asleep, std::optional<int> playback_status) {
+  if (asleep)
+    return MediaPlay::OFF;
+  if (!playback_status.has_value())
+    return MediaPlay::IDLE;
+  switch (*playback_status) {
+    case kMediaPlaying:
+      return MediaPlay::PLAYING;
+    case kMediaPaused:
+      return MediaPlay::PAUSED;
+    default:
+      return MediaPlay::IDLE;
+  }
+}
+
+// The car takes volumes 0-10 (vehicle-command SetVolume); it reports its own
+// maximum, which can be a little higher. The entity volume is 0-1 of the
+// usable range.
+constexpr float kMediaVolumeLimit = 10.0f;
+
+inline float media_volume_max(std::optional<float> reported_max) {
+  if (!reported_max.has_value() || !(*reported_max > 0.0f) || *reported_max > kMediaVolumeLimit)
+    return kMediaVolumeLimit;
+  return *reported_max;
+}
+
+inline float media_volume_fraction(float volume, float max) {
+  if (!(max > 0.0f) || !(volume > 0.0f))
+    return 0.0f;
+  return volume >= max ? 1.0f : volume / max;
+}
+
+inline float media_volume_absolute(float fraction, float max) {
+  if (!(fraction > 0.0f))
+    return 0.0f;
+  return fraction >= 1.0f ? max : fraction * max;
+}
+
+// CarServer_MediaSourceType -> text; nothing for None or unknown values.
+inline std::optional<std::string> media_source(int source) {
+  switch (source) {
+    case 1: return std::string("AM");
+    case 2: return std::string("FM");
+    case 3: return std::string("XM");
+    case 5: return std::string("Slacker");
+    case 6: return std::string("Local Files");
+    case 7: return std::string("iPod");
+    case 8: return std::string("Bluetooth");
+    case 9: return std::string("Aux In");
+    case 10: return std::string("DAB");
+    case 11: return std::string("Rdio");
+    case 12: return std::string("Spotify");
+    case 13: return std::string("Radio");
+    case 14: return std::string("Radio");
+    case 16: return std::string("Media File");
+    case 17: return std::string("TuneIn");
+    case 18: return std::string("Stingray");
+    case 19: return std::string("SiriusXM");
+    case 20: return std::string("Tidal");
+    case 21: return std::string("QQ Music");
+    case 22: return std::string("QQ Music");
+    case 23: return std::string("Ximalaya");
+    case 24: return std::string("Online Radio");
+    case 25: return std::string("Online Radio");
+    case 26: return std::string("NetEase Music");
+    case 28: return std::string("Browser");
+    case 29: return std::string("Theater");
+    case 30: return std::string("Game");
+    case 31: return std::string("Tutorial");
+    case 32: return std::string("Toybox");
+    case 33: return std::string("Recents & Favorites");
+    case 34: return std::string("Home Apps");
+    case 35: return std::string("Search");
+    default: return std::nullopt;
+  }
+}
+
 // Minutes after midnight -> "HH:MM"; nothing for values past the end of a day.
 inline std::optional<std::string> time_of_day(uint32_t minutes) {
   if (minutes >= 24 * 60)
