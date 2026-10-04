@@ -403,7 +403,7 @@ tesla_ble_vehicle:
     # ...
 ```
 
-All entities created for that vehicle, including Pair and Regenerate Key, are attached to the corresponding Home Assistant device.
+All entities created for that vehicle, including Pair and Regenerate Key, are attached to the corresponding Home Assistant device. Their names then leave out the car name ("Charge Port Latch", not "Car One Charge Port Latch"): Home Assistant already shows the device name in front, so it would appear twice. Without `device_id` the car name stays in each entity name.
 
 <img src="docs/ha-device-overview.png" width="700" alt="ESP32 node with one device per car">
 

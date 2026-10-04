@@ -410,7 +410,10 @@ def get_device_class_const(component_module, device_class_str):
 def _base_config(definition, id_type, suffix, vehicle_id, vehicle_name, device_id=None):
     config = {
         CONF_ID: cv.declare_id(id_type)(f"{vehicle_id}_{definition['id']}_{suffix}"),
-        CONF_NAME: f"{vehicle_name} {definition['name']}",
+        # With its own Home Assistant device (device_id) the car name is the
+        # device name, which Home Assistant already puts in front of every
+        # entity name - adding it here would show it twice.
+        CONF_NAME: definition['name'] if device_id is not None else f"{vehicle_name} {definition['name']}",
         CONF_DISABLED_BY_DEFAULT: definition.get("disabled_by_default", False),
     }
     if device_id is not None:
