@@ -36,29 +36,35 @@ jobs:
           TAG="v$VERSION"
 
           cat > /tmp/release-notes.md <<'EOF'
-          ## Home Assistant presentation: statistics, device classes, whole-number phases
+          ## Clearer entities in Home Assistant
 
-          No change to what is read from the cars or how the BLE link works - only how Home Assistant shows and stores the values.
+          How the cars' state is shown in Home Assistant, plus documentation. No change to the BLE link or polling.
 
-          ### Long-term statistics (state classes)
-          No sensor had a state class, so Home Assistant kept no long-term statistics: history disappeared after the recorder period, statistics graph cards stayed empty and Energy Added could not be used in the Energy dashboard.
-          - **measurement:** Battery, Usable Battery, Range / Estimated / Ideal Range, Charger Power, Voltage, Current, Charger Max, Requested Current, Car Max Acceptable, Charger Power Estimated, Charging Rate, Time to Full, Time to Charge Limit, Outside and Passenger Temperature, Speed Limit, TPMS pressures, BLE RSSI and BLE Advert RSSI, Charger Phases.
-          - **total_increasing:** Odometer, and Energy Added (the reset to 0 at a new charging session is handled as a new cycle, so it works in the Energy dashboard).
+          ### Doors, windows and odometer enabled, with state icons
+          - **Door** (4), **Window** (4) and **Odometer** are now enabled by default. Doors follow VCSEC, so they stay correct while the car sleeps. Sunroof stays disabled (rarely used).
+          - Doors and windows no longer force a fixed car-door icon. With their `door` / `window` device class Home Assistant now shows an open or closed door / window icon and colours it when open (the windows were showing a door icon before).
 
-          Statistics start from this version; nothing earlier is back-filled.
+          Entities that already exist in Home Assistant keep their enabled/disabled setting - enable them once under the car's device page. New installs get them enabled.
 
-          ### Device classes
-          - **Battery, Usable Battery:** `battery` - the icon now shows the charge level.
-          - **BLE RSSI, BLE Advert RSSI:** `signal_strength`.
-          - **Preconditioning, Front / Rear Defroster, Battery Heater, Cabin Overheat Active:** `running` - shown as *Running / Not running* instead of On / Off. (Home Assistant has no "Heating" class for binary sensors; `heat` would read *Hot / Normal*, which means "too hot".)
-          - **Charging Amps** (number): `current`; **Charging Limit** (number): `battery`.
+          ### Seat heaters show Running / Not running
+          - **Seat Heater Front Left / Front Right** are now binary sensors with device class `running`: *Running* when heating at any level. Rear seats work the same, disabled by default.
+          - The Off / Low / Medium / High level moved to **Seat Heater … Level** sensors, disabled by default.
+          - The steering wheel heater stays the **Heated Steering** switch (it is a control; Home Assistant shows switches as On / Off).
 
-          ### Charger Phases shows "1", not "1.0"
-          It already had 0 decimals, but with no unit, device class or state class Home Assistant treated it as text and showed the raw "1.0". With a state class it is a number and the 0 decimals apply. If it still shows "1.0", reset the display precision in the entity's settings in Home Assistant.
+          ### Sentry Mode Available folded into the Sentry Mode switch
+          The separate **Sentry Mode Available** entity is removed. The car's flag is still read: when the car reports sentry mode is not available, the **Sentry Mode** switch refuses to turn on and flips back, with a log line saying why.
 
-          Home Assistant may show repair notices about changed state classes on sensors that already have history - that is expected.
+          ### Battery Heater No Power shows OK
+          The car sends this flag only when the problem occurs, so the sensor stayed unknown. It now shows *OK* when the car reports a battery heater state without the flag, and *Problem* only when the car reports it.
 
-          See v2026.10.3 for the other changes in this series. Library unchanged: [darek-margas/tesla-ble](https://github.com/darek-margas/tesla-ble) `v5.2.0`.
+          ### Documentation
+          - README and `tesla-ble.example.yml` use generic car names only.
+          - `wake_on_boot` is shown per car in both examples (one car `true`, one `false`) and the README explains what it does and when to turn it off for a car.
+
+          ### After updating
+          Home Assistant will list **Sentry Mode Available** and the old **Seat Heater Front Left / Front Right** text sensors as unavailable - delete them.
+
+          Library unchanged: [darek-margas/tesla-ble](https://github.com/darek-margas/tesla-ble) `v5.2.0`.
           EOF
 
           if gh release view "$TAG" >/dev/null 2>&1; then
