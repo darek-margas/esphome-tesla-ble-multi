@@ -192,8 +192,6 @@ void TeslaBLEVehicle::configure_pending_sensors() {
     state_manager_->set_charging_limit_number(pending_charging_limit_number_);
   if (pending_cabin_overheat_select_)
     state_manager_->set_cabin_overheat_select(pending_cabin_overheat_select_);
-  if (pending_cabin_overheat_temp_select_)
-    state_manager_->set_cabin_overheat_temp_select(pending_cabin_overheat_temp_select_);
   if (pending_scheduled_charging_switch_)
     state_manager_->set_scheduled_charging_switch(pending_scheduled_charging_switch_);
   if (pending_scheduled_charging_time_)
@@ -855,12 +853,6 @@ void TeslaBLEVehicle::set_scheduled_charging_time_entity(datetime::TimeEntity *t
   pending_scheduled_charging_time_ = time;
   if (state_manager_)
     state_manager_->set_scheduled_charging_time(time);
-}
-
-void TeslaBLEVehicle::set_cabin_overheat_temp_select(select::Select *sel) {
-  pending_cabin_overheat_temp_select_ = sel;
-  if (state_manager_)
-    state_manager_->set_cabin_overheat_temp_select(sel);
 }
 
 void TeslaBLEVehicle::set_cabin_overheat_select(select::Select *sel) {
@@ -1601,6 +1593,21 @@ void TeslaBLEVehicle::send_scheduled_charging_(bool enabled, int minutes) {
         // switch / time back to what the car really has.
         schedule_state_refresh_(ControlStateRefresh::CHARGE_STATE);
       });
+}
+
+void TeslaBLEVehicle::set_cabin_overheat_choice(int mode, int level) {
+  const int current_mode = state_manager_ ? state_manager_->cop_mode() : -1;
+  const int current_level = state_manager_ ? state_manager_->cop_level() : 0;
+  bool sent = false;
+  if (mode != current_mode) {
+    set_cabin_overheat_protection(mode);
+    sent = true;
+  }
+  if (mode == state_text::kCopOn && level != current_level) {
+    set_cabin_overheat_temp(level);
+    sent = true;
+  }
+  if (!sent && state_manager_) state_manager_->republish_cabin_overheat();
 }
 
 void TeslaBLEVehicle::set_cabin_overheat_temp(int level) {

@@ -70,7 +70,6 @@ TeslaClimate = tesla_ble_vehicle_ns.class_("TeslaClimate", climate.Climate)
 
 # Custom select classes
 TeslaCabinOverheatSelect = tesla_ble_vehicle_ns.class_("TeslaCabinOverheatSelect", select.Select)
-TeslaCabinOverheatTempSelect = tesla_ble_vehicle_ns.class_("TeslaCabinOverheatTempSelect", select.Select)
 TeslaLowPowerModeSwitch = tesla_ble_vehicle_ns.class_("TeslaLowPowerModeSwitch", switch.Switch)
 TeslaKeepAccessoryPowerSwitch = tesla_ble_vehicle_ns.class_("TeslaKeepAccessoryPowerSwitch", switch.Switch)
 TeslaGuestModeSwitch = tesla_ble_vehicle_ns.class_("TeslaGuestModeSwitch", switch.Switch)
@@ -290,15 +289,8 @@ SELECTS = [
         "class": TeslaCabinOverheatSelect,
         "setter": "set_cabin_overheat_select",
         "icon": "mdi:car-defrost-front",
-        "options": ["Off", "On", "Fan Only"],
-    },
-    {
-        "id": "cabin_overheat_temp",
-        "name": "Cabin Overheat Temperature",
-        "class": TeslaCabinOverheatTempSelect,
-        "setter": "set_cabin_overheat_temp_select",
-        "icon": "mdi:thermometer-alert",
-        "options": ["30 °C", "35 °C", "40 °C"],
+        # The activation temperature only applies to On (A/C), as in the Tesla app
+        "options": ["Off", "Fan Only", "On 30 °C", "On 35 °C", "On 40 °C"],
     },
 ]
 

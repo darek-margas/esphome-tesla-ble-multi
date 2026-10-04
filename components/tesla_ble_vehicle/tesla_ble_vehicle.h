@@ -109,7 +109,6 @@ public:
     void set_charging_amps_number(number::Number *number);
     void set_charging_limit_number(number::Number *number);
     void set_cabin_overheat_select(select::Select *sel);
-    void set_cabin_overheat_temp_select(select::Select *sel);
     void set_scheduled_charging_switch(switch_::Switch *sw);
     void set_scheduled_charging_time_entity(datetime::TimeEntity *time);
 
@@ -164,6 +163,8 @@ public:
     void set_preconditioning_max(bool enable);  // Defrost
     void set_cabin_overheat_protection(int mode);  // 0=Off, 1=On, 2=Fan Only
     void set_cabin_overheat_temp(int level);  // 1=Low (30 C), 2=Medium (35 C), 3=High (40 C)
+    // Sends only what changes: the mode and/or (for On) the temperature
+    void set_cabin_overheat_choice(int mode, int level);
     void set_low_power_mode(bool enable, switch_::Switch *sw);
     void set_keep_accessory_power(bool enable, switch_::Switch *sw);
     void set_guest_mode(bool enable, switch_::Switch *sw);
@@ -399,7 +400,6 @@ private:
     number::Number *pending_charging_amps_number_{nullptr};
     number::Number *pending_charging_limit_number_{nullptr};
     select::Select *pending_cabin_overheat_select_{nullptr};
-    select::Select *pending_cabin_overheat_temp_select_{nullptr};
     void send_assumed_switch_(const char *name_on, const char *name_off, int32_t action_tag, bool enable,
                               switch_::Switch *sw);
     switch_::Switch *pending_scheduled_charging_switch_{nullptr};
@@ -558,16 +558,6 @@ DEFINE_TESLA_ASSUMED_SWITCH(TeslaLowPowerModeSwitch, set_low_power_mode)
 DEFINE_TESLA_ASSUMED_SWITCH(TeslaKeepAccessoryPowerSwitch, set_keep_accessory_power)
 DEFINE_TESLA_ASSUMED_SWITCH(TeslaGuestModeSwitch, set_guest_mode)
 
-// Cabin overheat protection activation temperature
-class TeslaCabinOverheatTempSelect : public WithParent<select::Select> {
-protected:
-    void control(const std::string &value) override {
-        if (!parent_) return;
-        auto level = state_text::cop_temp_level(value);
-        if (level.has_value()) parent_->set_cabin_overheat_temp(*level);
-    }
-};
-
 // "Start charging at" time; read back from the car's charge state
 class TeslaScheduledChargingTime : public WithParent<datetime::TimeEntity> {
 public:
@@ -597,13 +587,13 @@ protected:
 };
 
 
+// Off / Fan Only / On 30 °C / On 35 °C / On 40 °C
 class TeslaCabinOverheatSelect : public WithParent<select::Select> {
 protected:
     void control(const std::string &value) override {
         if (!parent_) return;
-        if (value == "Off") parent_->set_cabin_overheat_protection(0);
-        else if (value == "On") parent_->set_cabin_overheat_protection(1);
-        else if (value == "Fan Only") parent_->set_cabin_overheat_protection(2);
+        auto choice = state_text::cop_choice(value);
+        if (choice.has_value()) parent_->set_cabin_overheat_choice(choice->mode, choice->level);
     }
 };
 

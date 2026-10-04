@@ -204,6 +204,26 @@ static void test_cop_temp() {
     CHECK(cop_temp_level(cop_temp_option(level)) == std::optional<int>(level));
 }
 
+static void test_cop_option() {
+  CHECK(cop_option(kCopOff, 0).value() == "Off");
+  CHECK(cop_option(kCopFanOnly, kCopTempHigh).value() == "Fan Only");
+  CHECK(cop_option(kCopOn, kCopTempMedium).value() == "On 35 \u00b0C");
+  CHECK(!cop_option(kCopOn, 0).has_value());  // temperature not known yet
+  CHECK(!cop_option(-1, 0).has_value());
+  auto c = cop_choice("On 30 \u00b0C");
+  CHECK(c.has_value() && c->mode == kCopOn && c->level == kCopTempLow);
+  c = cop_choice("Fan Only");
+  CHECK(c.has_value() && c->mode == kCopFanOnly);
+  CHECK(cop_choice("Off").has_value());
+  CHECK(!cop_choice("On").has_value());
+  CHECK(!cop_choice("On 50 \u00b0C").has_value());
+  // Every option round-trips
+  for (int level = kCopTempLow; level <= kCopTempHigh; level++) {
+    auto back = cop_choice(cop_option(kCopOn, level).value());
+    CHECK(back.has_value() && back->mode == kCopOn && back->level == level);
+  }
+}
+
 int main() {
   test_sleep_status();
   test_lock_status();
@@ -225,6 +245,7 @@ int main() {
   test_steering_wheel_heat_level();
   test_charge_port_latch_lock();
   test_cop_temp();
+  test_cop_option();
 
   return test_summary();
 }

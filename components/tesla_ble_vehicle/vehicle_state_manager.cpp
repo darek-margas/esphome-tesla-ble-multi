@@ -53,6 +53,9 @@ static_assert(CarServer_ClimateState_ClimateKeeperMode_Party_tag == state_text::
 static_assert(CarServer_ClimateState_DefrostMode_Off_tag == state_text::kDefrostOff);
 static_assert(CarServer_ClimateState_DefrostMode_Normal_tag == state_text::kDefrostNormal);
 static_assert(CarServer_ClimateState_DefrostMode_Max_tag == state_text::kDefrostMax);
+static_assert(static_cast<int>(CarServer_ClimateState_CabinOverheatProtection_E_CabinOverheatProtectionOff) == state_text::kCopOff);
+static_assert(static_cast<int>(CarServer_ClimateState_CabinOverheatProtection_E_CabinOverheatProtectionOn) == state_text::kCopOn);
+static_assert(static_cast<int>(CarServer_ClimateState_CabinOverheatProtection_E_CabinOverheatProtectionFanOnly) == state_text::kCopFanOnly);
 static_assert(static_cast<int>(CarServer_ClimateState_CopActivationTemp_CopActivationTempLow) == state_text::kCopTempLow);
 static_assert(static_cast<int>(CarServer_ClimateState_CopActivationTemp_CopActivationTempMedium) == state_text::kCopTempMedium);
 static_assert(static_cast<int>(CarServer_ClimateState_CopActivationTemp_CopActivationTempHigh) == state_text::kCopTempHigh);
@@ -525,35 +528,14 @@ void VehicleStateManager::update_climate_state(const CarServer_ClimateState& cli
         climate_on_ = climate_state.optional_is_climate_on.is_climate_on;
     }
     
-    // Cabin Overheat Protection mode and active-cooling state.
-    if (climate_state.which_optional_cabin_overheat_protection && cabin_overheat_select_ != nullptr) {
-        const auto mode =
-            climate_state.optional_cabin_overheat_protection.cabin_overheat_protection;
-        const char *mode_name = nullptr;
-        switch (mode) {
-            case CarServer_ClimateState_CabinOverheatProtection_E_CabinOverheatProtectionOff:
-                mode_name = "Off";
-                break;
-            case CarServer_ClimateState_CabinOverheatProtection_E_CabinOverheatProtectionOn:
-                mode_name = "On";
-                break;
-            case CarServer_ClimateState_CabinOverheatProtection_E_CabinOverheatProtectionFanOnly:
-                mode_name = "Fan Only";
-                break;
-            default:
-                break;
-        }
-        if (mode_name != nullptr) {
-            cabin_overheat_select_->publish_state(mode_name);
-        }
+    // Cabin Overheat Protection: mode and activation temperature in one select
+    if (climate_state.which_optional_cabin_overheat_protection) {
+        cop_mode_ = static_cast<int>(climate_state.optional_cabin_overheat_protection.cabin_overheat_protection);
     }
-
-    // Cabin overheat protection activation temperature
-    if (climate_state.which_optional_cop_activation_temperature && cabin_overheat_temp_select_ != nullptr) {
-        const char *option = state_text::cop_temp_option(
-            static_cast<int>(climate_state.optional_cop_activation_temperature.cop_activation_temperature));
-        if (option != nullptr) cabin_overheat_temp_select_->publish_state(option);
+    if (climate_state.which_optional_cop_activation_temperature) {
+        cop_level_ = static_cast<int>(climate_state.optional_cop_activation_temperature.cop_activation_temperature);
     }
+    publish_cabin_overheat_();
 
     if (climate_state.which_optional_cabin_overheat_protection_actively_cooling) {
         publish_binary_sensor("cabin_overheat_active", climate_state.optional_cabin_overheat_protection_actively_cooling.cabin_overheat_protection_actively_cooling);
@@ -950,6 +932,16 @@ void VehicleStateManager::republish_doors_lock() {
     if (doors_lock_ == nullptr || !doors_unlocked_.has_value()) return;
     const auto st = *doors_unlocked_ ? lock::LOCK_STATE_UNLOCKED : lock::LOCK_STATE_LOCKED;
     if (doors_lock_->state != st) doors_lock_->publish_state(st);
+}
+
+void VehicleStateManager::publish_cabin_overheat_() {
+    if (cabin_overheat_select_ == nullptr) return;
+    auto option = state_text::cop_option(cop_mode_, cop_level_);
+    if (option.has_value()) cabin_overheat_select_->publish_state(*option);
+}
+
+void VehicleStateManager::republish_cabin_overheat() {
+    publish_cabin_overheat_();
 }
 
 void VehicleStateManager::save_charge_session_if_changed() {

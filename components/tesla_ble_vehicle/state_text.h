@@ -326,6 +326,44 @@ inline std::optional<int> cop_temp_level(const std::string &option) {
   return std::nullopt;
 }
 
+// Cabin overheat protection mode (ClimateState.CabinOverheatProtection_E)
+constexpr int kCopOff = 0;
+constexpr int kCopOn = 1;
+constexpr int kCopFanOnly = 2;
+
+// One select for mode + activation temperature, as the Tesla app shows it:
+// the temperature only applies to On (A/C), so it is part of the On options.
+struct CopChoice {
+  int mode;
+  int level;  // kCopTempLow..High for kCopOn, 0 otherwise
+};
+
+inline std::optional<std::string> cop_option(int mode, int level) {
+  switch (mode) {
+    case kCopOff:
+      return std::string("Off");
+    case kCopFanOnly:
+      return std::string("Fan Only");
+    case kCopOn: {
+      const char *temp = cop_temp_option(level);
+      if (temp == nullptr) return std::nullopt;  // temperature not known yet
+      return std::string("On ") + temp;
+    }
+    default:
+      return std::nullopt;
+  }
+}
+
+inline std::optional<CopChoice> cop_choice(const std::string &option) {
+  if (option == "Off") return CopChoice{kCopOff, 0};
+  if (option == "Fan Only") return CopChoice{kCopFanOnly, 0};
+  if (option.rfind("On ", 0) == 0) {
+    auto level = cop_temp_level(option.substr(3));
+    if (level.has_value()) return CopChoice{kCopOn, *level};
+  }
+  return std::nullopt;
+}
+
 // Climate entity preset from the car's climate keeper and defrost state, using
 // the preset names TeslaClimate offers. 0 = field not reported. nullptr when
 // the state does not tell (the entity keeps its current preset).
