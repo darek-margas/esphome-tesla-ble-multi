@@ -351,6 +351,11 @@ private:
     // Infotainment needs a moment after VCSEC reports the car awake; a session
     // request sent at once is often lost (and the library then waits 25 s).
     static constexpr uint32_t WAKE_SETTLE_MS = 8000;
+    // After a user command the car keeps its BLE turn this long, so the
+    // follow-up reads (e.g. lock state 1.5 s / 8 s later) run before hand-over.
+    static constexpr uint32_t USER_COMMAND_HOLD_MS = 10000;
+    uint32_t last_user_command_ms_{0};
+    bool user_command_seen_{false};
     bool should_retry_command_(const std::string &name, const TeslaBLE::OperationResult &result,
                                uint8_t retries_left);
     void release_infotainment_slot_();

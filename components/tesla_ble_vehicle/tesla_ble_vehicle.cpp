@@ -203,6 +203,29 @@ void TeslaBLEVehicle::configure_pending_sensors() {
   if (pending_climate_)
     state_manager_->set_climate(pending_climate_);
 
+  // Lock and cover changes logged with the car name: the [S] state lines
+  // in the ESPHome log viewer only carry the entity name.
+  for (lock::Lock *lck : {pending_doors_lock_, pending_charge_port_latch_lock_}) {
+    if (lck == nullptr) continue;
+    auto last = std::make_shared<lock::LockState>(lock::LOCK_STATE_NONE);
+    lck->add_on_state_callback([this, lck, last](lock::LockState state) {
+      if (state == *last) return;
+      *last = state;
+      ESP_LOGI(TAG, "[%s] %s: %s", log_name(), lck->get_name().c_str(), LOG_STR_ARG(lock::lock_state_to_string(state)));
+    });
+  }
+  for (cover::Cover *cvr : {pending_trunk_cover_, pending_frunk_cover_, pending_windows_cover_,
+                            pending_charge_port_door_cover_}) {
+    if (cvr == nullptr) continue;
+    auto last = std::make_shared<float>(-1.0f);  // log changes only (some covers republish every poll)
+    cvr->add_on_state_callback([this, cvr, last]() {
+      if (cvr->position == *last) return;
+      *last = cvr->position;
+      ESP_LOGI(TAG, "[%s] %s: %s", log_name(), cvr->get_name().c_str(),
+               cvr->position == cover::COVER_OPEN ? "OPEN" : "CLOSED");
+    });
+  }
+
   ESP_LOGD(TAG, "Configured %d binary, %d numeric, %d text sensors",
            pending_binary_sensors_.size(), pending_sensors_.size(),
            pending_text_sensors_.size());
@@ -281,7 +304,8 @@ LinkScheduler::Input TeslaBLEVehicle::link_input_(uint32_t now) const {
   const bool pairing = pairing_in_progress_ &&
                        static_cast<uint32_t>(now - pairing_started_ms_) < PAIRING_POLL_PAUSE_MS;
   in.busy = user_commands_in_flight_ > 0 || poll_batch_in_progress_ || infotainment_check_pending_ ||
-            !pending_commands_.empty() || pairing || (ble_adapter_ && !ble_adapter_->tx_idle());
+            !pending_commands_.empty() || pairing || (ble_adapter_ && !ble_adapter_->tx_idle()) ||
+            (user_command_seen_ && now - last_user_command_ms_ < USER_COMMAND_HOLD_MS);
   const auto state = ble_client_ != nullptr ? ble_client_->state() : espbt::ClientState::IDLE;
   in.link_idle = state == espbt::ClientState::IDLE || state == espbt::ClientState::INIT;
   in.last_activity_ms = last_link_activity_ms_;
@@ -911,6 +935,8 @@ void TeslaBLEVehicle::set_force_update_button(button::Button *button) {
 
 void TeslaBLEVehicle::handle_command_result(const std::string &name,
                                             TeslaBLE::OperationResult result) {
+  last_user_command_ms_ = millis();
+  user_command_seen_ = true;
   std::string value = name;
 
   const auto outcome = result.is_success()
