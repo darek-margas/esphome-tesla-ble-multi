@@ -41,14 +41,15 @@ jobs:
           New controls that were missing compared with the Tesla app. They need new actions in the Tesla BLE library, so this release moves to the library fork **[darek-margas/tesla-ble](https://github.com/darek-margas/tesla-ble) `v5.2.0-dm.2`**.
 
           ### ⚠️ Change your YAML: library `v5.2.0-dm.2`
-          If your config pins the library itself (instead of using `packages/board.yml`), change it to:
+          If your own YAML lists the `tesla-ble` component (instead of taking it from `packages/board.yml`), change it to:
 
           ```yaml
-          external_components:
-            - source:
-                type: git
-                url: https://github.com/darek-margas/tesla-ble.git
-                ref: v5.2.0-dm.2   # roll back: v5.2.0-dm.1
+          esp32:
+            framework:
+              components:
+                - name: tesla-ble
+                  source: https://github.com/darek-margas/tesla-ble.git
+                  ref: v5.2.0-dm.2   # roll back: v5.2.0-dm.1
           ```
 
           An older library now fails the build with a clear error at `set_scheduled_departure` instead of building firmware where the new controls do nothing (seen as `Unsupported vehicle action type: 66` in the log).
