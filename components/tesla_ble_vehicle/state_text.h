@@ -364,6 +364,31 @@ inline std::optional<CopChoice> cop_choice(const std::string &option) {
   return std::nullopt;
 }
 
+// Scheduled departure policy (preconditioning / off-peak charging):
+// PreconditioningTimes / OffPeakChargingTimes oneof tags, 0 = off
+constexpr int kPolicyOff = 0;
+constexpr int kPolicyAllWeek = 1;
+constexpr int kPolicyWeekdays = 2;
+
+inline const char *departure_policy_option(int policy) {
+  switch (policy) {
+    case kPolicyOff:
+      return "Off";
+    case kPolicyAllWeek:
+      return "All Week";
+    case kPolicyWeekdays:
+      return "Weekdays";
+    default:
+      return nullptr;
+  }
+}
+
+inline std::optional<int> departure_policy(const std::string &option) {
+  for (int p = kPolicyOff; p <= kPolicyWeekdays; p++)
+    if (option == departure_policy_option(p)) return p;
+  return std::nullopt;
+}
+
 // Climate entity preset from the car's climate keeper and defrost state, using
 // the preset names TeslaClimate offers. 0 = field not reported. nullptr when
 // the state does not tell (the entity keeps its current preset).

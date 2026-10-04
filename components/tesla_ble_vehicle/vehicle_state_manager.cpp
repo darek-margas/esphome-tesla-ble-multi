@@ -53,6 +53,10 @@ static_assert(CarServer_ClimateState_ClimateKeeperMode_Party_tag == state_text::
 static_assert(CarServer_ClimateState_DefrostMode_Off_tag == state_text::kDefrostOff);
 static_assert(CarServer_ClimateState_DefrostMode_Normal_tag == state_text::kDefrostNormal);
 static_assert(CarServer_ClimateState_DefrostMode_Max_tag == state_text::kDefrostMax);
+static_assert(CarServer_PreconditioningTimes_all_week_tag == state_text::kPolicyAllWeek);
+static_assert(CarServer_PreconditioningTimes_weekdays_tag == state_text::kPolicyWeekdays);
+static_assert(CarServer_OffPeakChargingTimes_all_week_tag == state_text::kPolicyAllWeek);
+static_assert(CarServer_OffPeakChargingTimes_weekdays_tag == state_text::kPolicyWeekdays);
 static_assert(static_cast<int>(CarServer_ClimateState_CabinOverheatProtection_E_CabinOverheatProtectionOff) == state_text::kCopOff);
 static_assert(static_cast<int>(CarServer_ClimateState_CabinOverheatProtection_E_CabinOverheatProtectionOn) == state_text::kCopOn);
 static_assert(static_cast<int>(CarServer_ClimateState_CabinOverheatProtection_E_CabinOverheatProtectionFanOnly) == state_text::kCopFanOnly);
@@ -468,9 +472,31 @@ void VehicleStateManager::update_charge_state(const CarServer_ChargeState& charg
             }
         }
     }
-    if (charge_state.which_optional_scheduled_departure_time_minutes) {
-        auto time = state_text::time_of_day(charge_state.optional_scheduled_departure_time_minutes.scheduled_departure_time_minutes);
-        if (time.has_value()) publish_text_sensor("scheduled_departure_time", time.value());
+    // Scheduled departure (entities live on the vehicle)
+    {
+        auto &d = parent_->departure_;
+        const auto before = d;
+        if (charge_state.which_optional_scheduled_charging_mode) {
+            d.enabled = static_cast<int>(charge_state.optional_scheduled_charging_mode.scheduled_charging_mode) ==
+                        state_text::kScheduledChargingDepartBy;
+            // Policies are only sent while set; the mode tells the data is there
+            d.preconditioning = charge_state.has_preconditioning_times
+                                    ? static_cast<int>(charge_state.preconditioning_times.which_times)
+                                    : state_text::kPolicyOff;
+            d.off_peak = charge_state.has_off_peak_charging_times
+                             ? static_cast<int>(charge_state.off_peak_charging_times.which_times)
+                             : state_text::kPolicyOff;
+        }
+        if (charge_state.which_optional_scheduled_departure_time_minutes &&
+            charge_state.optional_scheduled_departure_time_minutes.scheduled_departure_time_minutes < 24 * 60)
+            d.time = static_cast<int>(charge_state.optional_scheduled_departure_time_minutes.scheduled_departure_time_minutes);
+        if (charge_state.which_optional_off_peak_hours_end_time &&
+            charge_state.optional_off_peak_hours_end_time.off_peak_hours_end_time < 24 * 60)
+            d.off_peak_end = static_cast<int>(charge_state.optional_off_peak_hours_end_time.off_peak_hours_end_time);
+        if (d.enabled != before.enabled || d.time != before.time || d.preconditioning != before.preconditioning ||
+            d.off_peak != before.off_peak || d.off_peak_end != before.off_peak_end ||
+            (parent_->departure_switch_ != nullptr && !parent_->departure_switch_->has_state()))
+            parent_->publish_departure_();
     }
 
     // Update charger phases (integer 1..3, cached for estimated power)

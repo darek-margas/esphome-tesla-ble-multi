@@ -245,7 +245,7 @@ esp32:
     components:
       - name: tesla-ble
         source: https://github.com/darek-margas/tesla-ble.git
-        ref: v5.2.0-dm.1  # our fork: v5.2.0 + low power, keep accessory power, guest mode, overheat temperature (roll back: v5.2.0)
+        ref: v5.2.0-dm.2  # our fork: v5.2.0 + low power, keep accessory power, guest mode, overheat temperature, scheduled departure (roll back: v5.2.0-dm.1)
 ```
 
 The library is built from [darek-margas/tesla-ble](https://github.com/darek-margas/tesla-ble), a fork of [yoziru/tesla-ble](https://github.com/yoziru/tesla-ble) pinned at `v5.2.0`. Upstream changes are synced into the fork deliberately, so a new upstream release cannot break this build unannounced.

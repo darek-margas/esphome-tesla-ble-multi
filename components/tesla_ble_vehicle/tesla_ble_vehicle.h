@@ -172,6 +172,18 @@ public:
     // time; setting the time also enables it. minutes = after midnight.
     void set_scheduled_charging(bool enabled);
     void set_scheduled_charging_time(int minutes);
+    // Scheduled departure: every change sends the whole schedule, built from
+    // what the car last reported with the one changed value
+    void set_scheduled_departure(bool enabled);
+    void set_departure_time(int minutes);
+    void set_departure_preconditioning(int policy);
+    void set_departure_off_peak(int policy);
+    void set_off_peak_end_time(int minutes);
+    void set_scheduled_departure_switch(switch_::Switch *sw) { departure_switch_ = sw; }
+    void set_departure_time_entity(datetime::TimeEntity *t) { departure_time_entity_ = t; }
+    void set_off_peak_end_time_entity(datetime::TimeEntity *t) { off_peak_end_entity_ = t; }
+    void set_departure_preconditioning_select(select::Select *sel) { departure_precondition_select_ = sel; }
+    void set_departure_off_peak_select(select::Select *sel) { departure_off_peak_select_ = sel; }
     void set_steering_wheel_heat(bool enable);
     
     // Vehicle controls (Infotainment)
@@ -405,6 +417,21 @@ private:
     switch_::Switch *pending_scheduled_charging_switch_{nullptr};
     datetime::TimeEntity *pending_scheduled_charging_time_{nullptr};
     void send_scheduled_charging_(bool enabled, int minutes);
+    // Scheduled departure, as last reported by the car (-1 = unknown)
+    struct Departure {
+      int enabled{-1};
+      int time{-1};
+      int preconditioning{-1};
+      int off_peak{-1};
+      int off_peak_end{-1};
+    } departure_;
+    void send_departure_(Departure d);
+    void publish_departure_();
+    switch_::Switch *departure_switch_{nullptr};
+    datetime::TimeEntity *departure_time_entity_{nullptr};
+    datetime::TimeEntity *off_peak_end_entity_{nullptr};
+    select::Select *departure_precondition_select_{nullptr};
+    select::Select *departure_off_peak_select_{nullptr};
     
     // Pending locks
     lock::Lock *pending_doors_lock_{nullptr};
@@ -541,6 +568,7 @@ DEFINE_TESLA_SWITCH(TeslaChargingSwitch, set_charging_state)
 DEFINE_TESLA_SWITCH(TeslaSteeringWheelHeatSwitch, set_steering_wheel_heat)
 DEFINE_TESLA_SWITCH(TeslaSentryModeSwitch, set_sentry_mode)
 DEFINE_TESLA_SWITCH(TeslaScheduledChargingSwitch, set_scheduled_charging)
+DEFINE_TESLA_SWITCH(TeslaScheduledDepartureSwitch, set_scheduled_departure)
 
 // Modes the car does not report over BLE: the switch shows the last state
 // that was set successfully (assumed state, both buttons shown).
@@ -575,6 +603,42 @@ protected:
         parent_->set_scheduled_charging_time(hour * 60 + minute);
     }
 };
+
+// Time pickers that call a parent method with minutes after midnight
+#define DEFINE_TESLA_TIME(ClassName, ParentMethod) \
+    class ClassName : public WithParent<datetime::TimeEntity> { \
+    public: \
+        void update_time(int minutes) { \
+            this->hour_ = minutes / 60; \
+            this->minute_ = minutes % 60; \
+            this->second_ = 0; \
+            this->publish_state(); \
+        } \
+    protected: \
+        void control(const datetime::TimeCall &call) override { \
+            if (!parent_) return; \
+            const int hour = call.get_hour().value_or(this->hour_); \
+            const int minute = call.get_minute().value_or(this->minute_); \
+            parent_->ParentMethod(hour * 60 + minute); \
+        } \
+    };
+
+DEFINE_TESLA_TIME(TeslaDepartureTime, set_departure_time)
+DEFINE_TESLA_TIME(TeslaOffPeakEndTime, set_off_peak_end_time)
+
+// Off / All Week / Weekdays
+#define DEFINE_TESLA_POLICY_SELECT(ClassName, ParentMethod) \
+    class ClassName : public WithParent<select::Select> { \
+    protected: \
+        void control(const std::string &value) override { \
+            if (!parent_) return; \
+            auto policy = state_text::departure_policy(value); \
+            if (policy.has_value()) parent_->ParentMethod(*policy); \
+        } \
+    };
+
+DEFINE_TESLA_POLICY_SELECT(TeslaDeparturePreconditioningSelect, set_departure_preconditioning)
+DEFINE_TESLA_POLICY_SELECT(TeslaDepartureOffPeakSelect, set_departure_off_peak)
 
 class TeslaChargingAmpsNumber : public WithParent<number::Number> {
 protected:

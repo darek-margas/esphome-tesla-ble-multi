@@ -10,13 +10,13 @@
 #include <esphome/core/helpers.h>
 #include <tb_utils.h>
 
-// The guest mode / overheat temperature / low power commands need the
-// darek-margas tesla-ble fork v5.2.0-dm.1 or newer. With an older library the
+// The guest mode / overheat temperature / low power / scheduled departure
+// commands need the darek-margas tesla-ble fork v5.2.0-dm.2 or newer. With an older library the
 // messages still compile (same protocol definitions) but the library refuses
 // to build them at run time ("Unsupported vehicle action type"), so fail the
-// build instead. Fix: set the tesla-ble ref in your YAML to v5.2.0-dm.1.
-static_assert(std::is_member_function_pointer<decltype(&TeslaBLE::Vehicle::set_guest_mode)>::value,
-              "tesla-ble library too old: use ref v5.2.0-dm.1 (darek-margas fork) or newer");
+// build instead. Fix: set the tesla-ble ref in your YAML to v5.2.0-dm.2.
+static_assert(std::is_member_function_pointer<decltype(&TeslaBLE::Vehicle::set_scheduled_departure)>::value,
+              "tesla-ble library too old: use ref v5.2.0-dm.2 (darek-margas fork) or newer");
 
 namespace esphome {
 namespace tesla_ble_vehicle {
@@ -1566,6 +1566,105 @@ void TeslaBLEVehicle::set_scheduled_charging_time(int minutes) {
     return;
   }
   send_scheduled_charging_(true, minutes);
+}
+
+void TeslaBLEVehicle::set_scheduled_departure(bool enabled) {
+  Departure d = departure_;
+  if (enabled && d.time < 0) {
+    ESP_LOGW(TAG, "[%s] Scheduled departure: no departure time known yet - set the time instead", log_name());
+    publish_departure_();
+    return;
+  }
+  d.enabled = enabled;
+  send_departure_(d);
+}
+
+void TeslaBLEVehicle::set_departure_time(int minutes) {
+  if (minutes < 0 || minutes >= 24 * 60) return;
+  Departure d = departure_;
+  d.enabled = 1;  // setting the time turns departure on, like the charging start time
+  d.time = minutes;
+  send_departure_(d);
+}
+
+void TeslaBLEVehicle::set_departure_preconditioning(int policy) {
+  Departure d = departure_;
+  d.preconditioning = policy;
+  send_departure_(d);
+}
+
+void TeslaBLEVehicle::set_departure_off_peak(int policy) {
+  Departure d = departure_;
+  d.off_peak = policy;
+  send_departure_(d);
+}
+
+void TeslaBLEVehicle::set_off_peak_end_time(int minutes) {
+  if (minutes < 0 || minutes >= 24 * 60) return;
+  Departure d = departure_;
+  d.off_peak_end = minutes;
+  send_departure_(d);
+}
+
+void TeslaBLEVehicle::send_departure_(Departure d) {
+  // Policy and time changes only apply to an enabled departure schedule
+  if (d.enabled != 1 && d.enabled != 0) d.enabled = 1;
+  if (d.enabled == 1 && d.time < 0) {
+    ESP_LOGW(TAG, "[%s] Scheduled departure: set the departure time first", log_name());
+    publish_departure_();
+    return;
+  }
+  CarServer_ScheduledDepartureAction action = CarServer_ScheduledDepartureAction_init_default;
+  action.enabled = d.enabled == 1;
+  if (action.enabled) {
+    action.departure_time = d.time;
+    action.off_peak_hours_end_time = d.off_peak_end >= 0 ? d.off_peak_end : 0;
+    if (d.preconditioning == state_text::kPolicyAllWeek || d.preconditioning == state_text::kPolicyWeekdays) {
+      action.has_preconditioning_times = true;
+      action.preconditioning_times.which_times = d.preconditioning;
+    }
+    if (d.off_peak == state_text::kPolicyAllWeek || d.off_peak == state_text::kPolicyWeekdays) {
+      action.has_off_peak_charging_times = true;
+      action.off_peak_charging_times.which_times = d.off_peak;
+    }
+  }
+
+  char name[64];
+  if (action.enabled) {
+    snprintf(name, sizeof(name), "Scheduled Departure %02d:%02d", d.time / 60, d.time % 60);
+  } else {
+    snprintf(name, sizeof(name), "Scheduled Departure Off");
+  }
+  ESP_LOGI(TAG, "%s requested (preconditioning %s, off-peak %s)", name,
+           state_text::departure_policy_option(d.preconditioning > 0 ? d.preconditioning : 0),
+           state_text::departure_policy_option(d.off_peak > 0 ? d.off_peak : 0));
+
+  send_command_with_tracking(
+      UniversalMessage_Domain_DOMAIN_INFOTAINMENT, name,
+      [action](TeslaBLE::Client *client, uint8_t *buff, size_t *len) {
+        return client->build_car_server_vehicle_action_message(
+            buff, len, CarServer_VehicleAction_scheduledDepartureAction_tag, &action);
+      },
+      TeslaBLE::WakePolicy::WAKE_IF_NEEDED,
+      [this](bool succeeded) {
+        // Read the schedule back: shows what the car took, or puts the
+        // entities back if it did not
+        schedule_state_refresh_(ControlStateRefresh::CHARGE_STATE);
+        if (!succeeded) publish_departure_();
+      });
+}
+
+void TeslaBLEVehicle::publish_departure_() {
+  const Departure &d = departure_;
+  if (departure_switch_ != nullptr && d.enabled >= 0) departure_switch_->publish_state(d.enabled == 1);
+  if (departure_time_entity_ != nullptr && d.time >= 0)
+    static_cast<TeslaDepartureTime *>(departure_time_entity_)->update_time(d.time);
+  if (off_peak_end_entity_ != nullptr && d.off_peak_end >= 0)
+    static_cast<TeslaOffPeakEndTime *>(off_peak_end_entity_)->update_time(d.off_peak_end);
+  if (departure_precondition_select_ != nullptr && d.preconditioning >= 0)
+    departure_precondition_select_->publish_state(state_text::departure_policy_option(d.preconditioning));
+  if (departure_off_peak_select_ != nullptr && d.off_peak >= 0)
+    departure_off_peak_select_->publish_state(state_text::departure_policy_option(d.off_peak));
 }
 
 void TeslaBLEVehicle::send_scheduled_charging_(bool enabled, int minutes) {

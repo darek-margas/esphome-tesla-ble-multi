@@ -224,6 +224,15 @@ static void test_cop_option() {
   }
 }
 
+static void test_departure_policy() {
+  CHECK_STR(std::string(departure_policy_option(kPolicyOff)), "Off");
+  CHECK_STR(std::string(departure_policy_option(kPolicyWeekdays)), "Weekdays");
+  CHECK(departure_policy_option(3) == nullptr);
+  for (int p = kPolicyOff; p <= kPolicyWeekdays; p++)
+    CHECK(departure_policy(departure_policy_option(p)) == std::optional<int>(p));
+  CHECK(!departure_policy("Weekends").has_value());
+}
+
 int main() {
   test_sleep_status();
   test_lock_status();
@@ -246,6 +255,7 @@ int main() {
   test_charge_port_latch_lock();
   test_cop_temp();
   test_cop_option();
+  test_departure_policy();
 
   return test_summary();
 }

@@ -54,6 +54,11 @@ TeslaSteeringWheelHeatSwitch = tesla_ble_vehicle_ns.class_("TeslaSteeringWheelHe
 TeslaSentryModeSwitch = tesla_ble_vehicle_ns.class_("TeslaSentryModeSwitch", switch.Switch)
 TeslaScheduledChargingSwitch = tesla_ble_vehicle_ns.class_("TeslaScheduledChargingSwitch", switch.Switch)
 TeslaScheduledChargingTime = tesla_ble_vehicle_ns.class_("TeslaScheduledChargingTime", datetime.TimeEntity)
+TeslaScheduledDepartureSwitch = tesla_ble_vehicle_ns.class_("TeslaScheduledDepartureSwitch", switch.Switch)
+TeslaDepartureTime = tesla_ble_vehicle_ns.class_("TeslaDepartureTime", datetime.TimeEntity)
+TeslaOffPeakEndTime = tesla_ble_vehicle_ns.class_("TeslaOffPeakEndTime", datetime.TimeEntity)
+TeslaDeparturePreconditioningSelect = tesla_ble_vehicle_ns.class_("TeslaDeparturePreconditioningSelect", select.Select)
+TeslaDepartureOffPeakSelect = tesla_ble_vehicle_ns.class_("TeslaDepartureOffPeakSelect", select.Select)
 
 # Custom lock classes
 TeslaDoorsLock = tesla_ble_vehicle_ns.class_("TeslaDoorsLock", lock.Lock)
@@ -146,7 +151,7 @@ BINARY_SENSORS = [
     {"id": "asleep", "name": "Asleep", "icon": "mdi:sleep"},
     {"id": "user_present", "name": "User Present", "icon": "mdi:account-check", "device_class": "occupancy"},
     {"id": "charger", "name": "Charger", "icon": "mdi:power-plug", "device_class": "plug"},
-    {"id": "cabin_overheat_active", "name": "Cabin Overheat Active", "icon": "mdi:car-defrost-rear", "device_class": "running"},
+    {"id": "cabin_overheat_active", "name": "Cabin Overheat Active", "icon": "mdi:snowflake-thermometer", "device_class": "running"},
     # Car is here: its BLE adverts were heard in the last 60 s (or it is connected)
     {"id": "present", "name": "Present", "icon": "mdi:car-connected", "device_class": "presence"},
 
@@ -247,7 +252,6 @@ TEXT_SENSORS = [
     {"id": "shift_state", "name": "Shift State", "icon": "mdi:car-shift-pattern", "disabled_by_default": True},
     {"id": "charge_limit_reason", "name": "Charge Limit Reason", "icon": "mdi:ev-plug-tesla"},
     {"id": "scheduled_charging_mode", "name": "Scheduled Charging Mode", "icon": "mdi:calendar-clock"},
-    {"id": "scheduled_departure_time", "name": "Scheduled Departure Time", "icon": "mdi:clock-end"},
     {"id": "steering_wheel_heat_level", "name": "Steering Wheel Heat Level", "icon": "mdi:steering"},
     {"id": "seat_heater_front_left_level", "name": "Seat Heater Front Left Level", "icon": "mdi:car-seat-heater", "disabled_by_default": True},
     {"id": "seat_heater_front_right_level", "name": "Seat Heater Front Right Level", "icon": "mdi:car-seat-heater", "disabled_by_default": True},
@@ -276,6 +280,8 @@ SWITCHES = [
     {"id": "sentry_mode", "name": "Sentry Mode", "class": TeslaSentryModeSwitch, "setter": "set_sentry_mode_switch", "icon": "mdi:shield-car"},
     # On = "start charging at" the Scheduled Charging Start time
     {"id": "scheduled_charging", "name": "Scheduled Charging", "class": TeslaScheduledChargingSwitch, "setter": "set_scheduled_charging_switch", "icon": "mdi:calendar-clock"},
+    # On = depart by the Scheduled Departure Time (preconditioning / off-peak charging below)
+    {"id": "scheduled_departure", "name": "Scheduled Departure", "class": TeslaScheduledDepartureSwitch, "setter": "set_scheduled_departure_switch", "icon": "mdi:car-clock"},
     # Not reported by the car over BLE: show the last state that was set (assumed state)
     {"id": "low_power_mode", "name": "Low Power Mode", "class": TeslaLowPowerModeSwitch, "setter": None, "icon": "mdi:leaf"},
     {"id": "keep_accessory_power", "name": "Keep Accessory Power", "class": TeslaKeepAccessoryPowerSwitch, "setter": None, "icon": "mdi:power-socket"},
@@ -288,15 +294,34 @@ SELECTS = [
         "name": "Cabin Overheat Protection",
         "class": TeslaCabinOverheatSelect,
         "setter": "set_cabin_overheat_select",
-        "icon": "mdi:car-defrost-front",
+        "icon": "mdi:snowflake-thermometer",
         # The activation temperature only applies to On (A/C), as in the Tesla app
         "options": ["Off", "Fan Only", "On 30 °C", "On 35 °C", "On 40 °C"],
+    },
+    {
+        "id": "departure_preconditioning",
+        "name": "Departure Preconditioning",
+        "class": TeslaDeparturePreconditioningSelect,
+        "setter": "set_departure_preconditioning_select",
+        "icon": "mdi:car-defrost-front",
+        "options": ["Off", "All Week", "Weekdays"],
+    },
+    {
+        "id": "departure_off_peak",
+        "name": "Departure Off-Peak Charging",
+        "class": TeslaDepartureOffPeakSelect,
+        "setter": "set_departure_off_peak_select",
+        "icon": "mdi:transmission-tower",
+        "options": ["Off", "All Week", "Weekdays"],
     },
 ]
 
 # Time entities: "start charging at" (setting it also turns scheduled charging on)
 TIMES = [
     {"id": "scheduled_charging_start", "name": "Scheduled Charging Start", "class": TeslaScheduledChargingTime, "setter": "set_scheduled_charging_time_entity", "icon": "mdi:clock-start"},
+    # Setting it also turns scheduled departure on
+    {"id": "scheduled_departure_time", "name": "Scheduled Departure Time", "class": TeslaDepartureTime, "setter": "set_departure_time_entity", "icon": "mdi:clock-end"},
+    {"id": "off_peak_end_time", "name": "Off-Peak End Time", "class": TeslaOffPeakEndTime, "setter": "set_off_peak_end_time_entity", "icon": "mdi:clock-end"},
 ]
 
 # Lock entities (combined sensor + control)
