@@ -1,5 +1,7 @@
 # ESPHome Tesla BLE - multi-car
 
+<a href="#a-car-in-home-assistant"><img src="docs/preview.png" align="right" width="320" alt="A car in Home Assistant: controls, sensors and diagnostics - click for full size"></a>
+
 Control more than one Tesla from one ESP32 over BLE.
 
 This is a multi-car fork of [yoziru/esphome-tesla-ble](https://github.com/yoziru/esphome-tesla-ble). Each car gets its own BLE client, key, sessions and Home Assistant sub-device, so one ESP32 serves several cars instead of needing one ESP32 per car.
@@ -21,26 +23,6 @@ It runs on ESPHome 2026.9.x with the Tesla BLE library v5.2.0 and is tested with
 - Commands for a car that is not connected right now are queued and sent on its turn
 
 The original single-car package layout still works. Multi-car configs define the vehicles directly.
-
-## In Home Assistant
-
-Each car is its own device under the ESP32 node (see [Home Assistant sub-devices](#home-assistant-sub-devices)):
-
-<img src="docs/ha-device-overview.png" width="700" alt="ESP32 node with one device per car">
-
-A car's controls: locks, covers, charging, climate (with preset and Bioweapon fan mode read back from the car), scheduled charging start time, sentry mode and buttons:
-
-<img src="docs/ha-car-controls.png" width="700" alt="Car controls">
-
-Sensors and diagnostics of one car. A sensor that stays *Unknown* means that car does not send that value over BLE (for example Estimated Range), or the state does not apply right now (Time to Full when not charging):
-
-<table>
-<tr>
-<td valign="top"><img src="docs/ha-car-sensors.png" width="253" alt="Car sensors"></td>
-<td valign="top"><img src="docs/ha-car-diagnostic.png" width="252" alt="Car diagnostics"><br><br>
-Diagnostics: link signal (BLE RSSI, and the car's advert RSSI while not connected), <em>Force data update</em> to read everything now, pairing and key regeneration, and the result of the last command.</td>
-</tr>
-</table>
 
 ## Example: two cars
 
@@ -423,6 +405,8 @@ tesla_ble_vehicle:
 
 All entities created for that vehicle, including Pair and Regenerate Key, are attached to the corresponding Home Assistant device.
 
+<img src="docs/ha-device-overview.png" width="700" alt="ESP32 node with one device per car">
+
 Per car, besides the vehicle entities:
 
 | Entity | Type | Notes |
@@ -433,6 +417,22 @@ Per car, besides the vehicle entities:
 | Last Command | text sensor, diagnostic | Result of the last command. Disabled by default |
 
 The Restart and BLE Radio controls above remain on the parent ESPHome device.
+
+### A car in Home Assistant
+
+Controls: locks, covers, charging, climate (preset and Bioweapon fan mode are read back from the car), scheduled charging start time, sentry mode and buttons:
+
+<img src="docs/ha-car-controls.png" width="700" alt="Car controls">
+
+Sensors and diagnostics. A sensor that stays *Unknown* means that car does not send that value over BLE (for example Estimated Range), or it does not apply right now (Time to Full when not charging):
+
+<table>
+<tr>
+<td valign="top"><img src="docs/ha-car-sensors.png" width="253" alt="Car sensors"></td>
+<td valign="top"><img src="docs/ha-car-diagnostic.png" width="252" alt="Car diagnostics"><br><br>
+Diagnostics: link signal (BLE RSSI, and the car's advert RSSI while not connected), <em>Force data update</em> to read everything now, pairing and key regeneration, and the result of the last command.</td>
+</tr>
+</table>
 
 ## Polling
 
