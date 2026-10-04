@@ -644,6 +644,12 @@ void TeslaBLEVehicle::enqueue_poll_batch_(TeslaBLE::WakePolicy policy, uint32_t 
     };
     static constexpr uint8_t POLL_COUNT = sizeof(polls) / sizeof(polls[0]);
 
+    // Media only while the car is awake: it has nothing to report asleep, and
+    // this poll must never be the one that keeps it awake. Counted before any
+    // job is queued, so an early finish cannot close the batch too soon.
+    const bool poll_media = media_player_ != nullptr && state_manager_ && !state_manager_->is_asleep();
+    poll_batch_remaining_ = POLL_COUNT + (poll_media ? 1 : 0);
+
     const uint8_t start = poll_batch_start_ % POLL_COUNT;
     poll_batch_start_ = static_cast<uint8_t>((start + 1) % POLL_COUNT);
     ESP_LOGI(TAG, "[%s] Infotainment batch starts with %s", log_name(), polls[start].name);
@@ -652,10 +658,7 @@ void TeslaBLEVehicle::enqueue_poll_batch_(TeslaBLE::WakePolicy policy, uint32_t 
       const PollSpec &poll = polls[(start + offset) % POLL_COUNT];
       enqueue_poll_job_(poll.name, poll.data_type, policy);
     }
-    // Media only while the car is awake: it has nothing to report asleep, and
-    // this poll must never be the one that keeps it awake
-    if (media_player_ != nullptr && state_manager_ && !state_manager_->is_asleep()) {
-      ++poll_batch_remaining_;
+    if (poll_media) {
       enqueue_poll_job_("Media State Poll", CarServer_GetVehicleData_getMediaState_tag,
                         TeslaBLE::WakePolicy::NO_WAKE_SKIP);
     }
