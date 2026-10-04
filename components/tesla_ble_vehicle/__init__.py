@@ -153,12 +153,17 @@ BINARY_SENSORS = [
     {"id": "rear_defroster", "name": "Rear Defroster", "icon": "mdi:car-defrost-rear", "device_class": "running"},
     {"id": "battery_heater", "name": "Battery Heater", "icon": "mdi:battery-heart-variant", "device_class": "running"},
     {"id": "battery_heater_no_power", "name": "Battery Heater No Power", "icon": "mdi:battery-alert", "device_class": "problem"},
+    # Seat heaters: Running when heating at any level (level in the text sensors)
+    {"id": "seat_heater_front_left", "name": "Seat Heater Front Left", "icon": "mdi:car-seat-heater", "device_class": "running"},
+    {"id": "seat_heater_front_right", "name": "Seat Heater Front Right", "icon": "mdi:car-seat-heater", "device_class": "running"},
+    {"id": "seat_heater_rear_left", "name": "Seat Heater Rear Left", "icon": "mdi:car-seat-heater", "device_class": "running", "disabled_by_default": True},
+    {"id": "seat_heater_rear_center", "name": "Seat Heater Rear Center", "icon": "mdi:car-seat-heater", "device_class": "running", "disabled_by_default": True},
+    {"id": "seat_heater_rear_right", "name": "Seat Heater Rear Right", "icon": "mdi:car-seat-heater", "device_class": "running", "disabled_by_default": True},
 
     # Charging
     {"id": "scheduled_charging_pending", "name": "Scheduled Charging Pending", "icon": "mdi:calendar-clock"},
 
     # Closures / modes
-    {"id": "sentry_mode_available", "name": "Sentry Mode Available", "icon": "mdi:cctv", "entity_category": "diagnostic", "disabled_by_default": True},
     {"id": "speed_limit_mode", "name": "Speed Limit Mode", "icon": "mdi:speedometer-slow"},
 
     # Tyre low-pressure warnings (hard = significantly low, soft = slightly low)
@@ -241,11 +246,11 @@ TEXT_SENSORS = [
     {"id": "scheduled_charging_mode", "name": "Scheduled Charging Mode", "icon": "mdi:calendar-clock"},
     {"id": "scheduled_departure_time", "name": "Scheduled Departure Time", "icon": "mdi:clock-end"},
     {"id": "steering_wheel_heat_level", "name": "Steering Wheel Heat Level", "icon": "mdi:steering"},
-    {"id": "seat_heater_front_left", "name": "Seat Heater Front Left", "icon": "mdi:car-seat-heater"},
-    {"id": "seat_heater_front_right", "name": "Seat Heater Front Right", "icon": "mdi:car-seat-heater"},
-    {"id": "seat_heater_rear_left", "name": "Seat Heater Rear Left", "icon": "mdi:car-seat-heater", "disabled_by_default": True},
-    {"id": "seat_heater_rear_center", "name": "Seat Heater Rear Center", "icon": "mdi:car-seat-heater", "disabled_by_default": True},
-    {"id": "seat_heater_rear_right", "name": "Seat Heater Rear Right", "icon": "mdi:car-seat-heater", "disabled_by_default": True},
+    {"id": "seat_heater_front_left_level", "name": "Seat Heater Front Left Level", "icon": "mdi:car-seat-heater", "disabled_by_default": True},
+    {"id": "seat_heater_front_right_level", "name": "Seat Heater Front Right Level", "icon": "mdi:car-seat-heater", "disabled_by_default": True},
+    {"id": "seat_heater_rear_left_level", "name": "Seat Heater Rear Left Level", "icon": "mdi:car-seat-heater", "disabled_by_default": True},
+    {"id": "seat_heater_rear_center_level", "name": "Seat Heater Rear Center Level", "icon": "mdi:car-seat-heater", "disabled_by_default": True},
+    {"id": "seat_heater_rear_right_level", "name": "Seat Heater Rear Right Level", "icon": "mdi:car-seat-heater", "disabled_by_default": True},
     {"id": "last_command", "name": "Last Command", "icon": "mdi:history", "entity_category": "diagnostic", "disabled_by_default": True, "setter": "set_last_command_text_sensor"},
 ]
 

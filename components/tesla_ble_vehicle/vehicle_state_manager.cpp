@@ -563,6 +563,9 @@ void VehicleStateManager::update_climate_state(const CarServer_ClimateState& cli
     }
     if (climate_state.which_optional_battery_heater_no_power) {
         publish_binary_sensor("battery_heater_no_power", climate_state.optional_battery_heater_no_power.battery_heater_no_power);
+    } else if (climate_state.which_optional_battery_heater) {
+        // Only sent when the problem occurs: absent next to a battery heater state means OK
+        publish_binary_sensor("battery_heater_no_power", false);
     }
     if (climate_state.which_optional_steering_wheel_heat_level) {
         auto level = state_text::steering_wheel_heat_level(
@@ -581,19 +584,29 @@ void VehicleStateManager::update_climate_state(const CarServer_ClimateState& cli
 
     // Seat heaters (each field only set when that seat has a heater)
     if (climate_state.which_optional_seat_heater_left) {
-        publish_text_sensor("seat_heater_front_left", state_text::seat_heater_level(climate_state.optional_seat_heater_left.seat_heater_left));
+        const int level = climate_state.optional_seat_heater_left.seat_heater_left;
+        publish_text_sensor("seat_heater_front_left_level", state_text::seat_heater_level(level));
+        publish_binary_sensor("seat_heater_front_left", level > state_text::kSeatHeaterOff);
     }
     if (climate_state.which_optional_seat_heater_right) {
-        publish_text_sensor("seat_heater_front_right", state_text::seat_heater_level(climate_state.optional_seat_heater_right.seat_heater_right));
+        const int level = climate_state.optional_seat_heater_right.seat_heater_right;
+        publish_text_sensor("seat_heater_front_right_level", state_text::seat_heater_level(level));
+        publish_binary_sensor("seat_heater_front_right", level > state_text::kSeatHeaterOff);
     }
     if (climate_state.which_optional_seat_heater_rear_left) {
-        publish_text_sensor("seat_heater_rear_left", state_text::seat_heater_level(climate_state.optional_seat_heater_rear_left.seat_heater_rear_left));
+        const int level = climate_state.optional_seat_heater_rear_left.seat_heater_rear_left;
+        publish_text_sensor("seat_heater_rear_left_level", state_text::seat_heater_level(level));
+        publish_binary_sensor("seat_heater_rear_left", level > state_text::kSeatHeaterOff);
     }
     if (climate_state.which_optional_seat_heater_rear_center) {
-        publish_text_sensor("seat_heater_rear_center", state_text::seat_heater_level(climate_state.optional_seat_heater_rear_center.seat_heater_rear_center));
+        const int level = climate_state.optional_seat_heater_rear_center.seat_heater_rear_center;
+        publish_text_sensor("seat_heater_rear_center_level", state_text::seat_heater_level(level));
+        publish_binary_sensor("seat_heater_rear_center", level > state_text::kSeatHeaterOff);
     }
     if (climate_state.which_optional_seat_heater_rear_right) {
-        publish_text_sensor("seat_heater_rear_right", state_text::seat_heater_level(climate_state.optional_seat_heater_rear_right.seat_heater_rear_right));
+        const int level = climate_state.optional_seat_heater_rear_right.seat_heater_rear_right;
+        publish_text_sensor("seat_heater_rear_right_level", state_text::seat_heater_level(level));
+        publish_binary_sensor("seat_heater_rear_right", level > state_text::kSeatHeaterOff);
     }
 
     // Steering wheel heater - sync switch state from vehicle
@@ -768,7 +781,7 @@ void VehicleStateManager::update_closures_state(const CarServer_ClosuresState& c
     }
 
     if (closures_state.which_optional_sentry_mode_available) {
-        publish_binary_sensor("sentry_mode_available", closures_state.optional_sentry_mode_available.sentry_mode_available);
+        sentry_mode_available_ = closures_state.optional_sentry_mode_available.sentry_mode_available;
     }
 
     // Speed limit mode (only set when the car supports it)
@@ -842,6 +855,10 @@ void VehicleStateManager::update_steering_wheel_heat(bool enabled) {
 
 void VehicleStateManager::update_sentry_mode(bool enabled) {
     publish_sensor_state(sentry_mode_switch_, enabled);
+}
+
+void VehicleStateManager::republish_sentry_mode() {
+    if (sentry_mode_switch_ != nullptr) sentry_mode_switch_->publish_state(sentry_mode_switch_->state);
 }
 
 void VehicleStateManager::republish_charging_amps() {

@@ -1589,6 +1589,11 @@ void TeslaBLEVehicle::honk_horn() {
 }
 
 void TeslaBLEVehicle::set_sentry_mode(bool enable) {
+  if (enable && state_manager_ && !state_manager_->sentry_mode_available()) {
+    ESP_LOGW(TAG, "[%s] Sentry mode is not available on this car right now - not sending", log_name());
+    state_manager_->republish_sentry_mode();  // put the switch back
+    return;
+  }
   ESP_LOGI(TAG, "Sentry mode %s requested", enable ? "ON" : "OFF");
   send_command_with_tracking(
       UniversalMessage_Domain_DOMAIN_INFOTAINMENT,

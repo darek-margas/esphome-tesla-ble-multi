@@ -126,6 +126,7 @@ public:
     void update_charging_control_state(bool charging);
     void update_steering_wheel_heat(bool enabled);
     void update_sentry_mode(bool enabled);
+    void republish_sentry_mode();  // undo a switch flip that was not sent
     void republish_charging_amps();
     void republish_charging_limit();
     void update_charger_connected(bool connected);
@@ -144,6 +145,8 @@ public:
     // ==========================================================================
     bool is_asleep() const;
     bool is_sentry_mode() const;
+    // false only when the car reported that sentry mode is not available
+    bool sentry_mode_available() const { return sentry_mode_available_; }
     bool is_charge_flap_open() const;
     bool is_charging() const { return is_charging_; }
     float get_charging_amps() const;
@@ -209,6 +212,7 @@ private:
     float current_inside_temp_{NAN};
     float target_temp_{21.0f};
     bool climate_on_{false};
+    bool sentry_mode_available_{true};
     std::string last_climate_summary_;
 
     // Cached values for estimated power calculation (V * A * phases / 1000)
