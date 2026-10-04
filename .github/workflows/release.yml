@@ -36,26 +36,23 @@ jobs:
           TAG="v$VERSION"
 
           cat > /tmp/release-notes.md <<'EOF'
-          ## Fix: locks stuck on Locking / Unlocking; no doubled car names
+          ## Charge Port Latch settles reliably; car name in lock / cover log lines
 
-          Two fixes on top of v2026.10.4.1.
+          Follow-up to v2026.10.4.2, from testing the Charge Port Latch on a car without a cable.
 
-          ### Charge Port Latch (and Doors) no longer stick on Locking / Unlocking
-          The **Charge Port Latch** lock moves the charge port flap (Lock closes it, Unlock opens it and releases a cable), but its state comes from the cable latch. After a click it showed *Locking* / *Unlocking* and waited for a poll to report something else, which went wrong two ways:
-          - nothing re-read the state after the command, and with an idle car the next charge poll can be 11 minutes away;
-          - with no cable plugged in the car reports the latch as "not available", which was ignored - so the entity stayed *Locking* / *Unlocking* for good while the flap had long finished moving.
+          ### The car keeps its BLE turn 10 s after a command
+          After a lock / unlock the state is read again 1.5 s and 8 s later to confirm it. In a log the car handed the BLE link to the other car before the 8 s read, so a wrong early reading stayed on screen until that car's next turn. After any command sent from Home Assistant the car now keeps its turn for 10 s (the 60 s maximum turn still applies), so the follow-up reads always run.
 
-          Now:
-          - after a lock / unlock command the state is read again (charge state after 1.5 s and 8 s for the latch, VCSEC after 2 s for the doors). If the command fails or nothing new arrives within 20 s, the entity returns to the last state the car reported.
-          - the latch shows *Locked* (cable held), *Unlocked* (cable free) or *Jammed*; with **no cable** it follows the charge port flap: closed = *Locked*, open = *Unlocked*.
+          ### Charge Port Latch follows the flap when no cable is connected
+          Right after the flap opened, the car briefly reported the latch pin as engaged - with no cable - so the lock showed *Locked* although the flap was open. Without a cable the latch means nothing, so whenever the charging state says no cable is connected, the lock now follows the charge port flap: open = *Unlocked*, closed = *Locked*. With a cable plugged in, the real latch still decides (*Locked* = cable held, *Unlocked* = cable free, *Jammed*).
 
-          ### No doubled car names
-          With a Home Assistant sub-device per car (`device_id`), Home Assistant puts the device name in front of every entity name, and the entity name already started with the car name - giving names like "Car One Car One Charge Port Latch". Entities on a car's own device are now named without the car name ("Car One Charge Port Latch"). Without `device_id` nothing changes. ESPHome keys entities per device, so equal names on two cars do not collide.
+          ### Lock and cover changes logged with the car name
+          Since v2026.10.4.2 entity names on a car's own device leave out the car name, so the `[S]` state lines in the ESPHome log viewer (printed by the viewer from the entity name) no longer say which car. The firmware now logs each change of the Doors and Charge Port Latch locks and the Trunk, Frunk, Windows and Charge Port Door covers with the car name, once per change:
 
-          **After updating (only with `device_id`):** the entity names are part of each entity's identity, so Home Assistant creates **new entities** with shorter IDs (for example `lock.car_one_charge_port_latch`) and the old ones show as unavailable.
-          - Delete the old, unavailable entities (Settings → Entities, filter by status).
-          - Update automations, scripts and dashboards that use the old entity IDs - or, after deleting an old entity, rename the new entity's ID back to the old one.
-          - History starts fresh on the new entities.
+          ```text
+          [Szarik] Charge Port Door: OPEN
+          [Szarik] Charge Port Latch: UNLOCKED
+          ```
 
           Library unchanged: [darek-margas/tesla-ble](https://github.com/darek-margas/tesla-ble) `v5.2.0`.
           EOF
