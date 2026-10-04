@@ -36,11 +36,11 @@ jobs:
           TAG="v$VERSION"
 
           cat > /tmp/release-notes.md <<'EOF'
-          ## Scheduled departure, Cabin Overheat temperature, Low Power / Keep Accessory / Guest Mode
+          ## Media player: play / pause, volume, track skip and now playing
 
-          New controls that were missing compared with the Tesla app. They need new actions in the Tesla BLE library, so this release moves to the library fork **[darek-margas/tesla-ble](https://github.com/darek-margas/tesla-ble) `v5.2.0-dm.2`**.
+          Control the car's media from Home Assistant. This needs the Tesla BLE library fork **[darek-margas/tesla-ble](https://github.com/darek-margas/tesla-ble) `v5.2.0-dm.3`**, which adds the media controls and the media state read.
 
-          ### ⚠️ Change your YAML: library `v5.2.0-dm.2`
+          ### ⚠️ Change your YAML: library `v5.2.0-dm.3`
           If your own YAML lists the `tesla-ble` component (instead of taking it from `packages/board.yml`), change it to:
 
           ```yaml
@@ -49,29 +49,27 @@ jobs:
               components:
                 - name: tesla-ble
                   source: https://github.com/darek-margas/tesla-ble.git
-                  ref: v5.2.0-dm.2   # roll back: v5.2.0-dm.1
+                  ref: v5.2.0-dm.3   # roll back: v5.2.0-dm.2
           ```
 
-          An older library now fails the build with a clear error at `set_scheduled_departure` instead of building firmware where the new controls do nothing (seen as `Unsupported vehicle action type: 66` in the log).
+          With an older library the build stops with an error at `set_media_state_callback`. That error is the check telling you the library is too old.
 
-          ### Cabin Overheat Protection: one select with the temperature
-          As in the Tesla app, a single select: **Off / Fan Only / On 30 °C / On 35 °C / On 40 °C**, read back from the car. The icon is now a snowflake thermometer (cooling) instead of the defroster, also on *Cabin Overheat Active*. The separate *Cabin Overheat Temperature* select is gone.
+          ### New entities per car
+          - **Media** (media player): play / pause and volume. Both are read back from the car.
+            - Volume maps to the car's 0–10 scale.
+            - Volume up / down moves one step.
+          - **Media Title**, **Media Artist** and **Media Source** (text sensors). ESPHome media players cannot carry titles, so these are separate entities. They are empty while nothing plays.
+          - **Media Next Track** and **Media Previous Track** (buttons). Home Assistant's ESPHome integration has no next / previous track command.
 
-          ### Scheduled departure
-          - **Scheduled Departure** (switch)
-          - **Scheduled Departure Time** (time picker; setting a time also turns departure on)
-          - **Departure Preconditioning** and **Departure Off-Peak Charging** (Off / All Week / Weekdays)
-          - **Off-Peak End Time** (time picker)
+          ### When it is read, and the car's sleep
+          - The media state is read with each infotainment poll while the car is awake, and again 1.5 s after every media command.
+          - While the car sleeps the player shows *Off* and the now-playing sensors are cleared.
+          - Media commands are never sent to a sleeping car, so they never wake it. Media is for someone sitting in the car.
 
-          All of these are read back from the car's charge state. Each change sends the whole schedule, built from what the car last reported, then reads it back. The old *Scheduled Departure Time* text sensor is replaced by the time picker. *Not yet tested on the cars; please report if something does not stick.*
+          ### Also in this release
+          - Infotainment batches count the media poll before any job is queued, so a batch cannot be marked complete early.
 
-          ### Low Power Mode, Keep Accessory Power, Guest Mode
-          New switches. The car does not report these over BLE, so they are **assumed state**: Home Assistant shows what was last sent, with separate On / Off buttons.
-
-          ### Clean up in Home Assistant
-          These entities are now *unavailable* and can be deleted: **Cabin Overheat Temperature** and the old **Scheduled Departure Time** text sensor.
-
-          Library: [darek-margas/tesla-ble](https://github.com/darek-margas/tesla-ble) `v5.2.0-dm.2` (upstream yoziru v5.2.0 plus guest mode, cabin overheat temperature, low power / keep accessory power and scheduled departure).
+          Library: [darek-margas/tesla-ble](https://github.com/darek-margas/tesla-ble) `v5.2.0-dm.3` ([release notes](https://github.com/darek-margas/tesla-ble/releases/tag/v5.2.0-dm.3)).
           EOF
 
           if gh release view "$TAG" >/dev/null 2>&1; then
