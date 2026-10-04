@@ -10,6 +10,14 @@
 #include <esphome/core/helpers.h>
 #include <tb_utils.h>
 
+// The guest mode / overheat temperature / low power commands need the
+// darek-margas tesla-ble fork v5.2.0-dm.1 or newer. With an older library the
+// messages still compile (same protocol definitions) but the library refuses
+// to build them at run time ("Unsupported vehicle action type"), so fail the
+// build instead. Fix: set the tesla-ble ref in your YAML to v5.2.0-dm.1.
+static_assert(std::is_member_function_pointer<decltype(&TeslaBLE::Vehicle::set_guest_mode)>::value,
+              "tesla-ble library too old: use ref v5.2.0-dm.1 (darek-margas fork) or newer");
+
 namespace esphome {
 namespace tesla_ble_vehicle {
 
