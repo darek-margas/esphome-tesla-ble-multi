@@ -420,6 +420,7 @@ private:
     // Command tracking
     void handle_command_result(const std::string &name, TeslaBLE::OperationResult result);
     void schedule_state_refresh_(ControlStateRefresh refresh);
+    void settle_lock_(bool charge_port, bool succeeded);
     void send_command_with_tracking(
         UniversalMessage_Domain domain,
         const std::string &name,

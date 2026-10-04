@@ -95,6 +95,12 @@ constexpr int kStwHeatOff = 1;
 constexpr int kStwHeatLow = 2;
 constexpr int kStwHeatHigh = 3;
 
+// CarServer_ChargePortLatchState tags (which_type)
+constexpr int kLatchSNA = 1;
+constexpr int kLatchDisengaged = 2;
+constexpr int kLatchEngaged = 3;
+constexpr int kLatchBlocking = 4;
+
 constexpr float kKmPerMile = 1.609344f;
 
 inline float miles_to_km(float miles) { return miles * kKmPerMile; }
@@ -267,6 +273,27 @@ inline std::optional<bool> closure_open(int state) {
     case kClosureClosing:
       return true;
     default:
+      return std::nullopt;
+  }
+}
+
+// Charge Port Latch lock entity state from the latch and the charge port door.
+enum class LatchLock { UNLOCKED, LOCKED, JAMMED };
+// Engaged = cable held, Disengaged = cable free, Blocking = jammed. SNA (no
+// cable / not available) follows the charge port door, which is what the
+// lock / unlock commands move then: closed = locked, open = unlocked.
+// Nothing when neither tells.
+inline std::optional<LatchLock> charge_port_latch_lock(int latch_tag, std::optional<bool> door_open) {
+  switch (latch_tag) {
+    case kLatchEngaged:
+      return LatchLock::LOCKED;
+    case kLatchDisengaged:
+      return LatchLock::UNLOCKED;
+    case kLatchBlocking:
+      return LatchLock::JAMMED;
+    default:
+      if (door_open.has_value())
+        return *door_open ? LatchLock::UNLOCKED : LatchLock::LOCKED;
       return std::nullopt;
   }
 }

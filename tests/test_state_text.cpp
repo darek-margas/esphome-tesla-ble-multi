@@ -176,6 +176,18 @@ static void test_steering_wheel_heat_level() {
   CHECK(!steering_wheel_heat_level(9).has_value());
 }
 
+static void test_charge_port_latch_lock() {
+  using L = LatchLock;
+  CHECK(charge_port_latch_lock(kLatchEngaged, std::nullopt) == L::LOCKED);
+  CHECK(charge_port_latch_lock(kLatchDisengaged, false) == L::UNLOCKED);
+  CHECK(charge_port_latch_lock(kLatchBlocking, true) == L::JAMMED);
+  // No cable: follows the charge port door
+  CHECK(charge_port_latch_lock(kLatchSNA, false) == L::LOCKED);
+  CHECK(charge_port_latch_lock(kLatchSNA, true) == L::UNLOCKED);
+  CHECK(charge_port_latch_lock(0, true) == L::UNLOCKED);
+  CHECK(!charge_port_latch_lock(kLatchSNA, std::nullopt).has_value());
+}
+
 int main() {
   test_sleep_status();
   test_lock_status();
@@ -195,6 +207,7 @@ int main() {
   test_climate_fan_mode();
   test_closure_open();
   test_steering_wheel_heat_level();
+  test_charge_port_latch_lock();
 
   return test_summary();
 }

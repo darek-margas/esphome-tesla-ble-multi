@@ -53,6 +53,10 @@ static_assert(CarServer_ClimateState_ClimateKeeperMode_Party_tag == state_text::
 static_assert(CarServer_ClimateState_DefrostMode_Off_tag == state_text::kDefrostOff);
 static_assert(CarServer_ClimateState_DefrostMode_Normal_tag == state_text::kDefrostNormal);
 static_assert(CarServer_ClimateState_DefrostMode_Max_tag == state_text::kDefrostMax);
+static_assert(CarServer_ChargePortLatchState_SNA_tag == state_text::kLatchSNA);
+static_assert(CarServer_ChargePortLatchState_Disengaged_tag == state_text::kLatchDisengaged);
+static_assert(CarServer_ChargePortLatchState_Engaged_tag == state_text::kLatchEngaged);
+static_assert(CarServer_ChargePortLatchState_Blocking_tag == state_text::kLatchBlocking);
 static_assert(static_cast<int>(CarServer_StwHeatLevel_StwHeatLevel_Unknown) == state_text::kStwHeatUnknown);
 static_assert(static_cast<int>(CarServer_StwHeatLevel_StwHeatLevel_Off) == state_text::kStwHeatOff);
 static_assert(static_cast<int>(CarServer_StwHeatLevel_StwHeatLevel_Low) == state_text::kStwHeatLow);
@@ -431,7 +435,7 @@ void VehicleStateManager::update_charge_state(const CarServer_ChargeState& charg
     
     // Update charge port door cover (physical door open/closed)
     if (charge_state.which_optional_charge_port_door_open) {
-        publish_cover_open(charge_port_door_cover_, charge_state.optional_charge_port_door_open.charge_port_door_open);
+        update_charge_flap_open(charge_state.optional_charge_port_door_open.charge_port_door_open);
     }
     
     // Charge schedule
@@ -474,16 +478,8 @@ void VehicleStateManager::update_charge_state(const CarServer_ChargeState& charg
 
     // Update charge port latch lock (cable latch engaged/disengaged)
     if (charge_state.has_charge_port_latch) {
-        // Engaged = locked (cable secured), Disengaged = unlocked (cable can be removed)
-        const bool latch_engaged = (charge_state.charge_port_latch.which_type == CarServer_ChargePortLatchState_Engaged_tag);
-        const bool latch_disengaged = (charge_state.charge_port_latch.which_type == CarServer_ChargePortLatchState_Disengaged_tag);
-        if (charge_port_latch_lock_ != nullptr && (latch_engaged || latch_disengaged)) {
-            auto new_state = latch_engaged ? lock::LOCK_STATE_LOCKED : lock::LOCK_STATE_UNLOCKED;
-            if (charge_port_latch_lock_->state != new_state) {
-                charge_port_latch_lock_->publish_state(new_state);
-                ESP_LOGD(STATE_MANAGER_TAG, "Charge port latch: %s", latch_engaged ? "ENGAGED (locked)" : "DISENGAGED (unlocked)");
-            }
-        }
+        latch_tag_ = charge_state.charge_port_latch.which_type;
+        update_charge_port_latch_lock_();
     }
 
     // Deferred estimated power calculation: single publish per poll from cached voltage/current/phases.
@@ -815,6 +811,7 @@ void VehicleStateManager::update_asleep(bool asleep) {
 }
 
 void VehicleStateManager::update_unlocked(bool unlocked) {
+    doors_unlocked_ = unlocked;
     // Update doors lock entity
     if (doors_lock_ != nullptr) {
         auto new_state = unlocked ? lock::LOCK_STATE_UNLOCKED : lock::LOCK_STATE_LOCKED;
@@ -834,6 +831,11 @@ void VehicleStateManager::update_user_present(bool present) {
 void VehicleStateManager::update_charge_flap_open(bool open) {
     // Update charge port door cover entity with VCSEC data
     publish_cover_open(charge_port_door_cover_, open);
+    charge_port_door_open_ = open;
+    // Without a cable the latch lock follows the door
+    if (latch_tag_ != state_text::kLatchEngaged && latch_tag_ != state_text::kLatchDisengaged &&
+        latch_tag_ != state_text::kLatchBlocking)
+        update_charge_port_latch_lock_();
 }
 
 void VehicleStateManager::update_charging_amps(float amps) {
@@ -912,6 +914,30 @@ void VehicleStateManager::republish_scheduled_charging() {
     if (scheduled_charging_switch_ != nullptr) {
         scheduled_charging_switch_->publish_state(scheduled_charging_on_);
     }
+}
+
+void VehicleStateManager::update_charge_port_latch_lock_() {
+    auto st = state_text::charge_port_latch_lock(latch_tag_, charge_port_door_open_);
+    if (!st.has_value()) return;
+    latch_lock_state_ = *st == state_text::LatchLock::LOCKED   ? lock::LOCK_STATE_LOCKED
+                      : *st == state_text::LatchLock::UNLOCKED ? lock::LOCK_STATE_UNLOCKED
+                                                               : lock::LOCK_STATE_JAMMED;
+    if (charge_port_latch_lock_ != nullptr && charge_port_latch_lock_->state != latch_lock_state_) {
+        charge_port_latch_lock_->publish_state(latch_lock_state_);
+        ESP_LOGD(STATE_MANAGER_TAG, "Charge port latch: %s", LOG_STR_ARG(lock::lock_state_to_string(latch_lock_state_)));
+    }
+}
+
+void VehicleStateManager::republish_charge_port_latch() {
+    // Replace a stuck LOCKING / UNLOCKING with the last state the car reported
+    if (charge_port_latch_lock_ == nullptr || latch_lock_state_ == lock::LOCK_STATE_NONE) return;
+    if (charge_port_latch_lock_->state != latch_lock_state_) charge_port_latch_lock_->publish_state(latch_lock_state_);
+}
+
+void VehicleStateManager::republish_doors_lock() {
+    if (doors_lock_ == nullptr || !doors_unlocked_.has_value()) return;
+    const auto st = *doors_unlocked_ ? lock::LOCK_STATE_UNLOCKED : lock::LOCK_STATE_LOCKED;
+    if (doors_lock_->state != st) doors_lock_->publish_state(st);
 }
 
 void VehicleStateManager::save_charge_session_if_changed() {

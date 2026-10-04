@@ -75,6 +75,9 @@ public:
     void set_scheduled_charging_time(datetime::TimeEntity* time) { scheduled_charging_time_ = time; }
     int scheduled_charging_minutes() const { return scheduled_charging_minutes_; }  // -1 = unknown
     void republish_scheduled_charging();
+    // Put a lock showing LOCKING / UNLOCKING back to the last state the car reported
+    void republish_charge_port_latch();
+    void republish_doors_lock();
     bool is_climate_on() const { return climate_on_; }
     
     // ==========================================================================
@@ -213,6 +216,11 @@ private:
     float target_temp_{21.0f};
     bool climate_on_{false};
     bool sentry_mode_available_{true};
+    int latch_tag_{0};
+    std::optional<bool> charge_port_door_open_;
+    lock::LockState latch_lock_state_{lock::LOCK_STATE_NONE};
+    std::optional<bool> doors_unlocked_;
+    void update_charge_port_latch_lock_();
     std::string last_climate_summary_;
 
     // Cached values for estimated power calculation (V * A * phases / 1000)

@@ -1328,7 +1328,9 @@ void TeslaBLEVehicle::lock_vehicle() {
       UniversalMessage_Domain_DOMAIN_VEHICLE_SECURITY, "Lock",
       [](TeslaBLE::Client *client, uint8_t *buff, size_t *len) {
         return client->build_vcsec_action_message(VCSEC_RKEAction_E_RKE_ACTION_LOCK, buff, len);
-      });
+      },
+      TeslaBLE::WakePolicy::WAKE_IF_NEEDED,
+      [this](bool succeeded) { settle_lock_(false, succeeded); });
 }
 
 void TeslaBLEVehicle::unlock_vehicle() {
@@ -1337,7 +1339,41 @@ void TeslaBLEVehicle::unlock_vehicle() {
       UniversalMessage_Domain_DOMAIN_VEHICLE_SECURITY, "Unlock",
       [](TeslaBLE::Client *client, uint8_t *buff, size_t *len) {
         return client->build_vcsec_action_message(VCSEC_RKEAction_E_RKE_ACTION_UNLOCK, buff, len);
-      });
+      },
+      TeslaBLE::WakePolicy::WAKE_IF_NEEDED,
+      [this](bool succeeded) { settle_lock_(false, succeeded); });
+}
+
+// After a lock / unlock command the entity shows LOCKING / UNLOCKING until
+// the car reports the new state. Read the state again so it settles, and if
+// the command failed or nothing is reported, go back to the last real state.
+void TeslaBLEVehicle::settle_lock_(bool charge_port, bool succeeded) {
+  if (!state_manager_) return;
+  auto revert = [this, charge_port]() {
+    if (!state_manager_) return;
+    if (charge_port) state_manager_->republish_charge_port_latch();
+    else state_manager_->republish_doors_lock();
+  };
+  if (!succeeded) {
+    revert();
+    return;
+  }
+  if (charge_port) {
+    // The latch / door move takes a few seconds: read now and again later
+    schedule_state_refresh_(ControlStateRefresh::CHARGE_STATE);
+    this->set_timeout("latch-settle", 8000, [this]() {
+      LogScope log_scope(this);
+      if (link_ready()) vehicle_->charge_state_poll(TeslaBLE::WakePolicy::NO_WAKE_SKIP);
+    });
+    this->set_timeout("latch-fallback", 20000, revert);
+  } else {
+    // VCSEC reports the lock state on every status poll
+    this->set_timeout("doors-settle", 2000, [this]() {
+      LogScope log_scope(this);
+      if (link_ready()) vehicle_->vcsec_poll();
+    });
+    this->set_timeout("doors-fallback", 20000, revert);
+  }
 }
 
 void TeslaBLEVehicle::open_trunk() {
@@ -1392,7 +1428,9 @@ void TeslaBLEVehicle::close_charge_port() {
         VCSEC_ClosureMoveRequest request = VCSEC_ClosureMoveRequest_init_zero;
         request.chargePort = VCSEC_ClosureMoveType_E_CLOSURE_MOVE_TYPE_CLOSE;
         return client->build_vcsec_closure_message(&request, buff, len);
-      });
+      },
+      TeslaBLE::WakePolicy::WAKE_IF_NEEDED,
+      [this](bool succeeded) { settle_lock_(true, succeeded); });
 }
 
 void TeslaBLEVehicle::unlock_charge_port() {
@@ -1402,7 +1440,9 @@ void TeslaBLEVehicle::unlock_charge_port() {
       [](TeslaBLE::Client *client, uint8_t *buff, size_t *len) {
         return client->build_car_server_vehicle_action_message(
             buff, len, CarServer_VehicleAction_chargePortDoorOpen_tag, nullptr);
-      });
+      },
+      TeslaBLE::WakePolicy::WAKE_IF_NEEDED,
+      [this](bool succeeded) { settle_lock_(true, succeeded); });
 }
 
 void TeslaBLEVehicle::unlatch_driver_door() {
