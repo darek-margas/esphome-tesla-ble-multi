@@ -36,38 +36,24 @@ jobs:
           TAG="v$VERSION"
 
           cat > /tmp/release-notes.md <<'EOF'
-          ## Media player: play / pause, volume, track skip and now playing
+          ## Media player fixes, tested on the cars
 
-          Control the car's media from Home Assistant. This needs the Tesla BLE library fork **[darek-margas/tesla-ble](https://github.com/darek-margas/tesla-ble) `v5.2.0-dm.3`**, which adds the media controls and the media state read.
+          Follow-up to 2026.10.5.1 (media player). Same library, [darek-margas/tesla-ble](https://github.com/darek-margas/tesla-ble) `v5.2.0-dm.3`: no YAML change if you are already on 2026.10.5.1.
 
-          ### ⚠️ Change your YAML: library `v5.2.0-dm.3`
-          If your own YAML lists the `tesla-ble` component (instead of taking it from `packages/board.yml`), change it to:
+          ### Changed
+          - **Media** (media player) no longer offers next / previous track. Home Assistant shows those arrows for ESPHome media players but has no handler for them, so pressing them gave an error. Use the **Media Next Track** / **Media Previous Track** buttons, or the combined player below.
+          - **Media Source** shows a source that Tesla's protocol file does not name by its number, e.g. *Source 27*, which the cars report for streamed music. It used to stay empty.
+          - Each media poll logs what the car sent: `Media reported: status=… volume=… max=… source=… title=… bytes artist=… bytes` (`-1` = not sent).
 
-          ```yaml
-          esp32:
-            framework:
-              components:
-                - name: tesla-ble
-                  source: https://github.com/darek-margas/tesla-ble.git
-                  ref: v5.2.0-dm.3   # roll back: v5.2.0-dm.2
-          ```
+          ### One player in Home Assistant
+          ESPHome media players carry no titles, and Home Assistant's ESPHome integration has no next / previous. A [universal media player](https://www.home-assistant.io/integrations/universal/) combines the player, the track buttons and the text sensors into one entity with working arrows and now playing. The example is in the [README](https://github.com/darek-margas/esphome-tesla-ble-multi#a-car-in-home-assistant): one per car, check your entity ids, show it with a *Media control* card.
 
-          With an older library the build stops with an error at `set_media_state_callback`. That error is the check telling you the library is too old.
-
-          ### New entities per car
-          - **Media** (media player): play / pause and volume. Both are read back from the car.
-            - Volume maps to the car's 0–10 scale.
-            - Volume up / down moves one step.
-          - **Media Title**, **Media Artist** and **Media Source** (text sensors). ESPHome media players cannot carry titles, so these are separate entities. They are empty while nothing plays.
-          - **Media Next Track** and **Media Previous Track** (buttons). Home Assistant's ESPHome integration has no next / previous track command.
-
-          ### When it is read, and the car's sleep
-          - The media state is read with each infotainment poll while the car is awake, and again 1.5 s after every media command.
-          - While the car sleeps the player shows *Off* and the now-playing sensors are cleared.
-          - Media commands are never sent to a sleeping car, so they never wake it. Media is for someone sitting in the car.
-
-          ### Also in this release
-          - Infotainment batches count the media poll before any job is queued, so a batch cannot be marked complete early.
+          ### Tested on the cars
+          - Play / pause and next / previous track; volume read back.
+          - Titles and artists, including Polish characters.
+          - YouTube in the car's theater: source *Theater*, the video title as *Media Title*, no artist.
+          - While the car sleeps the player shows *Off*, and media commands are not sent (they never wake the car).
+          - Not tested yet: setting the volume from Home Assistant, and Netflix / Disney+ actually playing.
 
           Library: [darek-margas/tesla-ble](https://github.com/darek-margas/tesla-ble) `v5.2.0-dm.3` ([release notes](https://github.com/darek-margas/tesla-ble/releases/tag/v5.2.0-dm.3)).
           EOF
