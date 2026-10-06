@@ -5,6 +5,3 @@ packages:
   device_base: !include boards/esp32-generic.yml
   client_defaults: !include packages/client_defaults.yml
   client: !include packages/client.yml
-
-dashboard_import:
-  package_import_url: github://yoziru/esphome-tesla-ble/tesla-ble-esp32-generic.dashboard.yml@main

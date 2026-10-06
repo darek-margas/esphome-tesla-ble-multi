@@ -6,7 +6,6 @@ substitutions:
   board: esp32dev
   variant: esp32
   flash_size: 4MB
-  tesla_ble_ref: main
   tesla_vehicle_name: "Tesla"
   ble_mac_address: "A0:B1:C2:D3:E4:F5" # vehicle BLE MAC address
   tesla_vin: "5YJ30123456789ABC" # vehicle VIN
@@ -19,14 +18,17 @@ substitutions:
   infotainment_poll_interval_active: "10"      # Data when active (range: 5-120s, default: 10s)
   infotainment_sleep_timeout: "660"            # Sleep timeout (range: 60-3600s, default: 11min)
 
-external_components: !include packages/external_components.dashboard.yml
+external_components:
+  - source:
+      type: git
+      url: https://github.com/darek-margas/esphome-tesla-ble-multi.git
+      ref: multicar-v2          # or a release tag such as v2026.10.6
+      path: components
+    components: [tesla_ble_vehicle, tesla_ble_listener]
 
 packages:
   base: !include packages/base.yml
   client: !include packages/client.yml
-
-dashboard_import:
-  package_import_url: github://yoziru/esphome-tesla-ble/tesla-ble.example.yml@main
 
 
 # Multi-car users define vehicles directly instead of using packages/client.yml.
