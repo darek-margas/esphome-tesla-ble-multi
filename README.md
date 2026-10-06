@@ -444,7 +444,30 @@ Controls: locks, covers, charging, climate (preset and Bioweapon fan mode are re
 - **Scheduled Charging** (switch) + **Scheduled Charging Start** (time): start charging at a time.
 - **Scheduled Departure** (switch), **Scheduled Departure Time** (time), **Departure Preconditioning** and **Departure Off-Peak Charging** (*Off / All Week / Weekdays*), **Off-Peak End Time** (time): depart by a time. Setting a time also turns its schedule on; start-at and depart-by are alternatives in the car. All read back from the car.
 - **Low Power Mode**, **Keep Accessory Power**, **Guest Mode** (guest mode needs car software 2024.14+): the car does not report these modes over BLE, so the switches show the last state that was set successfully (Home Assistant shows on and off buttons).
-- **Media** (media player): play / pause and volume of the car's media, read back from the car. ESPHome media players carry no titles and Home Assistant does not offer next / previous for them, so these are separate entities: **Media Title**, **Media Artist** and **Media Source** (empty while nothing plays) and the **Media Next Track** / **Media Previous Track** buttons. The media state is read with each infotainment poll while the car is awake, and shortly after every media command. While the car sleeps the player shows *Off* (ESPHome cannot mark one entity unavailable), and media commands are not sent: they never wake the car.
+- **Media** (media player): play / pause and volume of the car's media, read back from the car. ESPHome media players carry no titles and Home Assistant does not offer next / previous for them, so these are separate entities: **Media Title**, **Media Artist** and **Media Source** (empty while nothing plays) and the **Media Next Track** / **Media Previous Track** buttons. The media state is read with each infotainment poll while the car is awake, and shortly after every media command. While the car sleeps the player shows *Off* (ESPHome cannot mark one entity unavailable), and media commands are not sent: they never wake the car. To get one player with the titles and the skip arrows, combine them in Home Assistant with a [universal media player](https://www.home-assistant.io/integrations/universal/) (entity ids for a car named *Bluey*; check yours):
+
+  ```yaml
+  # Home Assistant configuration.yaml
+  media_player:
+    - platform: universal
+      name: Bluey Player
+      unique_id: bluey_player
+      children:
+        - media_player.bluey_media
+      commands:
+        media_next_track:
+          action: button.press
+          target:
+            entity_id: button.bluey_media_next_track
+        media_previous_track:
+          action: button.press
+          target:
+            entity_id: button.bluey_media_previous_track
+      attributes:
+        media_title: sensor.bluey_media_title
+        media_artist: sensor.bluey_media_artist
+        source: sensor.bluey_media_source
+  ```
 
 <img src="docs/ha-car-controls.png" width="700" alt="Car controls">
 

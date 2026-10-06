@@ -751,14 +751,14 @@ public:
     media_player::MediaPlayerTraits get_traits() override {
         media_player::MediaPlayerTraits traits;
         // Not URL playback, browsing, stop, mute or announcements (the
-        // defaults); the car does play/pause, track skip and volume.
+        // defaults); the car does play/pause and volume. No next/previous:
+        // Home Assistant shows the arrows but its ESPHome integration has no
+        // handler for them (they fail) - the track buttons do that instead.
         traits.clear_feature_flags(media_player::BASE_MEDIA_PLAYER_FEATURES);
         traits.add_feature_flags(media_player::MediaPlayerEntityFeature::PAUSE |
                                  media_player::MediaPlayerEntityFeature::PLAY |
                                  media_player::MediaPlayerEntityFeature::VOLUME_SET |
-                                 media_player::MediaPlayerEntityFeature::VOLUME_STEP |
-                                 media_player::MediaPlayerEntityFeature::NEXT_TRACK |
-                                 media_player::MediaPlayerEntityFeature::PREVIOUS_TRACK);
+                                 media_player::MediaPlayerEntityFeature::VOLUME_STEP);
         return traits;
     }
 

@@ -272,8 +272,10 @@ static void test_media_source() {
   CHECK_OPT(media_source(8), std::string("Bluetooth"));
   CHECK_OPT(media_source(2), std::string("FM"));
   CHECK(!media_source(0).has_value());  // None
-  CHECK(!media_source(4).has_value());  // not defined by the protocol
-  CHECK(!media_source(99).has_value());
+  CHECK(!media_source(-1).has_value());
+  // Not named by the protocol file: shown by number (seen from a car: 27)
+  CHECK_OPT(media_source(27), std::string("Source 27"));
+  CHECK_OPT(media_source(4), std::string("Source 4"));
 }
 
 int main() {

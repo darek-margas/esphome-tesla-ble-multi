@@ -478,7 +478,9 @@ inline float media_volume_absolute(float fraction, float max) {
   return fraction >= 1.0f ? max : fraction * max;
 }
 
-// CarServer_MediaSourceType -> text; nothing for None or unknown values.
+// CarServer_MediaSourceType -> text; nothing for None. A value the protocol
+// file does not name (cars send 27, between NetEase Music and Browser) shows
+// its number, so it is not mistaken for "no source".
 inline std::optional<std::string> media_source(int source) {
   switch (source) {
     case 1: return std::string("AM");
@@ -513,8 +515,12 @@ inline std::optional<std::string> media_source(int source) {
     case 33: return std::string("Recents & Favorites");
     case 34: return std::string("Home Apps");
     case 35: return std::string("Search");
-    default: return std::nullopt;
+    default:
+      break;
   }
+  if (source <= 0)
+    return std::nullopt;
+  return "Source " + std::to_string(source);
 }
 
 // Minutes after midnight -> "HH:MM"; nothing for values past the end of a day.
