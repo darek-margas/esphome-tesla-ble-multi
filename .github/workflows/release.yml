@@ -36,24 +36,18 @@ jobs:
           TAG="v$VERSION"
 
           cat > /tmp/release-notes.md <<'EOF'
-          ## Media player fixes, tested on the cars
+          ## Cleanup: upstream leftovers removed
 
-          Follow-up to 2026.10.5.1 (media player). Same library, [darek-margas/tesla-ble](https://github.com/darek-margas/tesla-ble) `v5.2.0-dm.3`: no YAML change if you are already on 2026.10.5.1.
+          No firmware change: a device on 2026.10.6 behaves the same after updating. Same library, [darek-margas/tesla-ble](https://github.com/darek-margas/tesla-ble) `v5.2.0-dm.3`.
+
+          ### Removed
+          - **ESPHome Device Builder adopt / import.** The `*.dashboard.yml` files and their packages came from the original project and still pointed at yoziru/esphome-tesla-ble, so adopting a device through the dashboard installed the original single-car code, not this one. Install with your own YAML and the external component, as in the [README](https://github.com/darek-margas/esphome-tesla-ble-multi#external-component).
+          - The `dashboard_import` lines in the board files, the `make validate-dashboard-config` target and the old upstream release script (`scripts/release.sh`). Releases come from the GitHub workflow.
 
           ### Changed
-          - **Media** (media player) no longer offers next / previous track. Home Assistant shows those arrows for ESPHome media players but has no handler for them, so pressing them gave an error. Use the **Media Next Track** / **Media Previous Track** buttons, or the combined player below.
-          - **Media Source** shows a source that Tesla's protocol file does not name by its number, e.g. *Source 27*, which the cars report for streamed music. It used to stay empty.
-          - Each media poll logs what the car sent: `Media reported: status=… volume=… max=… source=… title=… bytes artist=… bytes` (`-1` = not sent).
+          - `tesla-ble.example.yml` takes the components from this repository instead of the upstream one.
 
-          ### One player in Home Assistant
-          ESPHome media players carry no titles, and Home Assistant's ESPHome integration has no next / previous. A [universal media player](https://www.home-assistant.io/integrations/universal/) combines the player, the track buttons and the text sensors into one entity with working arrows and now playing. The example is in the [README](https://github.com/darek-margas/esphome-tesla-ble-multi#a-car-in-home-assistant): one per car, check your entity ids, show it with a *Media control* card.
-
-          ### Tested on the cars
-          - Play / pause and next / previous track; volume read back.
-          - Titles and artists, including Polish characters.
-          - YouTube in the car's theater: source *Theater*, the video title as *Media Title*, no artist.
-          - While the car sleeps the player shows *Off*, and media commands are not sent (they never wake the car).
-          - Not tested yet: setting the volume from Home Assistant, and Netflix / Disney+ actually playing.
+          If you adopted a device through the dashboard earlier, it is running the upstream code: switch its YAML to the README example to get this project.
 
           Library: [darek-margas/tesla-ble](https://github.com/darek-margas/tesla-ble) `v5.2.0-dm.3` ([release notes](https://github.com/darek-margas/tesla-ble/releases/tag/v5.2.0-dm.3)).
           EOF
