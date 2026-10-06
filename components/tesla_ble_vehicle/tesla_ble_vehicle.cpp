@@ -1812,6 +1812,17 @@ static media_player::MediaPlayerState to_media_player_state(state_text::MediaPla
 void TeslaBLEVehicle::handle_media_state_(const CarServer_MediaState &media,
                                           const TeslaBLE::MediaNowPlaying &now_playing) {
   const bool asleep = state_manager_ && state_manager_->is_asleep();
+  // What the car sent (-1 = not reported), to tell a missing value from a mapping problem
+  ESP_LOGI(TAG, "[%s] Media reported: status=%d volume=%.2f max=%.2f source=%d title=%d bytes artist=%d bytes",
+           log_name(),
+           media.which_optional_media_playback_status
+               ? static_cast<int>(media.optional_media_playback_status.media_playback_status) : -1,
+           media.which_optional_audio_volume ? media.optional_audio_volume.audio_volume : -1.0f,
+           media.which_optional_audio_volume_max ? media.optional_audio_volume_max.audio_volume_max : -1.0f,
+           media.which_optional_now_playing_source
+               ? static_cast<int>(media.optional_now_playing_source.now_playing_source) : -1,
+           now_playing.has_title ? static_cast<int>(now_playing.title.size()) : -1,
+           now_playing.has_artist ? static_cast<int>(now_playing.artist.size()) : -1);
   if (media.which_optional_audio_volume_max)
     media_volume_max_ = state_text::media_volume_max(media.optional_audio_volume_max.audio_volume_max);
 
