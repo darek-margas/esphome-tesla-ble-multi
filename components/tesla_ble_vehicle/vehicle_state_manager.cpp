@@ -1003,6 +1003,11 @@ void VehicleStateManager::update_ble_rssi(float rssi) {
     publish_sensor("ble_rssi", rssi);
 }
 
+void VehicleStateManager::update_discovery(const std::string& state, const std::string& mac) {
+    publish_text_sensor("discovery", state);
+    publish_text_sensor("ble_mac", mac);
+}
+
 void VehicleStateManager::update_present(bool present) {
     publish_binary_sensor("present", present);
 }

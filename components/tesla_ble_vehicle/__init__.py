@@ -40,6 +40,7 @@ TeslaBLEVehicle = tesla_ble_vehicle_ns.class_(
 # Custom button classes - generated via macro in C++, just reference here
 # The class name follows pattern: Tesla{Id}Button where Id is PascalCase of id
 TeslaWakeButton = tesla_ble_vehicle_ns.class_("TeslaWakeButton", button.Button)
+TeslaFindCarButton = tesla_ble_vehicle_ns.class_("TeslaFindCarButton", button.Button)
 TeslaPairButton = tesla_ble_vehicle_ns.class_("TeslaPairButton", button.Button)
 TeslaRegenerateKeyButton = tesla_ble_vehicle_ns.class_("TeslaRegenerateKeyButton", button.Button)
 TeslaForceUpdateButton = tesla_ble_vehicle_ns.class_("TeslaForceUpdateButton", button.Button)
@@ -269,6 +270,9 @@ TEXT_SENSORS = [
     {"id": "media_title", "name": "Media Title", "icon": "mdi:music-note"},
     {"id": "media_artist", "name": "Media Artist", "icon": "mdi:account-music"},
     {"id": "media_source", "name": "Media Source", "icon": "mdi:radio"},
+    # BLE MAC discovery: Searching / Found / Not found / Configured (ble_mac_address in YAML)
+    {"id": "discovery", "name": "Discovery", "icon": "mdi:car-search", "entity_category": "diagnostic"},
+    {"id": "ble_mac", "name": "BLE MAC", "icon": "mdi:bluetooth", "entity_category": "diagnostic"},
 ]
 
 BUTTONS = [
@@ -276,6 +280,8 @@ BUTTONS = [
     {"id": "pair", "name": "Pair BLE Key", "class": TeslaPairButton, "setter": "set_pair_button", "icon": "mdi:key-wireless", "entity_category": "diagnostic"},
     {"id": "regenerate_key", "name": "Regenerate key", "class": TeslaRegenerateKeyButton, "setter": "set_regenerate_key_button", "icon": "mdi:key-change", "entity_category": "diagnostic", "disabled_by_default": True},
     {"id": "force_update", "name": "Force data update", "class": TeslaForceUpdateButton, "setter": "set_force_update_button", "icon": "mdi:database-sync", "entity_category": "diagnostic"},
+    # Search for the car's BLE MAC (active scan for 2 min); see Discovery / BLE MAC
+    {"id": "find_car", "name": "Find Car", "class": TeslaFindCarButton, "setter": None, "icon": "mdi:car-search", "entity_category": "diagnostic"},
     # Unique actions (not part of combined entities)
     {"id": "unlatch_driver_door", "name": "Unlatch Driver Door", "class": TeslaUnlatchDriverDoorButton, "setter": None, "icon": "mdi:car-door", "disabled_by_default": True},
     {"id": "release_charge_cable", "name": "Release Charge Cable", "class": TeslaReleaseChargeCableButton, "setter": None, "icon": "mdi:ev-plug-tesla"},

@@ -122,7 +122,7 @@ Per car, under `tesla_ble_vehicle:`:
 |---|---|---|
 | `name` | required | Car name, used for entity names and as the `[Name]` prefix in the log |
 | `vin` | required | Vehicle VIN |
-| `ble_mac_address` | - | Car's BLE MAC address. Optional: without it the car is found by the advert name derived from its VIN, and the MAC is saved in NVS (see [Finding the BLE MAC](#finding-the-ble-mac)) |
+| `ble_mac_address` | - | Car's BLE MAC address. Optional: without it the car is searched for by the advert name derived from its VIN, and the MAC is saved in NVS (see [Finding the BLE MAC](#finding-the-ble-mac)) |
 | `device_id` | - | Home Assistant sub-device for this car's entities |
 | `role` | `DRIVER` | `DRIVER` (all controls) or `CHARGING_MANAGER` (charging + basic controls) |
 | `charging_amps_max` | `32` | Upper limit of the charging amps control |
@@ -364,7 +364,14 @@ If you regenerate a key, that car needs to be paired again.
 
 ## Finding the BLE MAC
 
-You normally do not need to: leave `ble_mac_address` out and the component finds the car by its advert name, which is derived from the VIN. The log shows `[Car One] Found car: BLE MAC AA:BB:CC:DD:EE:FF (advert S...C)` once, and the MAC is saved in NVS for the next boot. Teslas send that name in the scan response, so while a car is still unknown the component switches the scanner to active, and back to passive once every car is found. If the car later advertises from a different MAC, the new one is picked up while the car is not connected. Set `ble_mac_address` only to pin a specific MAC.
+You normally do not need to: leave `ble_mac_address` out and the component searches for the car by its advert name, which is derived from the VIN.
+
+- **Where the MAC comes from**, in this order: `ble_mac_address` in YAML (always wins), the MAC saved in NVS by an earlier search, otherwise none.
+- **A search** runs once at boot when there is no MAC, and whenever you press the car's **Find Car** button. Teslas send their advert name in the scan response, so for the search window (2 minutes, counted from when the scanner is running) the scanner is switched to active, then back to passive.
+- **Diagnostic entities per car:** *Discovery* (`Searching` / `Found` / `Not found` / `Configured` for a YAML MAC) and *BLE MAC*. The log shows `[Car One] Found car: BLE MAC AA:BB:CC:DD:EE:FF (advert S...C)`, and the MAC is saved in NVS. A search that does not see the car ends as `Not found` (check the VIN, or press Find Car with the car nearby); a previously saved MAC is kept.
+- **A car without a MAC** takes no BLE turns, and its commands fail right away (`No BLE MAC - '...' not sent (press Find Car)`) instead of waiting in the queue.
+- **With `ble_mac_address` set** nothing changes, except that the MAC is also saved in NVS (only when it differs), so you can later delete it from YAML and carry on without a search. If this VIN's advert is seen from a different address than the configured one, the log warns once (likely a typo or swapped cars); the YAML MAC is never overridden.
+
 
 To look it up anyway:
 

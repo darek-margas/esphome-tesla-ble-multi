@@ -138,6 +138,8 @@ public:
     void update_charger_connected(bool connected);
     void update_ble_rssi(float rssi);
     void update_present(bool present);
+    // BLE MAC discovery state ("Searching", "Found", ...) and the MAC in use
+    void update_discovery(const std::string& state, const std::string& mac);
     void update_ble_advert_rssi(float rssi);  // NAN when not heard
     // Now playing; empty strings clear them (car asleep / nothing reported)
     void update_media_text(const std::string& title, const std::string& artist, const std::string& source);
