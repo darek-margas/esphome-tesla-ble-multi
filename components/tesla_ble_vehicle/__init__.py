@@ -407,7 +407,9 @@ CONFIG_SCHEMA = (
             cv.Required(CONF_NAME): cv.string,
             cv.Optional(CONF_DEVICE_ID): cv.sub_device_id,
             cv.Required(CONF_VIN): cv.string,
-            cv.Required(CONF_BLE_MAC_ADDRESS): cv.mac_address,
+            # Optional: without it the car is found by its VIN-derived advert
+            # name and the MAC is remembered in NVS.
+            cv.Optional(CONF_BLE_MAC_ADDRESS): cv.mac_address,
             cv.Optional(CONF_CHARGING_AMPS_MAX, default=DEFAULT_CHARGING_AMPS_MAX): cv.int_range(min=1, max=48),
             cv.Optional(CONF_ROLE, default="DRIVER"): cv.enum(TESLA_ROLES, upper=True),
             # Polling intervals (in seconds)
@@ -649,7 +651,9 @@ async def to_code(config):
     ble_var = cg.new_Pvariable(config[CONF_INTERNAL_BLE_CLIENT_ID])
     await cg.register_component(ble_var, ble_component_config)
     await esp32_ble_tracker.register_client(ble_var, ble_tracker_config)
-    cg.add(ble_var.set_address(config[CONF_BLE_MAC_ADDRESS].as_hex))
+    if CONF_BLE_MAC_ADDRESS in config:
+        cg.add(ble_var.set_address(config[CONF_BLE_MAC_ADDRESS].as_hex))
+        cg.add(var.set_mac_from_config(True))
     cg.add(ble_var.set_auto_connect(True))
     cg.add(ble_var.set_vehicle(var))
     interval_units = round(

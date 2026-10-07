@@ -122,7 +122,7 @@ Per car, under `tesla_ble_vehicle:`:
 |---|---|---|
 | `name` | required | Car name, used for entity names and as the `[Name]` prefix in the log |
 | `vin` | required | Vehicle VIN |
-| `ble_mac_address` | required | Car's BLE MAC address |
+| `ble_mac_address` | - | Car's BLE MAC address. Optional: without it the car is found by the advert name derived from its VIN, and the MAC is saved in NVS (see [Finding the BLE MAC](#finding-the-ble-mac)) |
 | `device_id` | - | Home Assistant sub-device for this car's entities |
 | `role` | `DRIVER` | `DRIVER` (all controls) or `CHARGING_MANAGER` (charging + basic controls) |
 | `charging_amps_max` | `32` | Upper limit of the charging amps control |
@@ -363,6 +363,10 @@ There is deliberately no migration from the old global `storage/private_key` key
 If you regenerate a key, that car needs to be paired again.
 
 ## Finding the BLE MAC
+
+You normally do not need to: leave `ble_mac_address` out and the component finds the car by its advert name, which is derived from the VIN. The log shows `[Car One] Found car: BLE MAC AA:BB:CC:DD:EE:FF (advert S...C)` once, and the MAC is saved in NVS for the next boot. If the car later advertises from a different MAC, the new one is picked up while the car is not connected. Set `ble_mac_address` only to pin a specific MAC.
+
+To look it up anyway:
 
 Tesla VCSEC advertises continuously. The advertisement name looks roughly like:
 

@@ -227,6 +227,13 @@ public:
     void note_link_activity();
     // Called for every advertisement from this car's MAC address.
     void note_advert_seen(int rssi);
+    // BLE MAC discovery. Without ble_mac_address the car is found by the
+    // advert name derived from its VIN; the MAC is then kept in NVS.
+    void set_mac_from_config(bool from_config) { mac_from_config_ = from_config; }
+    bool advert_name_matches(const std::string &name) const {
+      return !advert_name_.empty() && name == advert_name_;
+    }
+    void adopt_discovered_address(uint64_t address);
 
     // Car name for log lines (falls back to the VIN).
     const char *log_name() const { return debug_name_.empty() ? vin_.c_str() : debug_name_.c_str(); }
@@ -334,6 +341,8 @@ private:
     // Configuration
     std::string vin_;
     std::string debug_name_;
+    std::string advert_name_;  // "S<16 hex>C", from the VIN
+    bool mac_from_config_{false};
     std::string role_;
     
     // Polling intervals
@@ -474,6 +483,8 @@ private:
     int configured_charging_amps_max_{DEFAULT_CHARGING_AMPS_MAX};
 
     uint32_t charging_amps_max_pref_hash_() const;
+    uint32_t ble_mac_pref_hash_() const;
+    void restore_ble_mac_();
     void restore_charging_amps_max_();
     void save_charging_amps_max_(int max);
     uint32_t charge_session_pref_hash_() const;

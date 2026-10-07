@@ -9,6 +9,7 @@
 #include <esp_log.h>
 #include <esphome/core/helpers.h>
 #include <tb_utils.h>
+#include <vin_utils.h>
 
 // The guest mode / overheat temperature / low power / scheduled departure /
 // media commands need the darek-margas tesla-ble fork v5.2.0-dm.3 or newer. With an older library the
@@ -84,6 +85,11 @@ void TeslaBLEVehicle::setup() {
   }
 
   vehicle_->set_vin(vin_);
+
+  advert_name_ = TeslaBLE::get_vin_advertisement_name(vin_);
+  if (!mac_from_config_) {
+    restore_ble_mac_();
+  }
 
   link_slot_ = static_cast<int>(link_vehicles_.size());
   link_vehicles_.push_back(this);
@@ -746,6 +752,52 @@ void TeslaBLEVehicle::restore_charging_amps_max_() {
 
 uint32_t TeslaBLEVehicle::charging_amps_max_pref_hash_() const {
   return fnv1_hash_extend(fnv1_hash("tesla_ble_vehicle.charging_amps_max"), vin_);
+}
+
+uint32_t TeslaBLEVehicle::ble_mac_pref_hash_() const {
+  return fnv1_hash_extend(fnv1_hash("tesla_ble_vehicle.ble_mac"), vin_);
+}
+
+static void format_ble_mac(uint64_t address, char *buf) {
+  snprintf(buf, 18, "%02X:%02X:%02X:%02X:%02X:%02X", (unsigned) ((address >> 40) & 0xFF),
+           (unsigned) ((address >> 32) & 0xFF), (unsigned) ((address >> 24) & 0xFF),
+           (unsigned) ((address >> 16) & 0xFF), (unsigned) ((address >> 8) & 0xFF), (unsigned) (address & 0xFF));
+}
+
+void TeslaBLEVehicle::restore_ble_mac_() {
+  if (ble_client_ == nullptr) return;
+  auto pref = global_preferences->make_preference<uint64_t>(ble_mac_pref_hash_());
+  uint64_t stored = 0;
+  if (pref.load(&stored) && stored != 0) {
+    char mac[18];
+    format_ble_mac(stored, mac);
+    ESP_LOGI(TAG, "[%s] Using saved BLE MAC %s", log_name(), mac);
+    ble_client_->set_address(stored);
+    return;
+  }
+  ESP_LOGW(TAG, "[%s] No BLE MAC yet - looking for advert %s", log_name(), advert_name_.c_str());
+}
+
+void TeslaBLEVehicle::adopt_discovered_address(uint64_t address) {
+  if (mac_from_config_ || ble_client_ == nullptr || address == 0) return;
+  const uint64_t current = ble_client_->get_address();
+  if (current == address) return;
+  // Changing the address under a live or opening link would confuse the
+  // client; a car that changed its MAC is picked up once it is idle.
+  if (current != 0 && ble_client_->state() != espbt::ClientState::IDLE) return;
+
+  char mac[18];
+  format_ble_mac(address, mac);
+  if (current == 0) {
+    ESP_LOGW(TAG, "[%s] Found car: BLE MAC %s (advert %s)", log_name(), mac, advert_name_.c_str());
+  } else {
+    char old_mac[18];
+    format_ble_mac(current, old_mac);
+    ESP_LOGW(TAG, "[%s] Car now advertises from %s (was %s)", log_name(), mac, old_mac);
+  }
+  ble_client_->set_address(address);
+  auto pref = global_preferences->make_preference<uint64_t>(ble_mac_pref_hash_());
+  pref.save(&address);
 }
 
 void TeslaBLEVehicle::save_charging_amps_max_(int max) {
@@ -2096,6 +2148,10 @@ void TeslaBLEClient::log_link_params_if_changed(const char *name) {
 
 #ifdef USE_ESP32_BLE_DEVICE
 bool TeslaBLEClient::parse_device(const espbt::ESPBTDevice &device) {
+  // MAC discovery: the car is recognised by its VIN-derived advert name.
+  if (vehicle_ != nullptr && device.address_uint64() != tesla_address_ &&
+      vehicle_->advert_name_matches(device.get_name()))
+    vehicle_->adopt_discovered_address(device.address_uint64());
   if (vehicle_ != nullptr && tesla_address_ != 0 && device.address_uint64() == tesla_address_)
     vehicle_->note_advert_seen(device.get_rssi());
   if (vehicle_ != nullptr && !vehicle_->link_turn_allows_connect())
