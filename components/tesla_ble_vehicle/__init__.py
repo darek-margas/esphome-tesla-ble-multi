@@ -22,6 +22,7 @@ from esphome.const import (
     ENTITY_CATEGORY_DIAGNOSTIC,
 )
 from esphome import automation
+from esphome.core import CORE
 
 
 CODEOWNERS = ["@yoziru"]
@@ -627,6 +628,22 @@ async def create_media_player(var, definition, vehicle_id, vehicle_name, device_
 # CODE GENERATION
 # =============================================================================
 
+# ESPHome logger level -> TESLA_BLE_LOG_LEVEL of the tesla-ble library
+# (0 ERROR .. 4 VERBOSE). Library messages above the logger level would be
+# dropped at runtime anyway; compiling them out saves their strings in flash.
+# Libraries without TESLA_BLE_LOG_LEVEL ignore the define.
+TESLA_BLE_LOG_LEVELS = {
+    "NONE": 0,
+    "ERROR": 0,
+    "WARN": 1,
+    "INFO": 2,
+    "CONFIG": 2,
+    "DEBUG": 3,
+    "VERBOSE": 4,
+    "VERY_VERBOSE": 4,
+}
+
+
 async def to_code(config):
     # Tesla owns a private low-level BLE client. Using esp32_ble_client directly
     # avoids requiring a user-visible top-level ble_client: entry.
@@ -638,6 +655,9 @@ async def to_code(config):
 
     var = cg.new_Pvariable(config[CONF_ID])
     await cg.register_component(var, config)
+
+    logger_level = CORE.config.get("logger", {}).get("level", "DEBUG")
+    cg.add_build_flag(f"-DTESLA_BLE_LOG_LEVEL={TESLA_BLE_LOG_LEVELS.get(str(logger_level).upper(), 4)}")
 
     ble_component_config = {
         CONF_ID: config[CONF_INTERNAL_BLE_CLIENT_ID],
