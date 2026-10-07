@@ -148,7 +148,18 @@ static void test_empty_scheduler_is_inert() {
   CHECK(!s.may_connect(0));
 }
 
+static void test_heard_within() {
+  CHECK(!heard_within(5000, 0, 60000));       // never heard
+  CHECK(heard_within(5000, 4000, 60000));
+  CHECK(!heard_within(70000, 4000, 60000));   // 66 s ago: too old for a turn...
+  CHECK(heard_within(70000, 4000, 300000));   // ...still present with a 5 min grace
+  CHECK(!heard_within(304000, 4000, 300000));
+  // millis() wrapped since the car was last heard
+  CHECK(heard_within(1000, 0xFFFFF000u, 60000));
+}
+
 int main() {
+  test_heard_within();
   test_single_car_never_yields();
   test_first_waiting_car_gets_first_turn();
   test_owner_keeps_link_when_nobody_waits();

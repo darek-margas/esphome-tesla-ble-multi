@@ -118,6 +118,7 @@ CONF_INFOTAINMENT_POLL_INTERVAL_AWAKE = "infotainment_poll_interval_awake"
 CONF_INFOTAINMENT_POLL_INTERVAL_ACTIVE = "infotainment_poll_interval_active"
 CONF_INFOTAINMENT_SLEEP_TIMEOUT = "infotainment_sleep_timeout"
 CONF_WAKE_ON_BOOT = "wake_on_boot"
+CONF_PRESENCE_TIMEOUT = "presence_timeout"
 
 # Tesla key roles
 TESLA_ROLES = {
@@ -417,6 +418,13 @@ CONFIG_SCHEMA = (
             # Wake the car once after boot to fill all sensors. Later polls
             # never wake a sleeping car on their own.
             cv.Optional(CONF_WAKE_ON_BOOT, default=True): cv.boolean,
+            # Present turns to away only after the car was neither connected
+            # nor heard for this long. Longer than a BLE turn of the other
+            # car, so Present does not flicker while the cars take turns.
+            cv.Optional(CONF_PRESENCE_TIMEOUT, default="5min"): cv.All(
+                cv.positive_time_period_milliseconds,
+                cv.Range(min=cv.TimePeriod(minutes=1), max=cv.TimePeriod(hours=1)),
+            ),
             # BLE link parameters. With two cars on one ESP32, both links use
             # the same interval by default so their radio slots interleave
             # instead of colliding, and a long supervision timeout so a few
@@ -675,6 +683,7 @@ async def to_code(config):
     cg.add(var.set_infotainment_poll_interval_active(config[CONF_INFOTAINMENT_POLL_INTERVAL_ACTIVE] * 1000))
     cg.add(var.set_infotainment_sleep_timeout(config[CONF_INFOTAINMENT_SLEEP_TIMEOUT] * 1000))
     cg.add(var.set_wake_on_boot(config[CONF_WAKE_ON_BOOT]))
+    cg.add(var.set_presence_timeout(int(config[CONF_PRESENCE_TIMEOUT].total_milliseconds)))
     
     for creators in (
         (BINARY_SENSORS, create_binary_sensor),

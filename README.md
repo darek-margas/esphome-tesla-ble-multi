@@ -130,6 +130,7 @@ Per car, under `tesla_ble_vehicle:`:
 | `infotainment_poll_interval_active` | `10` s | Infotainment data while charging, in sentry mode or with climate on |
 | `infotainment_sleep_timeout` | `660` s | After this long idle, polls stop asking infotainment so the car can sleep |
 | `wake_on_boot` | `true` | Wake the car once after the ESP32 boots so every sensor gets a value. `false`: sensors stay empty until the car wakes on its own or you press *Force data update* |
+| `presence_timeout` | `5min` | `Present` turns to away after the car was neither connected nor heard for this long (1 min - 1 h). Keep it well above a BLE turn, so it does not flicker while the cars take turns |
 | `connection_interval` | `15ms` | BLE connection interval (7.5 ms - 4 s). Shorter = faster messages and service discovery. Keep it the same for every car |
 | `supervision_timeout` | `6s` | BLE link timeout (100 ms - 32 s, must be more than twice the interval) |
 
@@ -164,7 +165,7 @@ A hand-over takes about 1 s from one car's last traffic to the next car's first 
 A Tesla advertises over BLE all the time while it is in range, also while asleep. The scanner keeps listening while the other car is connected, so each car's adverts are recorded even when it does not hold the link.
 
 - only a car heard in the last 60 s (or connected) can ask for a turn, so a car that is away never takes the link from the car that is home. As soon as it is heard again it gets the next turn
-- `Present` (presence binary sensor) is on while the car is heard or connected, off after 60 s without an advert
+- `Present` (presence binary sensor) is on while the car is heard or connected, and turns to away after `presence_timeout` (default 5 min) without either. It is published only when it changes, and after a reboot it waits a minute for the first advert before it reports away
 - safety nets: a car that is heard but cannot connect backs off (30 s, doubling up to 5 min); a car that is never heard still gets one try every 10 min
 
 ### Commands
@@ -429,7 +430,7 @@ Per car, besides the vehicle entities:
 
 | Entity | Type | Notes |
 |---|---|---|
-| Present | binary sensor (presence) | Car heard over BLE in the last 60 s, or connected |
+| Present | binary sensor (presence) | Home while connected or heard over BLE in the last `presence_timeout` (5 min), otherwise away |
 | BLE RSSI | sensor, diagnostic | Signal of the connected link (only while this car holds it). Disabled by default |
 | BLE Advert RSSI | sensor, diagnostic | Signal of the car's adverts, every 10 s, also while not connected; unknown when not heard. Disabled by default |
 | Last Command | text sensor, diagnostic | Result of the last command. Disabled by default |

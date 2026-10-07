@@ -366,30 +366,35 @@ void TeslaBLEVehicle::note_advert_seen(int rssi) {
 }
 
 bool TeslaBLEVehicle::heard_recently_(uint32_t now) const {
-  return last_advert_ms_ != 0 && now - last_advert_ms_ < ADVERT_FRESH_MS;
+  return heard_within(now, last_advert_ms_, ADVERT_FRESH_MS);
 }
 
 void TeslaBLEVehicle::update_reachable_(uint32_t now) {
-  const bool reachable = is_connected() || heard_recently_(now);
+  // Advert RSSI goes unknown on the short window, independent of Present
+  if (last_advert_publish_ms_ != 0 && !heard_recently_(now) && state_manager_) {
+    state_manager_->update_ble_advert_rssi(NAN);
+    last_advert_publish_ms_ = 0;
+  }
+
+  const bool reachable = is_connected() || heard_within(now, last_advert_ms_, presence_timeout_ms_);
   if (reachable_known_ && reachable == reachable_published_)
+    return;
+  // After boot the scanner needs a moment to hear the car: report away only
+  // once it had the chance, so a reboot does not log away -> home
+  if (!reachable_known_ && !reachable && now < ADVERT_FRESH_MS)
     return;
   if (reachable_known_) {
     if (reachable) {
       ESP_LOGI(TAG, "[%s] Present (BLE heard)", log_name());
     } else {
       ESP_LOGI(TAG, "[%s] Not heard for %u s - not present", log_name(),
-               (unsigned) (ADVERT_FRESH_MS / 1000));
+               (unsigned) (presence_timeout_ms_ / 1000));
     }
   }
   reachable_known_ = true;
   reachable_published_ = reachable;
-  if (state_manager_) {
+  if (state_manager_)
     state_manager_->update_present(reachable);
-    if (!heard_recently_(now)) {
-      state_manager_->update_ble_advert_rssi(NAN);
-      last_advert_publish_ms_ = 0;
-    }
-  }
 }
 
 void TeslaBLEVehicle::yield_link_() {

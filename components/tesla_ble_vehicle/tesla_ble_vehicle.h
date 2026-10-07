@@ -92,6 +92,7 @@ public:
     void set_infotainment_poll_interval_active(uint32_t interval_ms);
     void set_infotainment_sleep_timeout(uint32_t interval_ms);
     void set_wake_on_boot(bool wake) { wake_on_boot_ = wake; }
+    void set_presence_timeout(uint32_t timeout_ms) { presence_timeout_ms_ = timeout_ms; }
 
     // ==========================================================================
     // Generic sensor setters - delegates to state manager
@@ -281,6 +282,9 @@ private:
     bool reachable_published_{false};
     bool reachable_known_{false};
     static constexpr uint32_t ADVERT_FRESH_MS = 60000;
+    // Present goes to away only after this long without the link or an
+    // advert: the scanner misses adverts while the other car has its turn.
+    uint32_t presence_timeout_ms_{300000};
     // Safety net if adverts are never reported: still try a turn this often.
     static constexpr uint32_t BLIND_TURN_MS = 600000;
     static constexpr uint32_t ADVERT_LOG_INTERVAL_MS = 60000;

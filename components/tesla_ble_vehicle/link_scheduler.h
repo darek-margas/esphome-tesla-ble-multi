@@ -7,6 +7,14 @@
 namespace esphome {
 namespace tesla_ble_vehicle {
 
+// Last heard (millis(), 0 = never) within window_ms of now; safe across the
+// millis() wrap. Turns use a short window (a car that is away must not take
+// the link); the Present sensor a longer one, so it does not flip to away
+// while the scanner misses a few adverts during the other car's turn.
+inline bool heard_within(uint32_t now, uint32_t last_heard_ms, uint32_t window_ms) {
+  return last_heard_ms != 0 && now - last_heard_ms < window_ms;
+}
+
 // One Tesla BLE link at a time.
 //
 // On the original ESP32, two simultaneous Tesla connections starve each
