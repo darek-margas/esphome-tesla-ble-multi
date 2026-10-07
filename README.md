@@ -364,7 +364,7 @@ If you regenerate a key, that car needs to be paired again.
 
 ## Finding the BLE MAC
 
-You normally do not need to: leave `ble_mac_address` out and the component finds the car by its advert name, which is derived from the VIN. The log shows `[Car One] Found car: BLE MAC AA:BB:CC:DD:EE:FF (advert S...C)` once, and the MAC is saved in NVS for the next boot. If the car later advertises from a different MAC, the new one is picked up while the car is not connected. Set `ble_mac_address` only to pin a specific MAC.
+You normally do not need to: leave `ble_mac_address` out and the component finds the car by its advert name, which is derived from the VIN. The log shows `[Car One] Found car: BLE MAC AA:BB:CC:DD:EE:FF (advert S...C)` once, and the MAC is saved in NVS for the next boot. Teslas send that name in the scan response, so while a car is still unknown the component switches the scanner to active, and back to passive once every car is found. If the car later advertises from a different MAC, the new one is picked up while the car is not connected. Set `ble_mac_address` only to pin a specific MAC.
 
 To look it up anyway:
 

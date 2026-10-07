@@ -25,6 +25,8 @@ namespace tesla_ble_vehicle {
 const char *TeslaBLEVehicle::log_context_ = nullptr;
 std::vector<TeslaBLEVehicle *> TeslaBLEVehicle::link_vehicles_;
 LinkScheduler TeslaBLEVehicle::link_scheduler_;
+bool TeslaBLEVehicle::discovery_forced_active_scan_ = false;
+uint32_t TeslaBLEVehicle::discovery_scan_checked_ms_ = 0;
 
 void tesla_ble_log_callback(TeslaBLE::LogLevel level, const char *tag, int line,
                             const char *format, va_list args) {
@@ -261,6 +263,8 @@ void TeslaBLEVehicle::loop() {
   LogScope log_scope(this);
   if (vehicle_)
     vehicle_->loop();
+  if (link_slot_ == 0)
+    update_discovery_scan_mode_(millis());
   if (ble_adapter_)
     ble_adapter_->process_write_queue();
 
@@ -776,6 +780,39 @@ void TeslaBLEVehicle::restore_ble_mac_() {
     return;
   }
   ESP_LOGW(TAG, "[%s] No BLE MAC yet - looking for advert %s", log_name(), advert_name_.c_str());
+}
+
+void TeslaBLEVehicle::update_discovery_scan_mode_(uint32_t now) {
+  if (now - discovery_scan_checked_ms_ < 2000) return;
+  discovery_scan_checked_ms_ = now;
+  auto *tracker = esp32_ble_tracker::global_esp32_ble_tracker;
+  if (tracker == nullptr) return;
+
+  bool searching = false;
+  for (auto *v : link_vehicles_) {
+    if (!v->mac_from_config_ && v->ble_client_ != nullptr && v->ble_client_->get_address() == 0) {
+      searching = true;
+      break;
+    }
+  }
+
+  bool want_active;
+  if (searching && !tracker->get_scan_active()) {
+    discovery_forced_active_scan_ = true;
+    want_active = true;
+    ESP_LOGW(TAG, "Active BLE scan until every car's MAC is found (Teslas send their name in the scan response)");
+  } else if (!searching && discovery_forced_active_scan_) {
+    discovery_forced_active_scan_ = false;
+    want_active = false;
+    ESP_LOGI(TAG, "All cars found - back to passive BLE scan");
+  } else {
+    return;
+  }
+  // Same sequence as bluetooth_proxy: the continuous scan restarts with the
+  // new mode once the stop has completed.
+  tracker->set_scan_active(want_active);
+  tracker->stop_scan();
+  tracker->set_scan_continuous(true);
 }
 
 void TeslaBLEVehicle::adopt_discovered_address(uint64_t address) {

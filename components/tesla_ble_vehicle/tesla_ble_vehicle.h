@@ -268,6 +268,12 @@ private:
     // scheduler; each car is one slot.
     static std::vector<TeslaBLEVehicle *> link_vehicles_;
     static LinkScheduler link_scheduler_;
+    // MAC discovery needs the advert name, which Teslas send in the scan
+    // response: scan actively while a car without ble_mac_address has not
+    // been found yet, then go back to passive (only if we switched).
+    static bool discovery_forced_active_scan_;
+    static uint32_t discovery_scan_checked_ms_;
+    static void update_discovery_scan_mode_(uint32_t now);
     int link_slot_{LinkScheduler::NONE};
     bool ever_ready_{false};
     bool yielding_link_{false};
