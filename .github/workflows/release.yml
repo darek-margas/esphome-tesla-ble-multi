@@ -36,18 +36,23 @@ jobs:
           TAG="v$VERSION"
 
           cat > /tmp/release-notes.md <<'EOF'
-          ## Cleanup: upstream leftovers removed
+          ## Present no longer flickers while the cars take turns
 
-          No firmware change: a device on 2026.10.6 behaves the same after updating. Same library, [darek-margas/tesla-ble](https://github.com/darek-margas/tesla-ble) `v5.2.0-dm.3`.
-
-          ### Removed
-          - **ESPHome Device Builder adopt / import.** The `*.dashboard.yml` files and their packages came from the original project and still pointed at yoziru/esphome-tesla-ble, so adopting a device through the dashboard installed the original single-car code, not this one. Install with your own YAML and the external component, as in the [README](https://github.com/darek-margas/esphome-tesla-ble-multi#external-component).
-          - The `dashboard_import` lines in the board files, the `make validate-dashboard-config` target and the old upstream release script (`scripts/release.sh`). Releases come from the GitHub workflow.
+          Firmware change: rebuild and flash. Same library, [darek-margas/tesla-ble](https://github.com/darek-margas/tesla-ble) `v5.2.0-dm.3`, no YAML change needed.
 
           ### Changed
-          - `tesla-ble.example.yml` takes the components from this repository instead of the upstream one.
+          - **Present** turns to away only after the car was neither connected nor heard for **5 minutes**. It used the same 60 s window as the BLE turn decision, so a car whose adverts the scanner missed for a minute, while the other car held the link, flipped to away and back. Turns still use 60 s, so a car that has left stops getting turns quickly.
+          - New per-car option **`presence_timeout`** (default `5min`, 1 min – 1 h) if you want it shorter or longer:
+            ```yaml
+            tesla_ble_vehicle:
+              - id: car_one
+                presence_timeout: 10min
+            ```
+          - After a reboot, Present waits a minute for the car's first advert before it reports away, so a restart no longer shows away → home.
+          - **BLE Advert RSSI** still goes unknown after 60 s without an advert, as before.
 
-          If you adopted a device through the dashboard earlier, it is running the upstream code: switch its YAML to the README example to get this project.
+          ### Also
+          - CI and `make` builds use ESPHome **2026.9.1**.
 
           Library: [darek-margas/tesla-ble](https://github.com/darek-margas/tesla-ble) `v5.2.0-dm.3` ([release notes](https://github.com/darek-margas/tesla-ble/releases/tag/v5.2.0-dm.3)).
           EOF
