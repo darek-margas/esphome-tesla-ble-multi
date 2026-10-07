@@ -82,6 +82,7 @@ tesla_ble_vehicle:
     wake_on_boot: true            # per car, default true: wake once after boot to fill sensors
 
     # Optional, shown with their defaults:
+    # presence_timeout: 5min      # Present turns to away after this long without the car
     # connection_interval: 15ms   # BLE link interval
     # supervision_timeout: 6s     # BLE link timeout
 
@@ -207,7 +208,7 @@ Every line carries the car name. A typical cycle:
 Other useful lines:
 
 ```text
-[Car One] Not heard for 60 s - not present
+[Car One] Not heard for 300 s - not present
 [Car One] Present (BLE heard)
 [Car Two] 'Honk Horn': car asleep - waking it first
 [Car Two] Awake - sending 'Honk Horn' in 8 s

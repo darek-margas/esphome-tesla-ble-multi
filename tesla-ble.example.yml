@@ -53,6 +53,7 @@ packages:
 #     infotainment_sleep_timeout: "660"
 #     wake_on_boot: true              # per car: wake it once after the ESP32 boots to fill sensors
 #     # Optional, shown with their defaults:
+#     # presence_timeout: 5min      # Present turns to away after this long without the car (1min - 1h)
 #     # connection_interval: 15ms   # BLE link interval, same for every car
 #     # supervision_timeout: 6s     # BLE link timeout
 #   - id: car_two
