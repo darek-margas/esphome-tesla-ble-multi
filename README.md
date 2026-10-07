@@ -337,6 +337,16 @@ Turning BLE off disconnects all cars. Turning it back on lets them reconnect in 
 
 Pair each car separately.
 
+Each car has a diagnostic **Key** sensor that shows where it stands:
+
+| Key | Meaning |
+|---|---|
+| `No key` | No key stored yet: press **Pair BLE Key** |
+| `Not verified` | A key is stored, but the car has not answered since boot |
+| `Waiting for approval` | Pairing sent: put the key card on the reader and confirm on the screen (up to 3 minutes) |
+| `Paired` | The car accepted an authenticated command |
+| `Not paired` | The car says the key is not on its whitelist (approval timed out, key removed on the car, or a new key after **Regenerate key**): pair again |
+
 1. Press that car's **Pair BLE Key** button once. If the car is not connected right now, the request waits for its turn (`'Pair' waits for this car's BLE turn`).
 2. Put an NFC key card on the car's card reader.
 3. The approval request should then appear on the car screen.

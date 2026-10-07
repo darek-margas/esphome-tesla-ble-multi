@@ -275,6 +275,8 @@ TEXT_SENSORS = [
     {"id": "media_source", "name": "Media Source", "icon": "mdi:radio"},
     # BLE MAC discovery: Searching / Found / Not found / Configured (ble_mac_address in YAML)
     {"id": "discovery", "name": "Discovery", "icon": "mdi:car-search", "entity_category": "diagnostic"},
+    # Does the car accept our key: No key / Not verified / Waiting for approval / Paired / Not paired
+    {"id": "key_status", "name": "Key", "icon": "mdi:key-chain", "entity_category": "diagnostic"},
     {"id": "ble_mac", "name": "BLE MAC", "icon": "mdi:bluetooth", "entity_category": "diagnostic"},
 ]
 

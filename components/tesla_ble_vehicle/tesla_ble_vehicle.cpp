@@ -88,6 +88,9 @@ void TeslaBLEVehicle::setup() {
 
   vehicle_->set_vin(vin_);
 
+  key_status_.on_boot(key_stored_());
+  publish_key_status_();
+
   advert_name_ = TeslaBLE::get_vin_advertisement_name(vin_);
   restore_ble_mac_();
 
@@ -473,6 +476,7 @@ void TeslaBLEVehicle::expire_pending_commands_(uint32_t now) {
 
 void TeslaBLEVehicle::update() {
   LogScope log_scope(this);
+  if (key_status_.tick(millis())) publish_key_status_();
   if (!link_ready())
     return;
 
@@ -492,7 +496,7 @@ void TeslaBLEVehicle::update() {
   // VCSEC Polling
   if (now - last_vcsec_poll_ >= vcsec_poll_interval_) {
     ESP_LOGI(TAG, "[%s] Polling VCSEC", log_name());
-    vehicle_->vcsec_poll();
+    poll_vcsec_();
     last_vcsec_poll_ = now;
   }
 
@@ -621,6 +625,7 @@ void TeslaBLEVehicle::enqueue_poll_job_(const char *name, int32_t data_type,
               return client->build_car_server_get_vehicle_data_message(buff, len, data_type);
             },
             [this, name](TeslaBLE::OperationResult result) {
+              note_key_result_(result);
               if (!result.is_success() && !result.is_skipped()) {
                 const TeslaBLE::CommandError *error = result.error();
                 ESP_LOGW(TAG, "[%s] %s failed: %s", log_name(), name.c_str(),
@@ -1176,11 +1181,52 @@ void TeslaBLEVehicle::set_force_update_button(button::Button *button) {
 }
 
 // =============================================================================
+// Key diagnostic
+// =============================================================================
+
+bool TeslaBLEVehicle::key_stored_() const {
+  std::vector<uint8_t> private_key;
+  return storage_adapter_ && storage_adapter_->load("private_key", private_key) && !private_key.empty();
+}
+
+void TeslaBLEVehicle::publish_key_status_() {
+  const char *text = KeyStatusPolicy::text(key_status_.status());
+  ESP_LOGI(TAG, "[%s] Key: %s", log_name(), text);
+  if (state_manager_) state_manager_->update_key_status(text);
+}
+
+// Only authenticated commands come here (polls and user commands; pairing's
+// whitelist request is unauthenticated and is not reported).
+void TeslaBLEVehicle::note_key_result_(const TeslaBLE::OperationResult &result) {
+  auto kind = KeyStatusPolicy::Result::OTHER;
+  if (result.is_success()) {
+    kind = KeyStatusPolicy::Result::SUCCESS;
+  } else if (!result.is_skipped() && result.error() != nullptr) {
+    kind = KeyStatusPolicy::classify_error(result.error()->message());
+  }
+  if (key_status_.on_result(kind)) publish_key_status_();
+}
+
+void TeslaBLEVehicle::poll_vcsec_() {
+  vehicle_->send_command_result(
+      UniversalMessage_Domain_DOMAIN_VEHICLE_SECURITY, "VCSEC Poll",
+      [](TeslaBLE::Client *client, uint8_t *buff, size_t *len) {
+        return client->build_vcsec_information_request_message(
+            VCSEC_InformationRequestType_INFORMATION_REQUEST_TYPE_GET_STATUS, buff, len);
+      },
+      [this](TeslaBLE::OperationResult result) { note_key_result_(result); },
+      // Same as Vehicle::vcsec_poll() (send_command's default); VCSEC itself
+      // never needs the car awake.
+      TeslaBLE::WakePolicy::WAKE_IF_NEEDED);
+}
+
+// =============================================================================
 // Command tracking (v5.1.0 OperationResult + phase callbacks)
 // =============================================================================
 
 void TeslaBLEVehicle::handle_command_result(const std::string &name,
                                             TeslaBLE::OperationResult result) {
+  note_key_result_(result);
   last_user_command_ms_ = millis();
   user_command_seen_ = true;
   std::string value = name;
@@ -1469,6 +1515,7 @@ int TeslaBLEVehicle::start_pairing() {
 
   pairing_in_progress_ = true;
   pairing_started_ms_ = now;
+  if (key_status_.on_pair_requested(now)) publish_key_status_();
 
   vehicle_->send_command(
       UniversalMessage_Domain_DOMAIN_VEHICLE_SECURITY, "Whitelist Add Key",
@@ -1490,6 +1537,7 @@ int TeslaBLEVehicle::regenerate_key() {
   }
 
   vehicle_->regenerate_key();
+  if (key_status_.on_key_regenerated()) publish_key_status_();
   return 0;
 }
 
@@ -1514,7 +1562,7 @@ void TeslaBLEVehicle::force_update() {
   poll_policy_.on_poll(now);
 
   if (vehicle_) {
-    vehicle_->vcsec_poll();
+    poll_vcsec_();
     enqueue_poll_batch_(TeslaBLE::WakePolicy::WAKE_IF_NEEDED, 500);
   }
 }
@@ -1648,7 +1696,7 @@ void TeslaBLEVehicle::settle_lock_(bool charge_port, bool succeeded) {
     // VCSEC reports the lock state on every status poll
     this->set_timeout("doors-settle", 2000, [this]() {
       LogScope log_scope(this);
-      if (link_ready()) vehicle_->vcsec_poll();
+      if (link_ready()) poll_vcsec_();
     });
     this->set_timeout("doors-fallback", 20000, revert);
   }
@@ -2519,7 +2567,7 @@ void TeslaBLEVehicle::handle_connection_established() {
     ESP_LOGI(TAG, "[%s] Connection established - polling VCSEC", log_name());
     // VCSEC never wakes the car. Infotainment waits for its answer (see the
     // vehicle status callback) so a sleeping car is not woken by connecting.
-    vehicle_->vcsec_poll();
+    poll_vcsec_();
     last_vcsec_poll_ = millis();
     infotainment_check_pending_ = true;
     this->set_timeout("infotainment-check", INFOTAINMENT_CHECK_TIMEOUT_MS, [this]() {

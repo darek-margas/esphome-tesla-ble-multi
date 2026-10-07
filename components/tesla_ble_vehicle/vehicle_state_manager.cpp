@@ -1014,6 +1014,10 @@ void VehicleStateManager::update_discovery(const std::string& state, const std::
     publish_text_sensor("ble_mac", mac);
 }
 
+void VehicleStateManager::update_key_status(const std::string& status) {
+    publish_text_sensor("key_status", status);
+}
+
 void VehicleStateManager::update_present(bool present) {
     publish_binary_sensor("present", present);
 }
