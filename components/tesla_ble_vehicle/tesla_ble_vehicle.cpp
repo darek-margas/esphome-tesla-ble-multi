@@ -2292,8 +2292,9 @@ void TeslaBLEClient::log_link_params_if_changed(const char *name) {
 
 #ifdef USE_ESP32_BLE_DEVICE
 bool TeslaBLEClient::parse_device(const espbt::ESPBTDevice &device) {
-  // MAC discovery: the car is recognised by its VIN-derived advert name.
-  if (vehicle_ != nullptr && device.address_uint64() != tesla_address_ &&
+  // MAC discovery: the car is recognised by its VIN-derived advert name. At
+  // its known address the name only matters while searching (to confirm it).
+  if (vehicle_ != nullptr && (device.address_uint64() != tesla_address_ || vehicle_->discovery_searching()) &&
       vehicle_->advert_name_matches(device.get_name()))
     vehicle_->on_advert_name_seen(device.address_uint64());
   if (vehicle_ != nullptr && tesla_address_ != 0 && device.address_uint64() == tesla_address_)
@@ -2479,6 +2480,12 @@ void TeslaBLEVehicle::register_notify_() {
 
 void TeslaBLEVehicle::handle_connection_established() {
   if (!notify_ready_) return;
+  // A working link at the current MAC answers a search: a connected car may
+  // not advertise, so the name alone could never confirm it.
+  if (discovery_ == Discovery::DISC_SEARCHING) {
+    ESP_LOGW(TAG, "[%s] Found car: connected at its current BLE MAC", log_name());
+    finish_discovery_(mac_from_config_ ? Discovery::DISC_CONFIGURED : Discovery::DISC_FOUND);
+  }
   if (vehicle_ && !link_ready_) {
     link_ready_ = true;
     if (!vehicle_->is_connected()) {

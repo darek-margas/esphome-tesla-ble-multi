@@ -240,6 +240,7 @@ public:
     void on_advert_name_seen(uint64_t address);
     // Find Car button: search for this car's MAC now.
     void find_car();
+    bool discovery_searching() const { return discovery_ == Discovery::DISC_SEARCHING; }
     bool has_ble_address() const;
 
     // Car name for log lines (falls back to the VIN).
