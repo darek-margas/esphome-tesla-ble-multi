@@ -231,6 +231,10 @@ private:
     std::optional<bool> cable_connected_;
     lock::LockState latch_lock_state_{lock::LOCK_STATE_NONE};
     std::optional<bool> doors_unlocked_;
+    // Sleep state as last reported by VCSEC. Starts awake, like the Asleep
+    // sensor's default state did when is_asleep() read it back.
+    bool asleep_{false};
+    bool asleep_known_{false};
     void update_charge_port_latch_lock_();
     std::string last_climate_summary_;
 

@@ -133,6 +133,7 @@ Per car, under `tesla_ble_vehicle:`:
 | `wake_on_boot` | `true` | Wake the car once after the ESP32 boots so every sensor gets a value. `false`: sensors stay empty until the car wakes on its own or you press *Force data update* |
 | `discovery_retry_interval` | `1h` | While the car has no MAC at all (none in YAML or NVS), a search that ended `Not found` is repeated after this long, so a car that was away at boot is still found (5 min - 24 h, or `never`). A car with a known MAC is never searched for automatically |
 | `presence_timeout` | `5min` | `Present` turns to away after the car was neither connected nor heard for this long (1 min - 1 h). Keep it well above a BLE turn, so it does not flicker while the cars take turns |
+| `exclude_entities` | - | Entity ids to leave out of the firmware to save flash, e.g. `[tpms_soft_warning_front_left, media_title]`. Only entities without a dedicated setter can be left out; an id that cannot be is reported with the list of ones that can |
 | `connection_interval` | `15ms` | BLE connection interval (7.5 ms - 4 s). Shorter = faster messages and service discovery. Keep it the same for every car |
 | `supervision_timeout` | `6s` | BLE link timeout (100 ms - 32 s, must be more than twice the interval) |
 
