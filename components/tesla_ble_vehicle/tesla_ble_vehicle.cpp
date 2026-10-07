@@ -9,6 +9,7 @@
 #include <esp_log.h>
 #include <esphome/core/helpers.h>
 #include <tb_utils.h>
+#include <vin_utils.h>
 
 // The guest mode / overheat temperature / low power / scheduled departure /
 // media commands need the darek-margas tesla-ble fork v5.2.0-dm.3 or newer. With an older library the
@@ -24,6 +25,8 @@ namespace tesla_ble_vehicle {
 const char *TeslaBLEVehicle::log_context_ = nullptr;
 std::vector<TeslaBLEVehicle *> TeslaBLEVehicle::link_vehicles_;
 LinkScheduler TeslaBLEVehicle::link_scheduler_;
+bool TeslaBLEVehicle::discovery_forced_active_scan_ = false;
+uint32_t TeslaBLEVehicle::discovery_checked_ms_ = 0;
 
 void tesla_ble_log_callback(TeslaBLE::LogLevel level, const char *tag, int line,
                             const char *format, va_list args) {
@@ -84,6 +87,9 @@ void TeslaBLEVehicle::setup() {
   }
 
   vehicle_->set_vin(vin_);
+
+  advert_name_ = TeslaBLE::get_vin_advertisement_name(vin_);
+  restore_ble_mac_();
 
   link_slot_ = static_cast<int>(link_vehicles_.size());
   link_vehicles_.push_back(this);
@@ -255,6 +261,8 @@ void TeslaBLEVehicle::loop() {
   LogScope log_scope(this);
   if (vehicle_)
     vehicle_->loop();
+  if (link_slot_ == 0)
+    update_discovery_(millis());
   if (ble_adapter_)
     ble_adapter_->process_write_queue();
 
@@ -318,7 +326,7 @@ LinkScheduler::Input TeslaBLEVehicle::link_input_(uint32_t now) const {
   // is a safety net in case adverts are not reported for some reason.
   const bool present = in.ready || heard_recently_(now);
   const bool blind_retry = now - turn_started_ms_ >= BLIND_TURN_MS;
-  in.wants = (present || blind_retry) &&
+  in.wants = has_ble_address() && (present || blind_retry) &&
              (!pending_commands_.empty() || turn_requested_ ||
               (!backing_off && (!ever_ready_ || vcsec_due)));
   const bool pairing = pairing_in_progress_ &&
@@ -423,6 +431,13 @@ void TeslaBLEVehicle::yield_link_() {
 
 bool TeslaBLEVehicle::queue_until_connected_(const std::string &name, std::function<void()> run,
                                              std::function<void()> expire) {
+  if (!has_ble_address()) {
+    // Nothing to connect to: fail now instead of waiting for a turn that
+    // never comes.
+    ESP_LOGW(TAG, "[%s] No BLE MAC - '%s' not sent (press Find Car)", log_name(), name.c_str());
+    if (expire) expire();
+    return false;
+  }
   if (pending_commands_.size() >= MAX_PENDING_COMMANDS) {
     ESP_LOGW(TAG, "[%s] Too many queued commands - dropping '%s'", log_name(),
              pending_commands_.front().name.c_str());
@@ -746,6 +761,187 @@ void TeslaBLEVehicle::restore_charging_amps_max_() {
 
 uint32_t TeslaBLEVehicle::charging_amps_max_pref_hash_() const {
   return fnv1_hash_extend(fnv1_hash("tesla_ble_vehicle.charging_amps_max"), vin_);
+}
+
+uint32_t TeslaBLEVehicle::ble_mac_pref_hash_() const {
+  return fnv1_hash_extend(fnv1_hash("tesla_ble_vehicle.ble_mac"), vin_);
+}
+
+static void format_ble_mac(uint64_t address, char *buf) {
+  snprintf(buf, 18, "%02X:%02X:%02X:%02X:%02X:%02X", (unsigned) ((address >> 40) & 0xFF),
+           (unsigned) ((address >> 32) & 0xFF), (unsigned) ((address >> 24) & 0xFF),
+           (unsigned) ((address >> 16) & 0xFF), (unsigned) ((address >> 8) & 0xFF), (unsigned) (address & 0xFF));
+}
+
+bool TeslaBLEVehicle::has_ble_address() const {
+  return ble_client_ != nullptr && ble_client_->get_address() != 0;
+}
+
+// MAC priority: ble_mac_address > NVS > search.
+void TeslaBLEVehicle::restore_ble_mac_() {
+  if (ble_client_ == nullptr) return;
+  auto pref = global_preferences->make_preference<uint64_t>(ble_mac_pref_hash_());
+  uint64_t stored = 0;
+  const bool have_stored = pref.load(&stored) && stored != 0;
+  char mac[18];
+
+  if (mac_from_config_) {
+    // YAML wins. Keep NVS in step, so ble_mac_address can later be removed
+    // without a search (written only when it differs).
+    const uint64_t configured = ble_client_->get_address();
+    if (configured != 0 && (!have_stored || stored != configured)) {
+      uint64_t value = configured;
+      pref.save(&value);
+    }
+    discovery_ = Discovery::DISC_CONFIGURED;
+  } else if (have_stored) {
+    format_ble_mac(stored, mac);
+    ESP_LOGI(TAG, "[%s] Using saved BLE MAC %s", log_name(), mac);
+    ble_client_->set_address(stored);
+    discovery_ = Discovery::DISC_FOUND;
+  } else {
+    start_discovery_("no MAC configured or saved");
+    return;
+  }
+  publish_discovery_();
+}
+
+void TeslaBLEVehicle::publish_discovery_() {
+  if (!state_manager_) return;
+  const char *text = "";
+  switch (discovery_) {
+    case Discovery::DISC_SEARCHING: text = "Searching"; break;
+    case Discovery::DISC_FOUND: text = "Found"; break;
+    case Discovery::DISC_NOT_FOUND: text = "Not found"; break;
+    case Discovery::DISC_CONFIGURED: text = "Configured"; break;
+    case Discovery::DISC_NONE: break;
+  }
+  std::string mac_text;
+  if (has_ble_address()) {
+    char mac[18];
+    format_ble_mac(ble_client_->get_address(), mac);
+    mac_text = mac;
+  }
+  state_manager_->update_discovery(text, mac_text);
+}
+
+void TeslaBLEVehicle::find_car() {
+  LogScope log_scope(this);
+  if (advert_name_.empty()) {
+    ESP_LOGW(TAG, "[%s] Cannot search: no valid VIN", log_name());
+    return;
+  }
+  start_discovery_("Find Car pressed");
+}
+
+void TeslaBLEVehicle::start_discovery_(const char *why) {
+  discovery_ = Discovery::DISC_SEARCHING;
+  discovery_until_ms_ = 0;  // timed once the scanner runs (update_discovery_)
+  ESP_LOGW(TAG, "[%s] Searching for advert %s (%s)", log_name(), advert_name_.c_str(), why);
+  publish_discovery_();
+}
+
+void TeslaBLEVehicle::finish_discovery_(Discovery result) {
+  discovery_ = result;
+  discovery_until_ms_ = 0;
+  if (result == Discovery::DISC_NOT_FOUND) {
+    ESP_LOGW(TAG, "[%s] Not found within %u s - check the VIN, or press Find Car with the car nearby",
+             log_name(), (unsigned) (DISCOVERY_WINDOW_MS / 1000));
+  }
+  publish_discovery_();
+}
+
+void TeslaBLEVehicle::update_discovery_(uint32_t now) {
+  if (now - discovery_checked_ms_ < 1000) return;
+  discovery_checked_ms_ = now;
+  auto *tracker = esp32_ble_tracker::global_esp32_ble_tracker;
+  if (tracker == nullptr) return;
+
+  bool searching = false;
+  for (auto *v : link_vehicles_) {
+    if (v->discovery_ != Discovery::DISC_SEARCHING) continue;
+    if (v->discovery_until_ms_ == 0) {
+      // Start the clock once the scanner is up, in the mode we asked for.
+      if (tracker->scan_running() && tracker->get_scan_active())
+        v->discovery_until_ms_ = (now + DISCOVERY_WINDOW_MS) | 1;
+    } else if (static_cast<int32_t>(now - v->discovery_until_ms_) >= 0) {
+      LogScope log_scope(v);
+      // Not seen in time. A saved MAC (Find Car on a known car) is kept.
+      v->finish_discovery_(v->mac_from_config_ ? Discovery::DISC_CONFIGURED : Discovery::DISC_NOT_FOUND);
+      continue;
+    }
+    searching = true;
+  }
+
+  bool want_active;
+  if (searching && !tracker->get_scan_active()) {
+    discovery_forced_active_scan_ = true;
+    want_active = true;
+    ESP_LOGI(TAG, "Active BLE scan while searching for a car");
+  } else if (!searching && discovery_forced_active_scan_) {
+    discovery_forced_active_scan_ = false;
+    want_active = false;
+    ESP_LOGI(TAG, "Search over - back to passive BLE scan");
+  } else {
+    return;
+  }
+  // Same sequence as bluetooth_proxy: the continuous scan restarts with the
+  // new mode once the stop has completed.
+  tracker->set_scan_active(want_active);
+  tracker->stop_scan();
+  tracker->set_scan_continuous(true);
+}
+
+void TeslaBLEVehicle::on_advert_name_seen(uint64_t address) {
+  if (ble_client_ == nullptr || address == 0) return;
+  const uint64_t current = ble_client_->get_address();
+  char mac[18];
+  format_ble_mac(address, mac);
+
+  if (mac_from_config_) {
+    // Never override YAML; point at a likely typo or swapped cars, once.
+    if (address != current && !mac_mismatch_warned_) {
+      mac_mismatch_warned_ = true;
+      char configured[18];
+      format_ble_mac(current, configured);
+      ESP_LOGW(TAG, "[%s] This car's advert %s comes from %s, but ble_mac_address is %s - typo or swapped cars?",
+               log_name(), advert_name_.c_str(), mac, configured);
+    }
+    if (discovery_ == Discovery::DISC_SEARCHING) finish_discovery_(Discovery::DISC_CONFIGURED);
+    return;
+  }
+
+  // Outside a search, only a car with no MAC at all takes one (e.g. the user
+  // scans actively anyway). A search may replace a saved MAC.
+  if (current != 0 && discovery_ != Discovery::DISC_SEARCHING) return;
+  if (current == address) {
+    if (discovery_ == Discovery::DISC_SEARCHING) {
+      ESP_LOGW(TAG, "[%s] Found car: BLE MAC %s (unchanged)", log_name(), mac);
+      finish_discovery_(Discovery::DISC_FOUND);
+    }
+    return;
+  }
+  // Changing the address under a live or opening link would confuse the
+  // client; the next advert (the search is still running) retries.
+  if (current != 0 && ble_client_->state() != espbt::ClientState::IDLE) return;
+  adopt_address_(address);
+}
+
+void TeslaBLEVehicle::adopt_address_(uint64_t address) {
+  char mac[18];
+  format_ble_mac(address, mac);
+  const uint64_t current = ble_client_->get_address();
+  if (current == 0) {
+    ESP_LOGW(TAG, "[%s] Found car: BLE MAC %s (advert %s)", log_name(), mac, advert_name_.c_str());
+  } else {
+    char old_mac[18];
+    format_ble_mac(current, old_mac);
+    ESP_LOGW(TAG, "[%s] Found car: BLE MAC %s (was %s)", log_name(), mac, old_mac);
+  }
+  ble_client_->set_address(address);
+  auto pref = global_preferences->make_preference<uint64_t>(ble_mac_pref_hash_());
+  pref.save(&address);
+  finish_discovery_(Discovery::DISC_FOUND);
 }
 
 void TeslaBLEVehicle::save_charging_amps_max_(int max) {
@@ -2096,6 +2292,11 @@ void TeslaBLEClient::log_link_params_if_changed(const char *name) {
 
 #ifdef USE_ESP32_BLE_DEVICE
 bool TeslaBLEClient::parse_device(const espbt::ESPBTDevice &device) {
+  // MAC discovery: the car is recognised by its VIN-derived advert name. At
+  // its known address the name only matters while searching (to confirm it).
+  if (vehicle_ != nullptr && (device.address_uint64() != tesla_address_ || vehicle_->discovery_searching()) &&
+      vehicle_->advert_name_matches(device.get_name()))
+    vehicle_->on_advert_name_seen(device.address_uint64());
   if (vehicle_ != nullptr && tesla_address_ != 0 && device.address_uint64() == tesla_address_)
     vehicle_->note_advert_seen(device.get_rssi());
   if (vehicle_ != nullptr && !vehicle_->link_turn_allows_connect())
@@ -2279,6 +2480,12 @@ void TeslaBLEVehicle::register_notify_() {
 
 void TeslaBLEVehicle::handle_connection_established() {
   if (!notify_ready_) return;
+  // A working link at the current MAC answers a search: a connected car may
+  // not advertise, so the name alone could never confirm it.
+  if (discovery_ == Discovery::DISC_SEARCHING) {
+    ESP_LOGW(TAG, "[%s] Found car: connected at its current BLE MAC", log_name());
+    finish_discovery_(mac_from_config_ ? Discovery::DISC_CONFIGURED : Discovery::DISC_FOUND);
+  }
   if (vehicle_ && !link_ready_) {
     link_ready_ = true;
     if (!vehicle_->is_connected()) {

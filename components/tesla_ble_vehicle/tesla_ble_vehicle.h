@@ -227,6 +227,21 @@ public:
     void note_link_activity();
     // Called for every advertisement from this car's MAC address.
     void note_advert_seen(int rssi);
+    // BLE MAC discovery. The MAC comes from ble_mac_address (always wins),
+    // else from NVS, else from a search: the car is recognised by the advert
+    // name derived from its VIN. Teslas send that name in the scan response,
+    // so a search scans actively for DISCOVERY_WINDOW_MS, then goes back to
+    // passive. A car without a MAC takes no BLE turns and refuses commands.
+    void set_mac_from_config(bool from_config) { mac_from_config_ = from_config; }
+    bool advert_name_matches(const std::string &name) const {
+      return !advert_name_.empty() && name == advert_name_;
+    }
+    // This car's advert name was seen from `address`.
+    void on_advert_name_seen(uint64_t address);
+    // Find Car button: search for this car's MAC now.
+    void find_car();
+    bool discovery_searching() const { return discovery_ == Discovery::DISC_SEARCHING; }
+    bool has_ble_address() const;
 
     // Car name for log lines (falls back to the VIN).
     const char *log_name() const { return debug_name_.empty() ? vin_.c_str() : debug_name_.c_str(); }
@@ -261,6 +276,13 @@ private:
     // scheduler; each car is one slot.
     static std::vector<TeslaBLEVehicle *> link_vehicles_;
     static LinkScheduler link_scheduler_;
+    // MAC discovery needs the advert name, which Teslas send in the scan
+    // response: scan actively while a car without ble_mac_address has not
+    // been found yet, then go back to passive (only if we switched).
+    static bool discovery_forced_active_scan_;
+    static uint32_t discovery_checked_ms_;
+    // Runs the search windows and the scanner mode for all cars.
+    static void update_discovery_(uint32_t now);
     int link_slot_{LinkScheduler::NONE};
     bool ever_ready_{false};
     bool yielding_link_{false};
@@ -334,6 +356,19 @@ private:
     // Configuration
     std::string vin_;
     std::string debug_name_;
+    std::string advert_name_;  // "S<16 hex>C", from the VIN
+    bool mac_from_config_{false};
+    enum class Discovery : uint8_t { DISC_NONE, DISC_SEARCHING, DISC_FOUND, DISC_NOT_FOUND, DISC_CONFIGURED };
+    Discovery discovery_{Discovery::DISC_NONE};
+    // The window is timed from when the scanner is running (after boot it
+    // may take a while), so discovery_until_ms_ is 0 until then.
+    uint32_t discovery_until_ms_{0};
+    bool mac_mismatch_warned_{false};
+    static constexpr uint32_t DISCOVERY_WINDOW_MS = 120000;
+    void start_discovery_(const char *why);
+    void finish_discovery_(Discovery result);
+    void publish_discovery_();
+    void adopt_address_(uint64_t address);
     std::string role_;
     
     // Polling intervals
@@ -474,6 +509,8 @@ private:
     int configured_charging_amps_max_{DEFAULT_CHARGING_AMPS_MAX};
 
     uint32_t charging_amps_max_pref_hash_() const;
+    uint32_t ble_mac_pref_hash_() const;
+    void restore_ble_mac_();
     void restore_charging_amps_max_();
     void save_charging_amps_max_(int max);
     uint32_t charge_session_pref_hash_() const;
@@ -571,6 +608,7 @@ DEFINE_TESLA_BUTTON(TeslaUnlatchDriverDoorButton, unlatch_driver_door)
 DEFINE_TESLA_BUTTON(TeslaReleaseChargeCableButton, unlock_charge_port)
 DEFINE_TESLA_BUTTON(TeslaMediaNextTrackButton, media_next_track)
 DEFINE_TESLA_BUTTON(TeslaMediaPreviousTrackButton, media_previous_track)
+DEFINE_TESLA_BUTTON(TeslaFindCarButton, find_car)
 
 // =============================================================================
 // Generic Tesla Switch - use DEFINE_TESLA_SWITCH macro for each switch type
