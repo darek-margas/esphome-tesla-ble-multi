@@ -430,6 +430,10 @@ CONFIG_SCHEMA = (
             # Present turns to away only after the car was neither connected
             # nor heard for this long. Longer than a BLE turn of the other
             # car, so Present does not flicker while the cars take turns.
+            cv.Optional(CONF_PRESENCE_TIMEOUT, default="5min"): cv.All(
+                cv.positive_time_period_milliseconds,
+                cv.Range(min=cv.TimePeriod(minutes=1), max=cv.TimePeriod(hours=1)),
+            ),
             # While a car has no MAC at all, a search that ends "Not found"
             # is retried after this long (e.g. the car was away at boot).
             # "never" turns it off; a known MAC is never searched for again.
@@ -439,10 +443,6 @@ CONFIG_SCHEMA = (
                     cv.positive_time_period_milliseconds,
                     cv.Range(min=cv.TimePeriod(minutes=5), max=cv.TimePeriod(hours=24)),
                 ),
-            ),
-            cv.Optional(CONF_PRESENCE_TIMEOUT, default="5min"): cv.All(
-                cv.positive_time_period_milliseconds,
-                cv.Range(min=cv.TimePeriod(minutes=1), max=cv.TimePeriod(hours=1)),
             ),
             # BLE link parameters. With two cars on one ESP32, both links use
             # the same interval by default so their radio slots interleave
