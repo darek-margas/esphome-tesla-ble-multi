@@ -844,9 +844,17 @@ void TeslaBLEVehicle::start_discovery_(const char *why) {
 void TeslaBLEVehicle::finish_discovery_(Discovery result) {
   discovery_ = result;
   discovery_until_ms_ = 0;
+  next_discovery_retry_ms_ = 0;
   if (result == Discovery::DISC_NOT_FOUND) {
-    ESP_LOGW(TAG, "[%s] Not found within %u s - check the VIN, or press Find Car with the car nearby",
-             log_name(), (unsigned) (DISCOVERY_WINDOW_MS / 1000));
+    if (!has_ble_address() && discovery_retry_interval_ms_ != 0) {
+      // The car may simply have been away: look again later.
+      next_discovery_retry_ms_ = (millis() + discovery_retry_interval_ms_) | 1;
+      ESP_LOGW(TAG, "[%s] Not found within %u s - searching again in %u min (or press Find Car)", log_name(),
+               (unsigned) (DISCOVERY_WINDOW_MS / 1000), (unsigned) (discovery_retry_interval_ms_ / 60000));
+    } else {
+      ESP_LOGW(TAG, "[%s] Not found within %u s - check the VIN, or press Find Car with the car nearby",
+               log_name(), (unsigned) (DISCOVERY_WINDOW_MS / 1000));
+    }
   }
   publish_discovery_();
 }
@@ -859,6 +867,13 @@ void TeslaBLEVehicle::update_discovery_(uint32_t now) {
 
   bool searching = false;
   for (auto *v : link_vehicles_) {
+    if (v->next_discovery_retry_ms_ != 0 && static_cast<int32_t>(now - v->next_discovery_retry_ms_) >= 0) {
+      v->next_discovery_retry_ms_ = 0;
+      if (v->discovery_ != Discovery::DISC_SEARCHING && !v->has_ble_address()) {
+        LogScope log_scope(v);
+        v->start_discovery_("retry");
+      }
+    }
     if (v->discovery_ != Discovery::DISC_SEARCHING) continue;
     if (v->discovery_until_ms_ == 0) {
       // Start the clock once the scanner is up, in the mode we asked for.

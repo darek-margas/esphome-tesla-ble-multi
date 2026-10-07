@@ -93,6 +93,8 @@ public:
     void set_infotainment_sleep_timeout(uint32_t interval_ms);
     void set_wake_on_boot(bool wake) { wake_on_boot_ = wake; }
     void set_presence_timeout(uint32_t timeout_ms) { presence_timeout_ms_ = timeout_ms; }
+    // 0 = off. Only for a car with no MAC whose search ended "Not found".
+    void set_discovery_retry_interval(uint32_t interval_ms) { discovery_retry_interval_ms_ = interval_ms; }
 
     // ==========================================================================
     // Generic sensor setters - delegates to state manager
@@ -364,6 +366,8 @@ private:
     // may take a while), so discovery_until_ms_ is 0 until then.
     uint32_t discovery_until_ms_{0};
     bool mac_mismatch_warned_{false};
+    uint32_t discovery_retry_interval_ms_{3600000};
+    uint32_t next_discovery_retry_ms_{0};  // 0 = none scheduled
     static constexpr uint32_t DISCOVERY_WINDOW_MS = 120000;
     void start_discovery_(const char *why);
     void finish_discovery_(Discovery result);

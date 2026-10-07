@@ -131,6 +131,7 @@ Per car, under `tesla_ble_vehicle:`:
 | `infotainment_poll_interval_active` | `10` s | Infotainment data while charging, in sentry mode or with climate on |
 | `infotainment_sleep_timeout` | `660` s | After this long idle, polls stop asking infotainment so the car can sleep |
 | `wake_on_boot` | `true` | Wake the car once after the ESP32 boots so every sensor gets a value. `false`: sensors stay empty until the car wakes on its own or you press *Force data update* |
+| `discovery_retry_interval` | `1h` | While the car has no MAC at all (none in YAML or NVS), a search that ended `Not found` is repeated after this long, so a car that was away at boot is still found (5 min - 24 h, or `never`). A car with a known MAC is never searched for automatically |
 | `presence_timeout` | `5min` | `Present` turns to away after the car was neither connected nor heard for this long (1 min - 1 h). Keep it well above a BLE turn, so it does not flicker while the cars take turns |
 | `connection_interval` | `15ms` | BLE connection interval (7.5 ms - 4 s). Shorter = faster messages and service discovery. Keep it the same for every car |
 | `supervision_timeout` | `6s` | BLE link timeout (100 ms - 32 s, must be more than twice the interval) |
@@ -370,7 +371,7 @@ If you regenerate a key, that car needs to be paired again.
 You normally do not need to: leave `ble_mac_address` out and the component searches for the car by its advert name, which is derived from the VIN.
 
 - **Where the MAC comes from**, in this order: `ble_mac_address` in YAML (always wins), the MAC saved in NVS by an earlier search, otherwise none.
-- **A search** runs once at boot when there is no MAC, and whenever you press the car's **Find Car** button. Teslas send their advert name in the scan response, so for the search window (2 minutes, counted from when the scanner is running) the scanner is switched to active, then back to passive.
+- **A search** runs once at boot when there is no MAC, whenever you press the car's **Find Car** button, and again every `discovery_retry_interval` (default 1 h) while a car without a MAC has not been found. Teslas send their advert name in the scan response, so for the search window (2 minutes, counted from when the scanner is running) the scanner is switched to active, then back to passive.
 - **Diagnostic entities per car:** *Discovery* (`Searching` / `Found` / `Not found` / `Configured` for a YAML MAC) and *BLE MAC*. The log shows `[Car One] Found car: BLE MAC AA:BB:CC:DD:EE:FF (advert S...C)`, and the MAC is saved in NVS. A search that does not see the car ends as `Not found` (check the VIN, or press Find Car with the car nearby); a previously saved MAC is kept.
 - **A car without a MAC** takes no BLE turns, and its commands fail right away (`No BLE MAC - '...' not sent (press Find Car)`) instead of waiting in the queue.
 - **With `ble_mac_address` set** nothing changes, except that the MAC is also saved in NVS (only when it differs), so you can later delete it from YAML and carry on without a search. If this VIN's advert is seen from a different address than the configured one, the log warns once (likely a typo or swapped cars); the YAML MAC is never overridden.
