@@ -121,6 +121,7 @@ CONF_INFOTAINMENT_SLEEP_TIMEOUT = "infotainment_sleep_timeout"
 CONF_WAKE_ON_BOOT = "wake_on_boot"
 CONF_PRESENCE_TIMEOUT = "presence_timeout"
 CONF_DISCOVERY_RETRY_INTERVAL = "discovery_retry_interval"
+CONF_EXCLUDE_ENTITIES = "exclude_entities"
 
 # Tesla key roles
 TESLA_ROLES = {
@@ -402,6 +403,39 @@ NUMBERS = [
     },
 ]
 
+# Entity lists that are created in a loop, in creation order.
+ENTITY_LISTS = (
+    BINARY_SENSORS,
+    SENSORS,
+    TEXT_SENSORS,
+    BUTTONS,
+    SWITCHES,
+    SELECTS,
+    TIMES,
+    LOCKS,
+    COVERS,
+)
+
+# Entities that exclude_entities may leave out of the build. Only entities
+# without a setter: the component reaches those through id-keyed maps (or not
+# at all), so a missing one is simply skipped. Setter-wired entities are held
+# as plain pointers in C++ and must always exist.
+EXCLUDABLE_ENTITY_IDS = sorted(
+    {d["id"] for entities in ENTITY_LISTS for d in entities if not d.get("setter")}
+)
+
+
+def validate_exclude_entities(value):
+    value = cv.ensure_list(cv.string_strict)(value)
+    for entity_id in value:
+        if entity_id not in EXCLUDABLE_ENTITY_IDS:
+            raise cv.Invalid(
+                f"'{entity_id}' cannot be excluded. Excludable entities: "
+                + ", ".join(EXCLUDABLE_ENTITY_IDS)
+            )
+    return value
+
+
 # =============================================================================
 # CONFIG SCHEMA
 # =============================================================================
@@ -430,6 +464,9 @@ CONFIG_SCHEMA = (
             # Present turns to away only after the car was neither connected
             # nor heard for this long. Longer than a BLE turn of the other
             # car, so Present does not flicker while the cars take turns.
+            # Leave entities out of the firmware to save flash (ids as in the
+            # entity lists above, e.g. tpms_soft_warning_front_left).
+            cv.Optional(CONF_EXCLUDE_ENTITIES, default=[]): validate_exclude_entities,
             cv.Optional(CONF_PRESENCE_TIMEOUT, default="5min"): cv.All(
                 cv.positive_time_period_milliseconds,
                 cv.Range(min=cv.TimePeriod(minutes=1), max=cv.TimePeriod(hours=1)),
@@ -708,19 +745,25 @@ async def to_code(config):
     retry = config[CONF_DISCOVERY_RETRY_INTERVAL]
     cg.add(var.set_discovery_retry_interval(0 if isinstance(retry, str) else int(retry.total_milliseconds)))
     
-    for creators in (
-        (BINARY_SENSORS, create_binary_sensor),
-        (SENSORS, create_sensor),
-        (TEXT_SENSORS, create_text_sensor),
-        (BUTTONS, create_button),
-        (SWITCHES, create_switch),
-        (SELECTS, create_select),
-        (TIMES, create_time),
-        (LOCKS, create_lock),
-        (COVERS, create_cover),
+    excluded = set(config[CONF_EXCLUDE_ENTITIES])
+    for entities, create in zip(
+        ENTITY_LISTS,
+        (
+            create_binary_sensor,
+            create_sensor,
+            create_text_sensor,
+            create_button,
+            create_switch,
+            create_select,
+            create_time,
+            create_lock,
+            create_cover,
+        ),
     ):
-        for definition in creators[0]:
-            await creators[1](var, definition, vehicle_id, vehicle_name, device_id)
+        for definition in entities:
+            if definition["id"] in excluded and not definition.get("setter"):
+                continue
+            await create(var, definition, vehicle_id, vehicle_name, device_id)
 
     for definition in NUMBERS:
         await create_number(var, definition, config, vehicle_id, vehicle_name, device_id)
