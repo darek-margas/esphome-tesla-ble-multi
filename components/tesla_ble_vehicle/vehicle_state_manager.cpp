@@ -833,7 +833,13 @@ void VehicleStateManager::update_closures_state(const CarServer_ClosuresState& c
 // =============================================================================
 
 void VehicleStateManager::update_asleep(bool asleep) {
-    if (publish_binary_sensor("asleep", asleep)) {
+    // Kept here, not read back from the sensor: the Asleep entity is
+    // optional (exclude_entities), the sleep state is not.
+    const bool changed = !asleep_known_ || asleep != asleep_;
+    asleep_ = asleep;
+    asleep_known_ = true;
+    publish_binary_sensor("asleep", asleep);
+    if (changed) {
         ESP_LOGI(STATE_MANAGER_TAG, "Vehicle sleep state: %s", asleep ? "ASLEEP" : "AWAKE");
     }
 }
@@ -1046,8 +1052,7 @@ void VehicleStateManager::reset_all_states() {
 // =============================================================================
 
 bool VehicleStateManager::is_asleep() const {
-    auto* sensor = get_binary_sensor("asleep");
-    return sensor ? sensor->state : true;
+    return asleep_;
 }
 
 bool VehicleStateManager::is_sentry_mode() const {

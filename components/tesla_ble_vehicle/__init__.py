@@ -461,12 +461,12 @@ CONFIG_SCHEMA = (
             # Wake the car once after boot to fill all sensors. Later polls
             # never wake a sleeping car on their own.
             cv.Optional(CONF_WAKE_ON_BOOT, default=True): cv.boolean,
-            # Present turns to away only after the car was neither connected
-            # nor heard for this long. Longer than a BLE turn of the other
-            # car, so Present does not flicker while the cars take turns.
             # Leave entities out of the firmware to save flash (ids as in the
             # entity lists above, e.g. tpms_soft_warning_front_left).
             cv.Optional(CONF_EXCLUDE_ENTITIES, default=[]): validate_exclude_entities,
+            # Present turns to away only after the car was neither connected
+            # nor heard for this long. Longer than a BLE turn of the other
+            # car, so Present does not flicker while the cars take turns.
             cv.Optional(CONF_PRESENCE_TIMEOUT, default="5min"): cv.All(
                 cv.positive_time_period_milliseconds,
                 cv.Range(min=cv.TimePeriod(minutes=1), max=cv.TimePeriod(hours=1)),

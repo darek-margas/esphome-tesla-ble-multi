@@ -37,6 +37,8 @@ ENTITY_LISTS = {
 # their own setters and are not part of the sensor-wiring cross-check.
 SENSOR_LISTS = ("BINARY_SENSORS", "SENSORS", "TEXT_SENSORS")
 
+# get_binary_sensor("id") / get_sensor("id") / get_text_sensor("id") with a literal id
+GET_BY_ID_CALL = re.compile(r'get_(?:binary_|text_)?sensor\("([a-z0-9_]+)"\)')
 # publish_text_sensor("id", ...) / publish_binary_sensor("id", ...) / publish_sensor("id", ...)
 PUBLISH_CALL = re.compile(r'publish_(?:binary_|text_)?sensor\("([a-z0-9_]+)"')
 
@@ -106,6 +108,24 @@ def check_sensor_wiring(sensors: dict, checks: int, failures: int):
     return checks, failures
 
 
+def check_no_state_read_back(checks: int, failures: int):
+    """Entities without a setter can be left out (exclude_entities), so C++
+    must not read their state back: keep the value in a member and only
+    publish it. Fetching a sensor by literal id is allowed only to mark it
+    unavailable (set_sensor_available)."""
+    for path in sorted(COMPONENT_DIR.glob("*.cpp")):
+        for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+            code = re.sub(r"//.*", "", line)
+            for entity_id in GET_BY_ID_CALL.findall(code):
+                checks += 1
+                if "set_sensor_available(" in code:
+                    continue
+                print(f"  FAIL {path.name}:{number} reads entity '{entity_id}' back "
+                      f"(keep the state in a member; the entity may be excluded)")
+                failures += 1
+    return checks, failures
+
+
 def main() -> int:
     tree = ast.parse(COMPONENT.read_text(encoding="utf-8"), filename=str(COMPONENT))
 
@@ -145,6 +165,7 @@ def main() -> int:
                     seen_ids[entity_id] = list_name
 
     checks, failures = check_sensor_wiring(collect_sensor_ids(tree), checks, failures)
+    checks, failures = check_no_state_read_back(checks, failures)
 
     if failures:
         print(f"FAILED: {failures}/{checks} checks")
