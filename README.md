@@ -6,7 +6,7 @@ Control more than one Tesla from one ESP32 over BLE.
 
 This is a multi-car fork of [yoziru/esphome-tesla-ble](https://github.com/yoziru/esphome-tesla-ble). Each car gets its own BLE client, key, sessions and Home Assistant sub-device, so one ESP32 serves several cars instead of needing one ESP32 per car.
 
-It runs on ESPHome 2026.9.x with the Tesla BLE library from [our fork](#tesla-ble-library) (`v5.2.0-dm.6`) and is tested with two cars on a classic ESP32 (Shelly Plus 1).
+It runs on ESPHome 2026.9.x with the Tesla BLE library from [our fork](#tesla-ble-library) (`v5.2.0-dm.7`) and is tested with two cars on a classic ESP32 (Shelly Plus 1).
 
 ## What works
 
@@ -252,7 +252,7 @@ esp32:
     components:
       - name: tesla-ble
         source: https://github.com/darek-margas/tesla-ble.git
-        ref: v5.2.0-dm.6  # our fork: v5.2.0 + low power, keep accessory power, guest mode, overheat temperature, scheduled departure, media, wake fix, crash fix (roll back: v5.2.0-dm.5)
+        ref: v5.2.0-dm.7  # our fork: v5.2.0 + low power, keep accessory power, guest mode, overheat temperature, scheduled departure, media, wake fix, crash fix, log level (roll back: v5.2.0-dm.6)
 ```
 
 ### Tesla BLE library
@@ -265,7 +265,8 @@ The library is built from [darek-margas/tesla-ble](https://github.com/darek-marg
 
 | `ref` | Contents |
 |---|---|
-| `v5.2.0-dm.6` | current: everything below + an unanswered session request is resent every second (fixes the first command after a wake failing after 25 s, a dm.4 regression) |
+| `v5.2.0-dm.7` | current: everything below + compile-time log level (library messages above the ESPHome logger level take no flash) and the ESP32-C5 target |
+| `v5.2.0-dm.6` | everything below + an unanswered session request is resent every second (fixes the first command after a wake failing after 25 s, a dm.4 regression) |
 | `v5.2.0-dm.5` | everything below + fix for a crash (abort) from a heap allocation on every loop |
 | `v5.2.0-dm.4` | everything below + one session request per wake (first command after a wake no longer takes ~8 s) and identical resends (a lost reply no longer runs a toggle twice) |
 | `v5.2.0-dm.3` | everything below + media controls and media state (artist, title) |
@@ -273,7 +274,7 @@ The library is built from [darek-margas/tesla-ble](https://github.com/darek-marg
 | `v5.2.0-dm.1` | guest mode, overheat temperature, low power, keep accessory power |
 | `v5.2.0` | upstream release (the new controls fail to build with it) |
 
-**If your own YAML declares the `tesla-ble` component** (as in the example above), set `source` to the fork and `ref: v5.2.0-dm.6` (dm.3 to dm.5 still build, without the later fixes). With a ref older than dm.3 the build stops with an error at `set_media_state_callback` - that is the check telling you the library is too old. Upstream changes are synced into the fork deliberately, so a new upstream release cannot break this build unannounced.
+**If your own YAML declares the `tesla-ble` component** (as in the example above), set `source` to the fork and `ref: v5.2.0-dm.7` (dm.3 to dm.6 still build, without the later fixes). With a ref older than dm.3 the build stops with an error at `set_media_state_callback` - that is the check telling you the library is too old. Upstream changes are synced into the fork deliberately, so a new upstream release cannot break this build unannounced.
 
 The component enables the ESP-IDF GATT client cache (`CONFIG_BT_GATTC_CACHE_NVS_FLASH`) itself; nothing to add.
 
