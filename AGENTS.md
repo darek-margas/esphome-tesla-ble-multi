@@ -9,7 +9,7 @@ make clean                                # Remove .esphome build dir
 make help                                 # Show all targets
 
 # Architecture
-ESPHome component for Tesla BLE vehicle control using ESP32 boards (M5Stack NanoC6, AtomS3, generic ESP32). Two custom components:
+ESPHome component for Tesla BLE vehicle control using ESP32 boards (M5Stack NanoC6, AtomS3, generic ESP32, ESP32-C5; each built by CI). Two custom components:
 - tesla_ble_vehicle: Main vehicle control (sensors, switches, charging, climate, locks)
 - tesla_ble_listener: BLE vehicle discovery (find MAC address by VIN)
 

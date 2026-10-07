@@ -29,6 +29,7 @@ jobs:
           - tesla-ble-esp32-generic.yml
           - tesla-ble-m5stack-atoms3.yml
           - tesla-ble-m5stack-nanoc6.yml
+          - tesla-ble-esp32-c5.yml
           - multicar-test.yml
           - listener-test.yml
     steps:

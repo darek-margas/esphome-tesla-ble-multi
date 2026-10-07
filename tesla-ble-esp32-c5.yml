@@ -1,0 +1,7 @@
+external_components: !include packages/external_components.yml
+
+packages:
+  base: !include packages/base.yml
+  device_base: !include boards/esp32-c5.yml
+  client_defaults: !include packages/client_defaults.yml
+  client: !include packages/client.yml
