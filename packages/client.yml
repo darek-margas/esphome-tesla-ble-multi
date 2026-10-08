@@ -9,7 +9,6 @@ tesla_ble_vehicle:
   - id: tesla_ble_vehicle_id
     name: $tesla_vehicle_name
     vin: $tesla_vin
-    ble_mac_address: $ble_mac_address
     role: DRIVER
     vcsec_poll_interval: $vcsec_poll_interval
     infotainment_poll_interval_awake: $infotainment_poll_interval_awake

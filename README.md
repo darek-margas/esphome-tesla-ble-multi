@@ -405,13 +405,23 @@ There is nothing to look up: the VIN is enough. A Tesla's Bluetooth advert carri
 - **A car without a MAC** takes no BLE turns, and its commands fail right away (`No BLE MAC - '...' not sent (press Find Car)`) instead of waiting in the queue.
 - **With `ble_mac_address` set** nothing changes, except that the MAC is also saved in NVS (only when it differs), so you can later delete it from YAML and carry on without a search. If this VIN's advert is seen from a different address than the configured one, the log warns once (likely a typo or swapped cars); the YAML MAC is never overridden.
 
+### Upgrading from 2026.10.7 or older with the single-car package
+
+The single-car package (`packages/client.yml`, used by the board configs) no longer reads `!secret ble_mac_address`. Releases up to 2026.10.7 kept the MAC only in your secrets, not on the device, so after this upgrade the first boot searches for the car by its VIN. If the car is away at that moment it stays `Not found` and gets no BLE turns until the hourly retry or *Find Car*. Do one of:
+
+- upgrade with the car within Bluetooth range: it is found within 2 minutes and the MAC is saved;
+- upgrade to any release from 2026.10.8 to 2026.10.9.6 first (it saves the MAC from your secrets on the device), then to this one;
+- or keep pinning it: set `ble_mac_address:` on the car in your own YAML.
+
+Releases from 2026.10.8 on have already saved the MAC on the device, so nothing changes for them.
+
 ### Looking up the MAC by hand (not needed)
 
 Only if you want to set `ble_mac_address` anyway: on Android a BLE scanner such as nRF Connect shows the Tesla advert (`S…C`) with its MAC. iOS does not show BLE MAC addresses to scanner apps.
 
 ### Listener component (removed)
 
-`tesla_ble_listener`, which only logged the MAC of a car with a given VIN, was removed in 2026.10.9.6: the search above does the same job and saves the result. If your YAML still lists it, delete `tesla_ble_listener` from `external_components` and any `tesla_ble_listener:` block. `ble_mac_address` keeps working, in YAML or from your secrets.
+`tesla_ble_listener`, which only logged the MAC of a car with a given VIN, was removed in 2026.10.9.6: the search above does the same job and saves the result. If your YAML still lists it, delete `tesla_ble_listener` from `external_components` and any `tesla_ble_listener:` block. `ble_mac_address` set on the car in YAML keeps working.
 
 
 ## Home Assistant sub-devices
