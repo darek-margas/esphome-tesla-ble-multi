@@ -429,6 +429,7 @@ void TeslaBLEVehicle::yield_link_() {
     return;
   ESP_LOGI(TAG, "[%s] Yielding BLE link to the next car", log_name());
   yielding_link_ = true;
+  planned_disconnect_ = true;
   ble_client_->disconnect();
 }
 
@@ -2420,17 +2421,28 @@ void TeslaBLEVehicle::gattc_event_handler(esp_gattc_cb_event_t event,
   switch (event) {
   case ESP_GATTC_OPEN_EVT:
     if (param->open.status == ESP_GATT_OK) {
+      planned_disconnect_ = false;
       ESP_LOGI(TAG, "[%s] BLE physical link established", log_name());
     }
     break;
 
+  // A hand-over to the other car closes the link several times a minute:
+  // that is routine, so only an unplanned drop is a warning.
   case ESP_GATTC_CLOSE_EVT:
-    ESP_LOGW(TAG, "[%s] BLE connection closed", log_name());
+    if (planned_disconnect_) {
+      ESP_LOGD(TAG, "[%s] BLE connection closed (hand-over)", log_name());
+    } else {
+      ESP_LOGW(TAG, "[%s] BLE connection closed", log_name());
+    }
     handle_connection_lost();
     break;
 
   case ESP_GATTC_DISCONNECT_EVT:
-    ESP_LOGW(TAG, "[%s] BLE disconnected", log_name());
+    if (planned_disconnect_) {
+      ESP_LOGD(TAG, "[%s] BLE disconnected (hand-over)", log_name());
+    } else {
+      ESP_LOGW(TAG, "[%s] BLE disconnected", log_name());
+    }
     this->read_handle_ = 0;
     this->write_handle_ = 0;
     notify_ready_ = false;
