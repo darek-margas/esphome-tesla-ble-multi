@@ -400,6 +400,10 @@ void TeslaBLEVehicle::update_reachable_(uint32_t now) {
     } else {
       ESP_LOGI(TAG, "[%s] Not heard for %u s - not present", log_name(),
                (unsigned) (presence_timeout_ms_ / 1000));
+      // A car that drove off during its turn left "BLE connection lost" set,
+      // and only its next connection would clear it: an absent car is normal,
+      // so the device should not stay in warning status until it returns
+      this->status_clear_warning();
     }
   }
   reachable_known_ = true;
