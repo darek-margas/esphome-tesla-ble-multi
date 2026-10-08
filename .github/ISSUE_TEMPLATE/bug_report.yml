@@ -1,0 +1,74 @@
+name: Problem report
+description: Something doesn't work as described in the README.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting! Please check the README's
+        [Troubleshooting](../blob/multicar-v2/README.md#troubleshooting) and
+        [Reading the log](../blob/multicar-v2/README.md#reading-the-log) first: a command
+        that does nothing the first time, a car that never gets a turn and empty sensors
+        after a reboot are covered there.
+
+        > ⚠️ This issue is public. **Remove VINs** (or keep only the last 4 characters)
+        > from YAML and logs before pasting. BLE MAC addresses are fine to leave.
+  - type: input
+    id: version
+    attributes:
+      label: Component version
+      description: The release you build from (e.g. `v2026.10.9.6`), or `multicar-v2` and the date you built.
+    validations:
+      required: true
+  - type: input
+    id: esphome
+    attributes:
+      label: ESPHome version
+      placeholder: e.g. 2026.9.1
+    validations:
+      required: true
+  - type: input
+    id: board
+    attributes:
+      label: Board
+      placeholder: e.g. classic ESP32 (Shelly Plus 1), ESP32-S3, ESP32-C6, ESP32-C5
+    validations:
+      required: true
+  - type: input
+    id: cars
+    attributes:
+      label: Cars on this ESP32
+      description: How many, and the models.
+      placeholder: e.g. 2 - Model 3 2024, Model Y 2026
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happens, and what you expected
+      description: Which car, which entity or button, and when (after a reboot, after the car woke up, while it was away...).
+    validations:
+      required: true
+  - type: textarea
+    id: yaml
+    attributes:
+      label: YAML
+      description: Your `tesla_ble_vehicle:` section (and `esp32_ble_tracker:` if you have one). VINs removed.
+      render: yaml
+    validations:
+      required: true
+  - type: textarea
+    id: log
+    attributes:
+      label: Log
+      description: |
+        From a few seconds before the problem until a little after it, with `logger: level: DEBUG`.
+        Each line carries the car name, e.g. `[Car One]`. VINs removed.
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Diagnostic entities
+      description: For each car, the values of *Key*, *Discovery*, *BLE MAC* (fine to share), *Present* and *Asleep* when it happened. A screenshot is fine.

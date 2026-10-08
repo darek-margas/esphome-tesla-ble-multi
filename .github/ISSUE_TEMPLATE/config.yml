@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: README - setup, pairing and troubleshooting
+    url: https://github.com/darek-margas/esphome-tesla-ble-multi#quick-start
+    about: Setting up with just the VIN, pairing, and answers to the usual first problems.
