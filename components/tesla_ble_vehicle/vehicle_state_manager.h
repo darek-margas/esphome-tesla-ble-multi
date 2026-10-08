@@ -138,6 +138,8 @@ public:
     void update_charger_connected(bool connected);
     void update_ble_rssi(float rssi);
     void update_present(bool present);
+    // Key diagnostic text ("Paired", "Waiting for approval", ...)
+    void update_key_status(const std::string& status);
     // BLE MAC discovery state ("Searching", "Found", ...) and the MAC in use
     void update_discovery(const std::string& state, const std::string& mac);
     void update_ble_advert_rssi(float rssi);  // NAN when not heard

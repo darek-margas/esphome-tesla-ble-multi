@@ -27,6 +27,7 @@
 #include "control_state_policy.h"
 #include "polling_policy.h"
 #include "connection_reset_policy.h"
+#include "key_status_policy.h"
 #include "link_scheduler.h"
 #include "storage_adapter_impl.h"
 #include <vehicle.h>
@@ -321,6 +322,14 @@ private:
     static constexpr uint32_t MISSED_TURN_BACKOFF_MS = 30000;
     static constexpr uint32_t MAX_MISSED_TURN_BACKOFF_MS = 300000;
     LinkScheduler::Input link_input_(uint32_t now) const;
+
+    // Key diagnostic sensor (see key_status_policy.h)
+    KeyStatusPolicy key_status_;
+    bool key_stored_() const;
+    void note_key_result_(const TeslaBLE::OperationResult &result);
+    void publish_key_status_();
+    // VCSEC status poll that also reports whether the car accepts our key.
+    void poll_vcsec_();
     static void run_link_scheduler_(uint32_t now);
     void yield_link_();
 
