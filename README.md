@@ -107,6 +107,7 @@ tesla_ble_vehicle:
 
     vin: !secret tesla_vin_car_two
     wake_on_boot: false           # this car is not woken after an ESP32 reboot
+    powershare: true              # this car can power a load or the home: build its Powershare entities
 
     role: DRIVER
     charging_amps_max: ${charging_amps_max}
@@ -146,6 +147,7 @@ Per car, under `tesla_ble_vehicle:`:
 | `discovery_retry_interval` | `1h` | While the car has no MAC at all (none in YAML or NVS), a search that ended `Not found` is repeated after this long, so a car that was away at boot is still found (5 min - 24 h, or `never`). A car with a known MAC is never searched for automatically |
 | `presence_timeout` | `5min` | `Present` turns to away after the car was neither connected nor heard for this long (1 min - 1 h). Keep it well above a BLE turn, so it does not flicker while the cars take turns |
 | `exclude_entities` | - | Entity ids to leave out of the firmware to save flash, e.g. `[tpms_soft_warning_front_left, media_title]`. Only entities without a dedicated setter can be left out; an id that cannot be is reported with the list of ones that can |
+| `powershare` | `false` | Build the [Powershare](#a-car-in-home-assistant) entities for a car that can power a load or the home. Off by default because few cars can; single Powershare entities can still be left out with `exclude_entities` |
 | `connection_interval` | `15ms` | BLE connection interval (7.5 ms - 4 s). Shorter = faster messages and service discovery. Keep it the same for every car |
 | `supervision_timeout` | `6s` | BLE link timeout (100 ms - 32 s, must be more than twice the interval) |
 
@@ -496,7 +498,7 @@ Controls: locks, covers, charging, climate (preset and Bioweapon fan mode are re
 
 Sensors and diagnostics. A sensor that stays *Unknown* means that car does not send that value over BLE (for example Estimated Range), or it does not apply right now (Time to Full when not charging):
 
-**Powershare** (the car powering a load or the home). A car that supports it reports the session in its charge state over BLE, as the Tesla app shows it; other cars leave these *Unknown*:
+**Powershare** (the car powering a load or the home). A car that supports it reports the session in its charge state over BLE, as the Tesla app shows it. These entities are only built for a car with `powershare: true` (a car without the feature just doesn't send the fields, so the firmware can't tell on its own); single ones can still be left out with `exclude_entities`:
 
 - **Powershare** (running), **Powershare Status** (*Inactive / Initializing / Handshaking / Active / Reconnecting / Stopped*), **Powershare Type** (*None / Load / Home*) and **Powershare Stop Reason** (*None / SOC Too Low / Retry / Fault / User / Reconnecting / Authentication*).
 - **Powershare Power** (kW going out now), **Powershare Time Left** (hours until it stops) and **Powershare Battery Limit** (the battery % at which it stops).

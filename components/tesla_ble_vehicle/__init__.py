@@ -123,6 +123,7 @@ CONF_WAKE_ON_BOOT = "wake_on_boot"
 CONF_PRESENCE_TIMEOUT = "presence_timeout"
 CONF_DISCOVERY_RETRY_INTERVAL = "discovery_retry_interval"
 CONF_EXCLUDE_ENTITIES = "exclude_entities"
+CONF_POWERSHARE = "powershare"
 
 # Tesla key roles
 TESLA_ROLES = {
@@ -436,6 +437,21 @@ EXCLUDABLE_ENTITY_IDS = sorted(
 )
 
 
+# Powershare entities: only built with "powershare: true", as few cars can power a
+# load or the home and the car's BLE replies give no reliable "not supported" (a car
+# without it just leaves the fields out). exclude_entities still applies on top.
+POWERSHARE_ENTITY_IDS = frozenset({
+    "powershare",
+    "powershare_status",
+    "powershare_type",
+    "powershare_stop_reason",
+    "powershare_power",
+    "powershare_hours_left",
+    "powershare_soc_limit",
+})
+assert POWERSHARE_ENTITY_IDS <= set(EXCLUDABLE_ENTITY_IDS)
+
+
 def validate_exclude_entities(value):
     value = cv.ensure_list(cv.string_strict)(value)
     for entity_id in value:
@@ -475,6 +491,9 @@ CONFIG_SCHEMA = (
             # Leave entities out of the firmware to save flash (ids as in the
             # entity lists above, e.g. tpms_soft_warning_front_left).
             cv.Optional(CONF_EXCLUDE_ENTITIES, default=[]): validate_exclude_entities,
+            # Build the Powershare entities (for a car that can power a load or
+            # the home); single ones can still be left out with exclude_entities.
+            cv.Optional(CONF_POWERSHARE, default=False): cv.boolean,
             # Present turns to away only after the car was neither connected
             # nor heard for this long. Longer than a BLE turn of the other
             # car, so Present does not flicker while the cars take turns.
@@ -785,6 +804,8 @@ async def to_code(config):
     cg.add(var.set_discovery_retry_interval(0 if isinstance(retry, str) else int(retry.total_milliseconds)))
     
     excluded = set(config[CONF_EXCLUDE_ENTITIES])
+    if not config[CONF_POWERSHARE]:
+        excluded |= POWERSHARE_ENTITY_IDS
     for entities, create in zip(
         ENTITY_LISTS,
         (

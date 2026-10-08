@@ -1,7 +1,7 @@
 esphome:
   project:
     name: yoziru.esphome-tesla-ble
-    version: "2026.10.9.3"
+    version: "2026.10.9.4"
 
 esp32_ble_tracker:
   scan_parameters:
