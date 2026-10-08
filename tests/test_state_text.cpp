@@ -235,13 +235,25 @@ static void test_departure_policy() {
 
 static void test_media_play_state() {
   // Asleep: no media state to read
-  CHECK(media_play_state(true, kMediaPlaying) == MediaPlay::OFF);
-  CHECK(media_play_state(true, std::nullopt) == MediaPlay::OFF);
-  CHECK(media_play_state(false, kMediaPlaying) == MediaPlay::PLAYING);
-  CHECK(media_play_state(false, kMediaPaused) == MediaPlay::PAUSED);
-  CHECK(media_play_state(false, kMediaStopped) == MediaPlay::IDLE);
-  CHECK(media_play_state(false, std::nullopt) == MediaPlay::IDLE);
-  CHECK(media_play_state(false, 99) == MediaPlay::IDLE);
+  CHECK(media_play_state(true, kMediaPlaying, true) == MediaPlay::OFF);
+  CHECK(media_play_state(true, std::nullopt, true) == MediaPlay::OFF);
+  CHECK(media_play_state(false, kMediaPlaying, true) == MediaPlay::PLAYING);
+  CHECK(media_play_state(false, kMediaPaused, true) == MediaPlay::PAUSED);
+  CHECK(media_play_state(false, kMediaStopped, true) == MediaPlay::IDLE);
+  CHECK(media_play_state(false, std::nullopt, true) == MediaPlay::IDLE);
+  CHECK(media_play_state(false, 99, true) == MediaPlay::IDLE);
+  // A parked car reports "playing" with nothing loaded: idle
+  CHECK(media_play_state(false, kMediaPlaying, false) == MediaPlay::IDLE);
+  CHECK(media_play_state(false, kMediaPaused, false) == MediaPlay::IDLE);
+}
+
+static void test_media_source_is_radio() {
+  // Radio may play without a title, so it still counts as playing
+  for (int radio : {1, 2, 3, 10, 13, 14, 19})
+    CHECK(media_source_is_radio(radio));
+  // Streaming / Bluetooth / theater sources need a title or artist
+  for (int other : {0, 8, 12, 27, 29, 99})
+    CHECK(!media_source_is_radio(other));
 }
 
 static void test_media_volume() {
@@ -302,6 +314,7 @@ int main() {
   test_cop_option();
   test_departure_policy();
   test_media_play_state();
+  test_media_source_is_radio();
   test_media_volume();
   test_media_source();
 

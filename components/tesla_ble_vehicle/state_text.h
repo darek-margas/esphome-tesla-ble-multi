@@ -440,10 +440,26 @@ constexpr int kMediaPaused = 2;
 // has no media state to read then (ESPHome has no per-entity "unavailable").
 enum class MediaPlay { OFF, IDLE, PLAYING, PAUSED };
 
-inline MediaPlay media_play_state(bool asleep, std::optional<int> playback_status) {
+// Broadcast radio (AM, FM, XM, DAB, US/EU radio, SiriusXM) can play without a
+// title or artist (no RDS text), so it counts as playing even then.
+inline bool media_source_is_radio(int source) {
+  switch (source) {
+    case 1: case 2: case 3: case 10: case 13: case 14: case 19:
+      return true;
+    default:
+      return false;
+  }
+}
+
+// has_now_playing: the car reported a title or an artist (or plays radio). A parked, empty car
+// keeps reporting its last streaming source as "playing" with neither (seen on
+// two cars overnight), while anything that really plays has at least a title
+// (music: title and artist, the theater apps: the video title). Playing or
+// paused with nothing loaded is shown as idle.
+inline MediaPlay media_play_state(bool asleep, std::optional<int> playback_status, bool has_now_playing) {
   if (asleep)
     return MediaPlay::OFF;
-  if (!playback_status.has_value())
+  if (!playback_status.has_value() || !has_now_playing)
     return MediaPlay::IDLE;
   switch (*playback_status) {
     case kMediaPlaying:

@@ -87,6 +87,13 @@ static_assert(static_cast<int>(CarServer_MediaPlaybackStatus_Stopped) == state_t
 static_assert(static_cast<int>(CarServer_MediaPlaybackStatus_Playing) == state_text::kMediaPlaying);
 static_assert(static_cast<int>(CarServer_MediaPlaybackStatus_Paused) == state_text::kMediaPaused);
 static_assert(static_cast<int>(CarServer_MediaSourceType_MediaSourceType_AM) == 1);
+// Radio sources for state_text::media_source_is_radio
+static_assert(static_cast<int>(CarServer_MediaSourceType_MediaSourceType_FM) == 2);
+static_assert(static_cast<int>(CarServer_MediaSourceType_MediaSourceType_XM) == 3);
+static_assert(static_cast<int>(CarServer_MediaSourceType_MediaSourceType_DAB) == 10);
+static_assert(static_cast<int>(CarServer_MediaSourceType_MediaSourceType_USRadio) == 13);
+static_assert(static_cast<int>(CarServer_MediaSourceType_MediaSourceType_EURadio) == 14);
+static_assert(static_cast<int>(CarServer_MediaSourceType_MediaSourceType_SiriusXM) == 19);
 static_assert(static_cast<int>(CarServer_MediaSourceType_MediaSourceType_Bluetooth) == 8);
 static_assert(static_cast<int>(CarServer_MediaSourceType_MediaSourceType_Spotify) == 12);
 static_assert(static_cast<int>(CarServer_MediaSourceType_MediaSourceType_MediaFile) == 16);

@@ -2045,7 +2045,12 @@ void TeslaBLEVehicle::handle_media_state_(const CarServer_MediaState &media,
   std::optional<int> status;
   if (media.which_optional_media_playback_status)
     status = static_cast<int>(media.optional_media_playback_status.media_playback_status);
-  const auto play = state_text::media_play_state(asleep, status);
+  const int source_type = media.which_optional_now_playing_source
+                              ? static_cast<int>(media.optional_now_playing_source.now_playing_source)
+                              : 0;
+  const bool has_now_playing = !now_playing.title.empty() || !now_playing.artist.empty() ||
+                               state_text::media_source_is_radio(source_type);
+  const auto play = state_text::media_play_state(asleep, status, has_now_playing);
 
   if (media_player_ != nullptr) {
     const auto state = to_media_player_state(play);
