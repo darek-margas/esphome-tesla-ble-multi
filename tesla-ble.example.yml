@@ -7,8 +7,7 @@ substitutions:
   variant: esp32
   flash_size: 4MB
   tesla_vehicle_name: "Tesla"
-  ble_mac_address: "A0:B1:C2:D3:E4:F5" # vehicle BLE MAC address
-  tesla_vin: "5YJ30123456789ABC" # vehicle VIN
+  tesla_vin: "5YJ30123456789ABC" # vehicle VIN; the car's BLE MAC is found from it
 
   # Polling intervals (in seconds) - customize based on your needs
   # Lower values = more responsive but higher battery drain
@@ -47,7 +46,6 @@ packages:
 #   - id: car_one
 #     name: Car One
 #     vin: !secret tesla_vin_car_one
-#     ble_mac_address: !secret ble_mac_address_car_one
 #     vcsec_poll_interval: "60"               # also how often this car asks for a BLE turn
 #     infotainment_poll_interval_awake: "120"
 #     infotainment_poll_interval_active: "60"
@@ -61,7 +59,6 @@ packages:
 #   - id: car_two
 #     name: Car Two
 #     vin: !secret tesla_vin_car_two
-#     ble_mac_address: !secret ble_mac_address_car_two
 #     wake_on_boot: false             # e.g. a car you rarely use: do not wake it on every ESP32 reboot
 #     powershare: true                # this car can power a load or the home: build its Powershare entities
 #     vcsec_poll_interval: "60"

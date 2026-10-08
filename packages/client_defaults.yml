@@ -1,6 +1,5 @@
 substitutions:
   tesla_vehicle_name: "Tesla"
-  ble_mac_address: !secret ble_mac_address
   tesla_vin: !secret tesla_vin
   vcsec_poll_interval: "10"
   infotainment_poll_interval_awake: "30"
