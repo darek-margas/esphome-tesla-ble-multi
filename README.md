@@ -224,6 +224,8 @@ At `DEBUG` level each Tesla message also logs its size and how long it took to l
 [Car One] BLE link params: interval 15.00 ms, latency 0, supervision timeout 6000 ms (requested 15.00 ms / 6000 ms)
 ```
 
+A hand-over between cars is normal and logs no warning. The component sets the ESP-IDF Bluetooth stack's HCI log to errors only (`CONFIG_BT_LOG_HCI_TRACE_LEVEL_ERROR`); at its default level every hand-over would log `BT_HCI: hci cmd send: disconnect` and `hcif disc complete` as warnings.
+
 ## External component
 
 ```yaml

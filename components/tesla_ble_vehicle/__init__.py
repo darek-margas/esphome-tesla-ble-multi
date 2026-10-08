@@ -710,6 +710,11 @@ async def to_code(config):
     # Cache each car's GATT service table in NVS: after a BLE hand-over the
     # reconnect skips service discovery (written once per car).
     add_idf_sdkconfig_option("CONFIG_BT_GATTC_CACHE_NVS_FLASH", True)
+    # Bluetooth stack HCI log at ERROR (ESP-IDF default WARNING): otherwise every
+    # planned hand-over between cars logs "BT_HCI: hci cmd send: disconnect" and
+    # "hcif disc complete" as warnings. esp32_ble keeps HCI as a required logger,
+    # so it never sets this level itself.
+    add_idf_sdkconfig_option("CONFIG_BT_LOG_HCI_TRACE_LEVEL_ERROR", True)
     cg.add_define("USE_ESP32_BLE_UUID")
 
     var = cg.new_Pvariable(config[CONF_ID])
