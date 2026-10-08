@@ -147,7 +147,7 @@ Per car, under `tesla_ble_vehicle:`:
 | `discovery_retry_interval` | `1h` | While the car has no MAC at all (none in YAML or NVS), a search that ended `Not found` is repeated after this long, so a car that was away at boot is still found (5 min - 24 h, or `never`). A car with a known MAC is never searched for automatically |
 | `presence_timeout` | `5min` | `Present` turns to away after the car was neither connected nor heard for this long (1 min - 1 h). Keep it well above a BLE turn, so it does not flicker while the cars take turns |
 | `exclude_entities` | - | Entity ids to leave out of the firmware to save flash, e.g. `[tpms_soft_warning_front_left, media_title]`. Only entities without a dedicated setter can be left out; an id that cannot be is reported with the list of ones that can |
-| `powershare` | `false` | Build the [Powershare](#a-car-in-home-assistant) entities for a car that can power a load or the home. Off by default because few cars can; single Powershare entities can still be left out with `exclude_entities` |
+| `powershare` | `false` | Build the [Powershare](#a-car-in-home-assistant) entities for a car that can power a load or the home. Off by default because few cars can; single Powershare entities can still be left out with `exclude_entities`. With the single-car package (`packages/client.yml`), set the substitution `tesla_powershare: "true"` instead |
 | `connection_interval` | `15ms` | BLE connection interval (7.5 ms - 4 s). Shorter = faster messages and service discovery. Keep it the same for every car |
 | `supervision_timeout` | `6s` | BLE link timeout (100 ms - 32 s, must be more than twice the interval) |
 

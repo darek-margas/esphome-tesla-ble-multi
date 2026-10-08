@@ -42,3 +42,4 @@ tesla_ble_vehicle:
     name: Car Two
     vin: "5YJ30123456789ABD"
     ble_mac_address: "A0:B1:C2:D3:E4:F6"
+    powershare: true

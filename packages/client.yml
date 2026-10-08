@@ -1,5 +1,10 @@
 # Backward-compatible single-vehicle package using the same internal
 # Tesla BLE client as direct multi-car configurations.
+substitutions:
+  # Default; set tesla_powershare: "true" in your own substitutions for a car
+  # that can power a load or the home.
+  tesla_powershare: "false"
+
 tesla_ble_vehicle:
   - id: tesla_ble_vehicle_id
     name: $tesla_vehicle_name
@@ -10,3 +15,4 @@ tesla_ble_vehicle:
     infotainment_poll_interval_awake: $infotainment_poll_interval_awake
     infotainment_poll_interval_active: $infotainment_poll_interval_active
     infotainment_sleep_timeout: $infotainment_sleep_timeout
+    powershare: $tesla_powershare

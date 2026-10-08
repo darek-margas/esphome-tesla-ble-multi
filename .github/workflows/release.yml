@@ -6,6 +6,7 @@ on:
       - multicar-v2
     paths:
       - VERSION
+      - CHANGELOG.md
       - .github/workflows/release.yml
   workflow_dispatch:
 
@@ -35,19 +36,20 @@ jobs:
           test -n "$VERSION"
           TAG="v$VERSION"
 
-          cat > /tmp/release-notes.md <<'EOF'
-          ## Quieter warnings: no Bluetooth noise on hand-over, no lasting warning while a car is away
+          # Notes come from CHANGELOG.md: the "## <version> — <title>" section, with the
+          # title as its heading.
+          notes() {
+            awk -v v="$1" '
+              /^## / { if (found) exit; if ($2 == v) { found = 1; sub(/^## [^ ]+ +(— +)?/, "## "); print; next } }
+              found { print }
+              END { if (!found) exit 1 }
+            ' CHANGELOG.md
+          }
 
-          Firmware change only: rebuild and flash. Same library, [darek-margas/tesla-ble](https://github.com/darek-margas/tesla-ble) `v5.2.0-dm.9`, no YAML change needed.
-
-          ### Changed
-          - **The Bluetooth stack logs errors only at its HCI layer.** With two cars, every planned hand-over logged two warnings from ESP-IDF's Bluetooth stack, `BT_HCI: hci cmd send: disconnect` and `hcif disc complete`. They were normal disconnects, but they made real problems harder to spot. The component now sets `CONFIG_BT_LOG_HCI_TRACE_LEVEL_ERROR`, so real Bluetooth errors still show. If you added this option to your own YAML, you can remove it.
-
-          ### Fixed
-          - **The device no longer stays in warning status while a car is away.** A car that drove off during its BLE turn set the warning *BLE connection lost*, and only its next connection cleared it, so the device showed a warning for as long as the car was gone. The warning is now cleared when the car is marked not present (after `presence_timeout`, default 5 minutes). The log still shows the drop itself as a warning.
-
-          Library: [darek-margas/tesla-ble](https://github.com/darek-margas/tesla-ble) `v5.2.0-dm.9` ([release notes](https://github.com/darek-margas/tesla-ble/releases/tag/v5.2.0-dm.9)).
-          EOF
+          notes "$VERSION" > /tmp/release-notes.md || {
+            echo "::error::CHANGELOG.md has no '## $VERSION' section"
+            exit 1
+          }
 
           if gh release view "$TAG" >/dev/null 2>&1; then
             gh release edit "$TAG" \
@@ -59,3 +61,11 @@ jobs:
               --title "ESPHome Tesla BLE multi-car $TAG" \
               --notes-file /tmp/release-notes.md
           fi
+
+          # Keep the notes of earlier releases listed in the changelog in step with it.
+          for v in $(grep -oP '^## \K[0-9][^ ]*' CHANGELOG.md); do
+            [ "$v" = "$VERSION" ] && continue
+            gh release view "v$v" >/dev/null 2>&1 || continue
+            notes "$v" > /tmp/old-notes.md
+            gh release edit "v$v" --notes-file /tmp/old-notes.md
+          done
