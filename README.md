@@ -36,6 +36,7 @@ A fork of [yoziru/esphome-tesla-ble](https://github.com/yoziru/esphome-tesla-ble
 - Media player: play / pause, volume and track skip, with now playing (title, artist, source)
 - Honk / flash, sentry mode
 - Vehicle, charging, climate, drive, closure and TPMS sensors
+- Powershare (the car powering a load or the home): status, type, power, time left and battery limit, read over BLE as the Tesla app shows them
 - `Present` binary sensor per car, based on the car's BLE adverts
 - Commands for a sleeping car wake it first; background polling never wakes a car
 - Commands for a car that is not connected right now are queued and sent on its turn
@@ -494,6 +495,15 @@ Controls: locks, covers, charging, climate (preset and Bioweapon fan mode are re
 <img src="docs/ha-car-controls.png" width="700" alt="Car controls">
 
 Sensors and diagnostics. A sensor that stays *Unknown* means that car does not send that value over BLE (for example Estimated Range), or it does not apply right now (Time to Full when not charging):
+
+**Powershare** (the car powering a load or the home). A car that supports it reports the session in its charge state over BLE, as the Tesla app shows it; other cars leave these *Unknown*:
+
+- **Powershare** (running), **Powershare Status** (*Inactive / Initializing / Handshaking / Active / Reconnecting / Stopped*), **Powershare Type** (*None / Load / Home*) and **Powershare Stop Reason** (*None / SOC Too Low / Retry / Fault / User / Reconnecting / Authentication*).
+- **Powershare Power** (kW going out now), **Powershare Time Left** (hours until it stops) and **Powershare Battery Limit** (the battery % at which it stops).
+- The battery limit is read-only: the car's BLE protocol has no command to set it (set it in the Tesla app; the charge limit is a different setting).
+- The car reports no energy total for Powershare. For the energy dashboard, add a [Riemann sum integral](https://www.home-assistant.io/integrations/integration/) helper on **Powershare Power** (method *Left*, no metric prefix: the source is already in kW, so the result is kWh).
+- While powersharing, **Charger Power** reads 0 and **Energy Added** is not updated (it is a charging counter; a falling value would look like a meter reset in the statistics).
+- Each charge poll during a session also logs the raw fields at INFO (`Powershare: ... | charger_power=... energy_added=...`).
 
 <table>
 <tr>
