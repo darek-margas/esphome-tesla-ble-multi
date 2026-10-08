@@ -504,7 +504,7 @@ Sensors and diagnostics. A sensor that stays *Unknown* means that car does not s
 - The battery limit is read-only: the car's BLE protocol has no command to set it (set it in the Tesla app; the charge limit is a different setting).
 - The car reports no energy total for Powershare. For the energy dashboard, add a [Riemann sum integral](https://www.home-assistant.io/integrations/integration/) helper on **Powershare Power** (method *Left*, no metric prefix: the source is already in kW, so the result is kWh).
 - While powersharing, **Charger Power** reads 0 and **Energy Added** is not updated (it is a charging counter; a falling value would look like a meter reset in the statistics).
-- Each charge poll during a session also logs the raw fields at INFO (`Powershare: ... | charger_power=... energy_added=...`).
+- With the log level at DEBUG, each charge poll logs the raw fields (`Powershare: ... | charger_power=... energy_added=...`).
 
 <table>
 <tr>

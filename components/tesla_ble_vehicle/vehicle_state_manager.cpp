@@ -248,7 +248,7 @@ void VehicleStateManager::update_user_presence(VCSEC_UserPresence_E presence) {
 
 // Powershare (the car powering a load or the home): the raw ChargeState fields next to
 // charger power and energy added, to see how the charging sensors behave meanwhile.
-// INFO while something is going on (or charger power is negative), DEBUG otherwise.
+// DEBUG, and only for a car that sends any Powershare field.
 static void log_powershare(const CarServer_ChargeState& cs) {
     const int status = cs.which_optional_powershare_status
         ? static_cast<int>(cs.optional_powershare_status.powershare_status) : -1;
@@ -263,9 +263,7 @@ static void log_powershare(const CarServer_ChargeState& cs) {
         status >= 0 || type >= 0 || cs.which_optional_powershare_stop_reason ||
         !std::isnan(load) || cs.which_optional_powershare_vehicle_energy_left_hr ||
         cs.which_optional_powershare_soc_limit;
-    const bool active = status > 0 || type > 0 || (!std::isnan(load) && load != 0.0f) ||
-        charger_power < 0;
-    if (!present && !active) return;
+    if (!present) return;
     char line[256];
     snprintf(line, sizeof(line),
         "Powershare: allowed=%d enabled=%d request=%d type=%d status=%d stop_reason=%d "
@@ -288,11 +286,7 @@ static void log_powershare(const CarServer_ChargeState& cs) {
         charger_power,
         cs.which_optional_charge_energy_added
             ? cs.optional_charge_energy_added.charge_energy_added : NAN);
-    if (active) {
-        ESP_LOGI(STATE_MANAGER_TAG, "%s", line);
-    } else {
-        ESP_LOGD(STATE_MANAGER_TAG, "%s", line);
-    }
+    ESP_LOGD(STATE_MANAGER_TAG, "%s", line);
 }
 
 void VehicleStateManager::update_charge_state(const CarServer_ChargeState& charge_state) {

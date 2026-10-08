@@ -5,7 +5,7 @@ the version in `VERSION`, and refreshes the notes of any other release listed he
 Earlier releases (up to 2026.10.8.2) have their notes on the
 [releases page](https://github.com/darek-margas/esphome-tesla-ble-multi/releases).
 
-## 2026.10.9.6 — Listener component removed
+## 2026.10.9.6 — Listener component removed, Powershare log at DEBUG
 
 **Breaking for configs that still use the listener:** remove `tesla_ble_listener` from
 `external_components` (and any `tesla_ble_listener:` block), then rebuild. Nothing else
@@ -17,6 +17,10 @@ changes. Same library, [darek-margas/tesla-ble](https://github.com/darek-margas/
   copying into YAML. The vehicle component finds the car from its VIN by itself and saves
   the MAC (*Find Car*, *Discovery*, *BLE MAC*), so the listener has had no use since
   2026.10.8. Also removed: `packages/listener.yml`, `listener-test.yml` and its CI build.
+
+### Changed
+- The `Powershare: …` log line is logged at DEBUG only (it was INFO during a session):
+  the Powershare entities now show the same values.
 
 ### Unchanged
 - **`ble_mac_address` keeps working**, set in YAML or read from your secrets (the board
