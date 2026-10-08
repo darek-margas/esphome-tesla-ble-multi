@@ -5,6 +5,42 @@ the version in `VERSION`, and refreshes the notes of any other release listed he
 Earlier releases (up to 2026.10.8.2) have their notes on the
 [releases page](https://github.com/darek-margas/esphome-tesla-ble-multi/releases).
 
+## 2026.10.9.7 — Single-car package: VIN only, no BLE MAC from secrets
+
+No firmware change for configs that define the cars themselves (the multi-car layout).
+**Read the upgrade note below if you use the single-car package** (the board configs,
+`packages/client.yml`). Same library,
+[darek-margas/tesla-ble](https://github.com/darek-margas/tesla-ble) `v5.2.0-dm.9`.
+
+### Changed
+- **The single-car package no longer reads `!secret ble_mac_address`.** The car is found
+  from its VIN and its MAC is saved on the device, as in the multi-car layout. This
+  reverses the *Unchanged* note of 2026.10.9.6. A `ble_mac_address` left in your
+  `secrets.yaml` does no harm; it is simply not used.
+- **`secrets.yaml.example` and `tesla-ble.example.yml` have no MAC any more.** Their dummy
+  MAC was a trap: a new user who filled in only the VIN built with a fake address, which
+  wins over the VIN search, so the car was never found.
+- **`ble_mac_address:` set on the car in your own YAML keeps working** and still wins over
+  a MAC found by a search.
+
+### Upgrading from 2026.10.7 or older with the single-car package
+Releases up to 2026.10.7 kept the MAC only in your secrets, not on the device. After this
+upgrade the first boot searches for the car by its VIN; if the car is away then, it stays
+*Not found* and gets no BLE turns until the hourly retry or *Find Car*. Do one of:
+- upgrade with the car within Bluetooth range: it is found within 2 minutes and saved;
+- upgrade to any release from 2026.10.8 to 2026.10.9.6 first (it saves the MAC from your
+  secrets on the device), then to this one;
+- or keep pinning it: set `ble_mac_address:` on the car in your own YAML.
+
+From 2026.10.8 on the MAC is already saved on the device, so nothing changes.
+
+### Also
+- New issue form for problem reports (version, board, cars, YAML, log, diagnostic
+  entities).
+
+### Thanks
+The package and example changes and the upgrade note are by @davidcoulson.
+
 ## 2026.10.9.6 — Listener component removed, Powershare log at DEBUG
 
 **Breaking for configs that still use the listener:** remove `tesla_ble_listener` from
@@ -25,7 +61,8 @@ changes. Same library, [darek-margas/tesla-ble](https://github.com/darek-margas/
 ### Unchanged
 - **`ble_mac_address` keeps working**, set in YAML or read from your secrets (the board
   configs read `!secret ble_mac_address`). It still wins over a MAC found by a search; leave
-  it out to let the car be found from its VIN.
+  it out to let the car be found from its VIN. *(The board configs stopped reading the
+  secret in 2026.10.9.7; `ble_mac_address:` set on the car in YAML still works.)*
 
 ## 2026.10.9.5 — Powershare option in the examples and the single-car package
 
