@@ -25,7 +25,7 @@ external_components:
       url: https://github.com/darek-margas/esphome-tesla-ble-multi.git
       ref: multicar-v2          # or a release tag such as v2026.10.6
       path: components
-    components: [tesla_ble_vehicle, tesla_ble_listener]
+    components: [tesla_ble_vehicle]
 
 packages:
   base: !include packages/base.yml

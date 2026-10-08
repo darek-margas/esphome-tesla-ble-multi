@@ -251,7 +251,6 @@ external_components:
       path: components
     components:
       - tesla_ble_vehicle
-      - tesla_ble_listener
     refresh: 60s
 ```
 
@@ -311,7 +310,7 @@ esp32_ble_tracker:
 
 - `continuous: true` is required: scanning is how a car is found to connect, and how presence is detected
 - keep the window short: scanning takes radio time from the connected car. A long active scan window (for example 120 ms of 211 ms) noticeably hurt the links
-- `active: false` is enough; Teslas are found by MAC address. Only the listener component (finding a MAC from a VIN) may need active scanning
+- `active: false` is enough; Teslas are found by MAC address. While it searches for a car's MAC (see [Finding the car](#finding-the-car)), the component switches the scanner to active by itself for 2 minutes
 
 Each `tesla_ble_vehicle` instance creates its own internal ESPHome BLE client, so the log shows separate clients:
 
@@ -410,9 +409,9 @@ There is nothing to look up: the VIN is enough. A Tesla's Bluetooth advert carri
 
 Only if you want to set `ble_mac_address` anyway: on Android a BLE scanner such as nRF Connect shows the Tesla advert (`S…C`) with its MAC. iOS does not show BLE MAC addresses to scanner apps.
 
-### Listener component (legacy)
+### Listener component (removed)
 
-The repo still contains `tesla_ble_listener`, which logs the MAC of a car with a given VIN. The search above does the same job and saves the result, so the listener is no longer needed and will be removed in a later release.
+`tesla_ble_listener`, which only logged the MAC of a car with a given VIN, was removed in 2026.10.9.6: the search above does the same job and saves the result. If your YAML still lists it, delete `tesla_ble_listener` from `external_components` and any `tesla_ble_listener:` block. `ble_mac_address` keeps working, in YAML or from your secrets.
 
 
 ## Home Assistant sub-devices

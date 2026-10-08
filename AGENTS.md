@@ -9,17 +9,16 @@ make clean                                # Remove .esphome build dir
 make help                                 # Show all targets
 
 # Architecture
-ESPHome component for Tesla BLE vehicle control using ESP32 boards (M5Stack NanoC6, AtomS3, generic ESP32, ESP32-C5; each built by CI). Two custom components:
+ESPHome component for Tesla BLE vehicle control using ESP32 boards (M5Stack NanoC6, AtomS3, generic ESP32, ESP32-C5; each built by CI). One custom component:
 - tesla_ble_vehicle: Main vehicle control (sensors, switches, charging, climate, locks)
-- tesla_ble_listener: BLE vehicle discovery (find MAC address by VIN)
 
 External Tesla BLE library (yoziru/tesla-ble) provides low-level BLE protocol implementation.
 Session keys stored in ESP NVS flash.
 
 Structure:
 - boards/: Board-specific YAML configs (use Makefile BOARD= param)
-- packages/: Reusable YAML packages (base, client, common, project, listener)
-- components/: C++ + Python codegen (tesla_ble_vehicle, tesla_ble_listener)
+- packages/: Reusable YAML packages (base, client, common, project)
+- components/: C++ + Python codegen (tesla_ble_vehicle)
 - docs/: Screenshots for README
 
 Install methods: your own YAML with the external component (README example), CLI with uv, or Docker. No ESPHome Device Builder adopt/import path.
