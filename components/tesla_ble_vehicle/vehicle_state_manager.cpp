@@ -281,9 +281,10 @@ static void log_powershare(const CarServer_ChargeState& cs) {
             ? static_cast<int>(cs.optional_powershare_stop_reason.powershare_stop_reason) : -1,
         load,
         cs.which_optional_powershare_vehicle_energy_left_hr
-            ? cs.optional_powershare_vehicle_energy_left_hr.powershare_vehicle_energy_left_hr : -1,
+            ? static_cast<int>(cs.optional_powershare_vehicle_energy_left_hr.powershare_vehicle_energy_left_hr)
+            : -1,
         cs.which_optional_powershare_soc_limit
-            ? cs.optional_powershare_soc_limit.powershare_soc_limit : -1,
+            ? static_cast<int>(cs.optional_powershare_soc_limit.powershare_soc_limit) : -1,
         charger_power,
         cs.which_optional_charge_energy_added
             ? cs.optional_charge_energy_added.charge_energy_added : NAN);
