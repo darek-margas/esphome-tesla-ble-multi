@@ -1,4 +1,4 @@
 substitutions:
   board: esp32-c5-devkitc-1
   variant: esp32c5
-  flash_size: 4MB
+  flash_size: 8MB
