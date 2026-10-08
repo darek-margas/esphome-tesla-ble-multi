@@ -232,6 +232,63 @@ inline std::string charge_limit_reason(int reason) {
   }
 }
 
+// Powershare (ChargeState fields 169-171): plain proto enum values, 0 = none/inactive.
+inline std::string powershare_status(int status) {
+  switch (status) {
+    case 0:
+      return "Inactive";
+    case 1:
+      return "Initializing";
+    case 2:
+      return "Active";
+    case 3:
+      return "Stopped";
+    case 4:
+      return "Handshaking";
+    case 5:
+      return "Reconnecting";
+    default:
+      return "Unknown";
+  }
+}
+
+// Sharing power now, including "active, reconnecting soon".
+inline bool powershare_active(int status) { return status == 2 || status == 5; }
+
+inline std::string powershare_type(int type) {
+  switch (type) {
+    case 0:
+      return "None";
+    case 1:
+      return "Load";
+    case 2:
+      return "Home";
+    default:
+      return "Unknown";
+  }
+}
+
+inline std::string powershare_stop_reason(int reason) {
+  switch (reason) {
+    case 0:
+      return "None";
+    case 1:
+      return "SOC Too Low";
+    case 2:
+      return "Retry";
+    case 3:
+      return "Fault";
+    case 4:
+      return "User";
+    case 5:
+      return "Reconnecting";
+    case 6:
+      return "Authentication";
+    default:
+      return "Unknown";
+  }
+}
+
 inline std::string scheduled_charging_mode(int mode) {
   switch (mode) {
     case kScheduledChargingOff:

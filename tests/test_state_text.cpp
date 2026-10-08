@@ -110,6 +110,22 @@ static void test_charge_limit_reason_text() {
   CHECK_STR(charge_limit_reason(99), "Unknown");
 }
 
+static void test_powershare_text() {
+  // Values as Bluey reported them over BLE while powering a load.
+  CHECK_STR(powershare_status(2), "Active");
+  CHECK(powershare_active(2));
+  CHECK(powershare_active(5));
+  CHECK(!powershare_active(0));
+  CHECK(!powershare_active(3));
+  CHECK_STR(powershare_status(0), "Inactive");
+  CHECK_STR(powershare_status(9), "Unknown");
+  CHECK_STR(powershare_type(1), "Load");
+  CHECK_STR(powershare_type(2), "Home");
+  CHECK_STR(powershare_stop_reason(0), "None");
+  CHECK_STR(powershare_stop_reason(1), "SOC Too Low");
+  CHECK_STR(powershare_stop_reason(7), "Unknown");
+}
+
 static void test_scheduled_charging_mode_text() {
   CHECK_STR(scheduled_charging_mode(kScheduledChargingOff), "Off");
   CHECK_STR(scheduled_charging_mode(kScheduledChargingStartAt), "Start At");
@@ -301,6 +317,7 @@ int main() {
   test_shift_state_text();
   test_is_parked();
   test_charge_limit_reason_text();
+  test_powershare_text();
   test_scheduled_charging_mode_text();
   test_seat_heater_level_text();
   test_time_of_day();

@@ -161,6 +161,7 @@ BINARY_SENSORS = [
     {"id": "asleep", "name": "Asleep", "icon": "mdi:sleep"},
     {"id": "user_present", "name": "User Present", "icon": "mdi:account-check", "device_class": "occupancy"},
     {"id": "charger", "name": "Charger", "icon": "mdi:power-plug", "device_class": "plug"},
+    {"id": "powershare", "name": "Powershare", "icon": "mdi:transmission-tower-export", "device_class": "running"},
     {"id": "cabin_overheat_active", "name": "Cabin Overheat Active", "icon": "mdi:snowflake-thermometer", "device_class": "running"},
     # Car is here: its BLE adverts were heard in the last 60 s (or it is connected)
     {"id": "present", "name": "Present", "icon": "mdi:car-connected", "device_class": "presence"},
@@ -236,6 +237,10 @@ SENSORS = [
     {"id": "charging_rate", "name": "Charging Rate", "icon": "mdi:speedometer", "device_class": "speed", "unit": "km/h", "accuracy_decimals": 1, "state_class": "measurement"},
     {"id": "range_added", "name": "Range Added", "icon": "mdi:map-marker-plus", "device_class": "distance", "unit": "km", "accuracy_decimals": 0},
     {"id": "energy_added", "name": "Energy Added", "icon": "mdi:battery-charging", "device_class": "energy", "unit": "kWh", "accuracy_decimals": 1, "state_class": "total_increasing"},
+    # Powershare: the car powering a load or the home (only cars that support it report it)
+    {"id": "powershare_power", "name": "Powershare Power", "icon": "mdi:transmission-tower-export", "device_class": "power", "unit": "kW", "accuracy_decimals": 2, "state_class": "measurement"},
+    {"id": "powershare_hours_left", "name": "Powershare Time Left", "icon": "mdi:timer-sand", "device_class": "duration", "unit": "h", "state_class": "measurement"},
+    {"id": "powershare_soc_limit", "name": "Powershare Battery Limit", "icon": "mdi:battery-arrow-down", "unit": "%", "state_class": "measurement"},
     {"id": "time_to_full", "name": "Time to Full", "icon": "mdi:clock-outline", "device_class": "duration", "unit": "min", "state_class": "measurement"},
     {"id": "time_to_charge_limit", "name": "Time to Charge Limit", "icon": "mdi:clock-outline", "device_class": "duration", "unit": "min", "state_class": "measurement"},
     
@@ -261,6 +266,9 @@ TEXT_SENSORS = [
     {"id": "iec61851_state", "name": "IEC 61851", "icon": "mdi:ev-plug-type2", "disabled_by_default": True},
     {"id": "shift_state", "name": "Shift State", "icon": "mdi:car-shift-pattern", "disabled_by_default": True},
     {"id": "charge_limit_reason", "name": "Charge Limit Reason", "icon": "mdi:ev-plug-tesla"},
+    {"id": "powershare_status", "name": "Powershare Status", "icon": "mdi:transmission-tower-export"},
+    {"id": "powershare_type", "name": "Powershare Type", "icon": "mdi:home-lightning-bolt"},
+    {"id": "powershare_stop_reason", "name": "Powershare Stop Reason", "icon": "mdi:transmission-tower-off"},
     {"id": "scheduled_charging_mode", "name": "Scheduled Charging Mode", "icon": "mdi:calendar-clock"},
     {"id": "steering_wheel_heat_level", "name": "Steering Wheel Heat Level", "icon": "mdi:steering"},
     {"id": "seat_heater_front_left_level", "name": "Seat Heater Front Left Level", "icon": "mdi:car-seat-heater", "disabled_by_default": True},

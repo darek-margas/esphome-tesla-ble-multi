@@ -246,8 +246,8 @@ void VehicleStateManager::update_user_presence(VCSEC_UserPresence_E presence) {
 // CarServer State Updates
 // =============================================================================
 
-// Powershare (the car powering a load or the home) isn't published yet: log what the car
-// sends, to learn whether these ChargeState fields arrive over BLE and what they look like.
+// Powershare (the car powering a load or the home): the raw ChargeState fields next to
+// charger power and energy added, to see how the charging sensors behave meanwhile.
 // INFO while something is going on (or charger power is negative), DEBUG otherwise.
 static void log_powershare(const CarServer_ChargeState& cs) {
     const int status = cs.which_optional_powershare_status
@@ -298,6 +298,40 @@ static void log_powershare(const CarServer_ChargeState& cs) {
 void VehicleStateManager::update_charge_state(const CarServer_ChargeState& charge_state) {
     ESP_LOGD(STATE_MANAGER_TAG, "Updating charge state");
     log_powershare(charge_state);
+
+    // Powershare: published only by cars that report it (seen over BLE on a car powering
+    // a load: status Active, type Load, load in kW, hours left, battery limit).
+    bool powersharing = false;
+    if (charge_state.which_optional_powershare_status) {
+        const int status = static_cast<int>(charge_state.optional_powershare_status.powershare_status);
+        powersharing = state_text::powershare_active(status);
+        publish_binary_sensor("powershare", powersharing);
+        publish_text_sensor("powershare_status", state_text::powershare_status(status));
+    }
+    if (charge_state.which_optional_powershare_type) {
+        publish_text_sensor("powershare_type", state_text::powershare_type(
+            static_cast<int>(charge_state.optional_powershare_type.powershare_type)));
+    }
+    if (charge_state.which_optional_powershare_stop_reason) {
+        publish_text_sensor("powershare_stop_reason", state_text::powershare_stop_reason(
+            static_cast<int>(charge_state.optional_powershare_stop_reason.powershare_stop_reason)));
+    }
+    if (charge_state.which_optional_powershare_instantaneous_load_kw) {
+        const float load = charge_state.optional_powershare_instantaneous_load_kw.powershare_instantaneous_load_kw;
+        if (std::isfinite(load) && load >= 0.0f && load <= 50.0f) {
+            publish_sensor("powershare_power", load);
+        }
+    } else if (charge_state.which_optional_powershare_status && !powersharing) {
+        publish_sensor("powershare_power", 0.0f);  // stopped: the car may omit the load
+    }
+    if (charge_state.which_optional_powershare_vehicle_energy_left_hr) {
+        const int32_t hours = charge_state.optional_powershare_vehicle_energy_left_hr.powershare_vehicle_energy_left_hr;
+        if (hours >= 0) publish_sensor("powershare_hours_left", static_cast<float>(hours));
+    }
+    if (charge_state.which_optional_powershare_soc_limit) {
+        const int32_t limit = charge_state.optional_powershare_soc_limit.powershare_soc_limit;
+        if (limit >= 0 && limit <= 100) publish_sensor("powershare_soc_limit", static_cast<float>(limit));
+    }
     // Track whether charger is disconnected in this message to avoid stale estimate recomputation.
     bool charger_was_disconnected = false;
     
@@ -398,8 +432,9 @@ void VehicleStateManager::update_charge_state(const CarServer_ChargeState& charg
         }
     }
 
-    // Update energy added (kWh)
-    if (charge_state.which_optional_charge_energy_added) {
+    // Update energy added (kWh). Not while powersharing: it is a total_increasing
+    // charging counter, and a value going down would be read as a meter reset.
+    if (charge_state.which_optional_charge_energy_added && !powersharing) {
         const float energy = charge_state.optional_charge_energy_added.charge_energy_added;
         if (energy >= 0.0f && std::isfinite(energy)) {
             publish_sensor("energy_added", energy);
