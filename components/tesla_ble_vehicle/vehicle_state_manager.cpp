@@ -8,6 +8,7 @@
 #include <cmath>
 #include <algorithm>
 #include <cinttypes>
+#include <cstdio>
 
 namespace esphome {
 namespace tesla_ble_vehicle {
@@ -245,8 +246,57 @@ void VehicleStateManager::update_user_presence(VCSEC_UserPresence_E presence) {
 // CarServer State Updates
 // =============================================================================
 
+// Powershare (the car powering a load or the home) isn't published yet: log what the car
+// sends, to learn whether these ChargeState fields arrive over BLE and what they look like.
+// INFO while something is going on (or charger power is negative), DEBUG otherwise.
+static void log_powershare(const CarServer_ChargeState& cs) {
+    const int status = cs.which_optional_powershare_status
+        ? static_cast<int>(cs.optional_powershare_status.powershare_status) : -1;
+    const int type = cs.which_optional_powershare_type
+        ? static_cast<int>(cs.optional_powershare_type.powershare_type) : -1;
+    const float load = cs.which_optional_powershare_instantaneous_load_kw
+        ? cs.optional_powershare_instantaneous_load_kw.powershare_instantaneous_load_kw : NAN;
+    const int charger_power = cs.which_optional_charger_power
+        ? static_cast<int>(cs.optional_charger_power.charger_power) : 0;
+    const bool present = cs.which_optional_powershare_feature_allowed ||
+        cs.which_optional_powershare_feature_enabled || cs.which_optional_powershare_request ||
+        status >= 0 || type >= 0 || cs.which_optional_powershare_stop_reason ||
+        !std::isnan(load) || cs.which_optional_powershare_vehicle_energy_left_hr ||
+        cs.which_optional_powershare_soc_limit;
+    const bool active = status > 0 || type > 0 || (!std::isnan(load) && load != 0.0f) ||
+        charger_power < 0;
+    if (!present && !active) return;
+    char line[256];
+    snprintf(line, sizeof(line),
+        "Powershare: allowed=%d enabled=%d request=%d type=%d status=%d stop_reason=%d "
+        "load_kw=%.2f energy_left_hr=%d soc_limit=%d | charger_power=%d energy_added=%.2f",
+        cs.which_optional_powershare_feature_allowed
+            ? cs.optional_powershare_feature_allowed.powershare_feature_allowed : -1,
+        cs.which_optional_powershare_feature_enabled
+            ? cs.optional_powershare_feature_enabled.powershare_feature_enabled : -1,
+        cs.which_optional_powershare_request
+            ? cs.optional_powershare_request.powershare_request : -1,
+        type, status,
+        cs.which_optional_powershare_stop_reason
+            ? static_cast<int>(cs.optional_powershare_stop_reason.powershare_stop_reason) : -1,
+        load,
+        cs.which_optional_powershare_vehicle_energy_left_hr
+            ? cs.optional_powershare_vehicle_energy_left_hr.powershare_vehicle_energy_left_hr : -1,
+        cs.which_optional_powershare_soc_limit
+            ? cs.optional_powershare_soc_limit.powershare_soc_limit : -1,
+        charger_power,
+        cs.which_optional_charge_energy_added
+            ? cs.optional_charge_energy_added.charge_energy_added : NAN);
+    if (active) {
+        ESP_LOGI(STATE_MANAGER_TAG, "%s", line);
+    } else {
+        ESP_LOGD(STATE_MANAGER_TAG, "%s", line);
+    }
+}
+
 void VehicleStateManager::update_charge_state(const CarServer_ChargeState& charge_state) {
     ESP_LOGD(STATE_MANAGER_TAG, "Updating charge state");
+    log_powershare(charge_state);
     // Track whether charger is disconnected in this message to avoid stale estimate recomputation.
     bool charger_was_disconnected = false;
     
