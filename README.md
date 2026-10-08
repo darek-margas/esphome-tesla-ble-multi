@@ -2,18 +2,33 @@
 
 <a href="#a-car-in-home-assistant"><img src="docs/preview.png" align="right" width="320" alt="A car in Home Assistant: controls, sensors and diagnostics - click for full size"></a>
 
-Control more than one Tesla from one ESP32 over BLE.
+Control your Teslas from Home Assistant over Bluetooth, locally, with one ESP32 near where they park. No cloud, no Tesla account, no subscription.
 
-This is a multi-car fork of [yoziru/esphome-tesla-ble](https://github.com/yoziru/esphome-tesla-ble). Each car gets its own BLE client, key, sessions and Home Assistant sub-device, so one ESP32 serves several cars instead of needing one ESP32 per car.
+A fork of [yoziru/esphome-tesla-ble](https://github.com/yoziru/esphome-tesla-ble), tested with two cars on a classic ESP32 (Shelly Plus 1), ESPHome 2026.9.x.
 
-It runs on ESPHome 2026.9.x with the Tesla BLE library from [our fork](#tesla-ble-library) (`v5.2.0-dm.9`) and is tested with two cars on a classic ESP32 (Shelly Plus 1).
+## What is different from the original
+
+- **Set up with just the VIN.** No BLE scanner app and no MAC address to hunt for. Put the VIN in YAML, flash, and the ESP32 finds the car by itself and remembers it. Then press **Pair BLE Key**, put your key card on the reader and confirm on the car screen. A **Key** sensor shows each step, so you can see when pairing worked. See [Quick start](#quick-start).
+- **Several cars, one ESP32.** Each car gets its own key, sessions and Home Assistant device. The cars take turns on the Bluetooth link, and a command for a car that is not connected right now waits for its turn instead of failing.
+- **Commands that work the first time.** The first command after the car wakes no longer waits 25 s or fails; a command that is repeated because its reply was lost is not carried out twice (trunk, play / pause); the ESP32 no longer crashes after some minutes of running. These are fixes in [our fork of the Tesla BLE library](#tesla-ble-library).
+- **Replies from the car are verified.** Their authentication tag was never checked before; now a corrupted or forged reply is rejected.
+- **More of the car in Home Assistant:** a media player, scheduled departure with preconditioning, guest mode, cabin overheat temperature, low power mode, keep accessory power, and a **Present** sensor per car (home / away from its Bluetooth signal).
+- **Gentle on the battery.** Background polling never wakes a car; only a command you send does (and, by default, one wake after the ESP32 boots to fill the sensors: [`wake_on_boot`](#waking-a-car-after-boot-wake_on_boot)).
+
+## Quick start
+
+1. Use the [two-car example](#example-two-cars) (or one car): give each car a `name` and its `vin`, keep VINs in `secrets.yaml`. No `ble_mac_address`.
+2. Build and flash. Within 2 minutes each car's **Discovery** sensor goes from *Searching* to *Found* and **BLE MAC** shows its address. The car must be within Bluetooth range; if it was away, press **Find Car** when it is back.
+3. Press **Pair BLE Key** for one car, put a key card on the car's card reader and confirm on the screen. **Key** turns to *Paired*. Repeat for the next car. See [Pairing](#pairing).
+4. Test with **Flash Lights**.
 
 ## What works
 
 - Multiple cars from one ESP32, one BLE link at a time (see [How it works](#how-it-works))
+- Car found from its VIN, no MAC needed (see [Finding the car](#finding-the-car))
 - Separate private key and session storage per VIN
 - Home Assistant sub-device per car
-- Pair / regenerate key per car
+- Pair / regenerate key per car, with a Key status sensor
 - Lock / unlock, frunk / trunk / windows, charge port
 - Charging controls and limits, scheduled charging start and scheduled departure (with preconditioning and off-peak charging)
 - Climate (preset and Bioweapon mode read back), cabin overheat protection with its temperature
@@ -29,7 +44,7 @@ The original single-car package layout still works. Multi-car configs define the
 
 ## Example: two cars
 
-Keep VINs and BLE MACs in ESPHome secrets.
+Keep VINs in ESPHome secrets. No BLE MAC is needed: each car is found from its VIN (see [Finding the car](#finding-the-car)). A single car is the same with one entry.
 
 ```yaml
 substitutions:
@@ -70,7 +85,6 @@ tesla_ble_vehicle:
     device_id: car_one_device
 
     vin: !secret tesla_vin_car_one
-    ble_mac_address: !secret ble_mac_address_car_one
 
     role: DRIVER
     charging_amps_max: ${charging_amps_max}
@@ -91,7 +105,6 @@ tesla_ble_vehicle:
     device_id: car_two_device
 
     vin: !secret tesla_vin_car_two
-    ble_mac_address: !secret ble_mac_address_car_two
     wake_on_boot: false           # this car is not woken after an ESP32 reboot
 
     role: DRIVER
@@ -106,13 +119,11 @@ Secrets:
 
 ```yaml
 tesla_vin_car_one: "5YJ30123456789ABC"
-ble_mac_address_car_one: "A0:B1:C2:D3:E4:F5"
 
 tesla_vin_car_two: "5YJ30123456789ABD"
-ble_mac_address_car_two: "A0:B1:C2:D3:E4:F6"
 ```
 
-Do not put real VINs or MACs into a public repo.
+Do not put real VINs into a public repo.
 
 ## Configuration reference
 
@@ -122,7 +133,7 @@ Per car, under `tesla_ble_vehicle:`:
 |---|---|---|
 | `name` | required | Car name, used for entity names and as the `[Name]` prefix in the log |
 | `vin` | required | Vehicle VIN |
-| `ble_mac_address` | - | Car's BLE MAC address. Optional: without it the car is searched for by the advert name derived from its VIN, and the MAC is saved in NVS (see [Finding the BLE MAC](#finding-the-ble-mac)) |
+| `ble_mac_address` | - | Car's BLE MAC address. Optional: without it the car is searched for by the advert name derived from its VIN, and the MAC is saved in NVS (see [Finding the car](#finding-the-car)) |
 | `device_id` | - | Home Assistant sub-device for this car's entities |
 | `role` | `DRIVER` | `DRIVER` (all controls) or `CHARGING_MANAGER` (charging + basic controls) |
 | `charging_amps_max` | `32` | Upper limit of the charging amps control |
@@ -382,9 +393,9 @@ There is deliberately no migration from the old global `storage/private_key` key
 
 If you regenerate a key, that car needs to be paired again.
 
-## Finding the BLE MAC
+## Finding the car
 
-You normally do not need to: leave `ble_mac_address` out and the component searches for the car by its advert name, which is derived from the VIN.
+There is nothing to look up: the VIN is enough. A Tesla's Bluetooth advert carries a name derived from its VIN (`S` + 16 hex characters + `C`), so the component listens for that name, takes the car's BLE MAC from it and saves it on the ESP32. Leave `ble_mac_address` out.
 
 - **Where the MAC comes from**, in this order: `ble_mac_address` in YAML (always wins), the MAC saved in NVS by an earlier search, otherwise none.
 - **A search** runs once at boot when there is no MAC, whenever you press the car's **Find Car** button, and again every `discovery_retry_interval` (default 1 h) while a car without a MAC has not been found. Teslas send their advert name in the scan response, so for the search window (2 minutes, counted from when the scanner is running) the scanner is switched to active, then back to passive.
@@ -392,36 +403,14 @@ You normally do not need to: leave `ble_mac_address` out and the component searc
 - **A car without a MAC** takes no BLE turns, and its commands fail right away (`No BLE MAC - '...' not sent (press Find Car)`) instead of waiting in the queue.
 - **With `ble_mac_address` set** nothing changes, except that the MAC is also saved in NVS (only when it differs), so you can later delete it from YAML and carry on without a search. If this VIN's advert is seen from a different address than the configured one, the log warns once (likely a typo or swapped cars); the YAML MAC is never overridden.
 
+### Looking up the MAC by hand (not needed)
 
-To look it up anyway:
+Only if you want to set `ble_mac_address` anyway: on Android a BLE scanner such as nRF Connect shows the Tesla advert (`S…C`) with its MAC. iOS does not show BLE MAC addresses to scanner apps.
 
-Tesla VCSEC advertises continuously. The advertisement name looks roughly like:
+### Listener component (legacy)
 
-```text
-SxxxxxxxxxxxxxxxxC
-```
+The repo still contains `tesla_ble_listener`, which logs the MAC of a car with a given VIN. The search above does the same job and saves the result, so the listener is no longer needed and will be removed in a later release.
 
-### Android
-
-Use a BLE scanner such as nRF Connect and find the Tesla advertisement. Android can show the MAC address.
-
-### iPhone
-
-iOS does not expose BLE MAC addresses to scanner apps.
-
-### Listener component
-
-The repo also contains `tesla_ble_listener`. It can be used temporarily if the VIN is known but the BLE MAC is not.
-
-Example:
-
-```yaml
-tesla_ble_listener:
-  id: tesla_listener
-  vin: !secret tesla_vin
-```
-
-Watch the ESPHome log for the detected Tesla name and MAC, then remove or disable the listener once the real vehicle instance is configured.
 
 ## Home Assistant sub-devices
 
@@ -620,4 +609,4 @@ Original project and most of the Tesla integration work:
 - [yoziru/esphome-tesla-ble](https://github.com/yoziru/esphome-tesla-ble)
 - Tesla BLE protocol/library work used by that project
 
-This fork mainly adds the multi-car plumbing, per-car storage, ESPHome sub-devices, the one-link-at-a-time scheduler, presence detection and the BLE transport changes needed to run more than one vehicle from the same ESP32.
+This fork mainly adds the multi-car plumbing, per-car storage, ESPHome sub-devices, the one-link-at-a-time scheduler, presence detection and the BLE transport changes needed to run more than one vehicle from the same ESP32. Finding a car from its VIN, the Key sensor, `exclude_entities`, the compile-time log level, ESP32-C5 support and the verification of the car's replies are by [@davidcoulson](https://github.com/davidcoulson).
