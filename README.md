@@ -575,6 +575,10 @@ A car that is heard but does not connect logs `Not reachable during its BLE turn
 - If hand-overs are slow, check that `connection_interval` is not set high (the default 15 ms is right) and that `vcsec_poll_interval` is not so low that the cars swap continuously.
 - Commands for a sleeping car take about 10 s longer: wake, 8 s for infotainment, then the command.
 
+### A command succeeds but nothing happens the first time
+
+Seen with the horn, flash lights and release cable: *Last Command* shows *Success*, but the car does nothing; pressed again, it works. The car accepted the command while it was still waking up (it answers before the part that sounds the horn or opens the latch is ready). The Tesla app behaves the same way. Press again. The component does not repeat these commands by itself, so a second honk or trunk command is never sent by accident.
+
 ### Sensors are empty after a reboot
 
 With `wake_on_boot: false` a sleeping car's infotainment sensors stay empty until it wakes. Press *Force data update*, or leave `wake_on_boot` at its default.
