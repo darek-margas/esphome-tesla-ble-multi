@@ -289,6 +289,10 @@ private:
     int link_slot_{LinkScheduler::NONE};
     bool ever_ready_{false};
     bool yielding_link_{false};
+    // Set when this car yields its turn, cleared on the next connection: the
+    // CLOSE / DISCONNECT events of a hand-over are logged at DEBUG, not WARN.
+    // (yielding_link_ itself is cleared already when CLOSE is handled.)
+    bool planned_disconnect_{false};
     bool link_ready_{false};
     bool turn_requested_{false};
     bool ready_this_turn_{false};
