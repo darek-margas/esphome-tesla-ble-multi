@@ -36,28 +36,15 @@ jobs:
           TAG="v$VERSION"
 
           cat > /tmp/release-notes.md <<'EOF'
-          ## Quieter log: car hand-overs and late replies no longer warn
+          ## Quieter warnings: no Bluetooth noise on hand-over, no lasting warning while a car is away
 
-          Firmware change only: rebuild and flash. No YAML change needed, unless your own YAML pins the library:
-
-          ```yaml
-          esp32:
-            framework:
-              components:
-                - name: tesla-ble
-                  source: https://github.com/darek-margas/tesla-ble.git
-                  ref: v5.2.0-dm.9   # roll back: v5.2.0-dm.8
-          ```
+          Firmware change only: rebuild and flash. Same library, [darek-margas/tesla-ble](https://github.com/darek-margas/tesla-ble) `v5.2.0-dm.9`, no YAML change needed.
 
           ### Changed
-          - **A planned BLE hand-over between cars logs at DEBUG.** With two cars, every turn change logged *BLE connection closed* and *BLE disconnected* as warnings, about four lines a minute, so a real drop was hard to spot at a WARN-level logger. A hand-over now shows at DEBUG with *(hand-over)*; an unplanned drop still warns.
-          - **A late reply from the car logs at DEBUG** (library dm.9). A reply to a request that was already resent or given up on is dropped, as before, and the command still reports its own result.
+          - **The Bluetooth stack logs errors only at its HCI layer.** With two cars, every planned hand-over logged two warnings from ESP-IDF's Bluetooth stack, `BT_HCI: hci cmd send: disconnect` and `hcif disc complete`. They were normal disconnects, but they made real problems harder to spot. The component now sets `CONFIG_BT_LOG_HCI_TRACE_LEVEL_ERROR`, so real Bluetooth errors still show. If you added this option to your own YAML, you can remove it.
 
-          ### Library dm.9
-          - Tests also run against Mbed TLS 4 (ESP-IDF 6), and the library's full CI now runs on its `multicar` branch. No change to commands, sessions or stored keys.
-
-          ### Thanks
-          Both log changes and the Mbed TLS 4 tests are by @davidcoulson.
+          ### Fixed
+          - **The device no longer stays in warning status while a car is away.** A car that drove off during its BLE turn set the warning *BLE connection lost*, and only its next connection cleared it, so the device showed a warning for as long as the car was gone. The warning is now cleared when the car is marked not present (after `presence_timeout`, default 5 minutes). The log still shows the drop itself as a warning.
 
           Library: [darek-margas/tesla-ble](https://github.com/darek-margas/tesla-ble) `v5.2.0-dm.9` ([release notes](https://github.com/darek-margas/tesla-ble/releases/tag/v5.2.0-dm.9)).
           EOF
