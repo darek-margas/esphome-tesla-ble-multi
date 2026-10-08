@@ -36,25 +36,42 @@ jobs:
           TAG="v$VERSION"
 
           cat > /tmp/release-notes.md <<'EOF'
-          ## Present no longer flickers while the cars take turns
+          ## Verified car responses, MAC from VIN, crash and wake fixes
 
-          Firmware change: rebuild and flash. Same library, [darek-margas/tesla-ble](https://github.com/darek-margas/tesla-ble) `v5.2.0-dm.3`, no YAML change needed.
+          Library: [darek-margas/tesla-ble](https://github.com/darek-margas/tesla-ble) **`v5.2.0-dm.8`**. If your own YAML pins the library, change it (needs ESP-IDF 5.3 or newer; ESPHome 2026.9 has 5.5):
 
-          ### Changed
-          - **Present** turns to away only after the car was neither connected nor heard for **5 minutes**. It used the same 60 s window as the BLE turn decision, so a car whose adverts the scanner missed for a minute, while the other car held the link, flipped to away and back. Turns still use 60 s, so a car that has left stops getting turns quickly.
-          - New per-car option **`presence_timeout`** (default `5min`, 1 min – 1 h) if you want it shorter or longer:
-            ```yaml
-            tesla_ble_vehicle:
-              - id: car_one
-                presence_timeout: 10min
-            ```
-          - After a reboot, Present waits a minute for the car's first advert before it reports away, so a restart no longer shows away → home.
-          - **BLE Advert RSSI** still goes unknown after 60 s without an advert, as before.
+          ```yaml
+          esp32:
+            framework:
+              components:
+                - name: tesla-ble
+                  source: https://github.com/darek-margas/tesla-ble.git
+                  ref: v5.2.0-dm.8   # roll back: v5.2.0-dm.7
+          ```
 
-          ### Also
-          - CI and `make` builds use ESPHome **2026.9.1**.
+          ### Security
+          - **Responses from the car are now authenticated.** Their AES-GCM tag was never checked: the library handed the received tag to Mbed TLS as an output buffer, which overwrote it instead of comparing. A corrupted or forged response would have been accepted. The tag is checked now, using the counter the car sends in its reply. Crypto moved to the PSA API, which also makes the library build on ESP-IDF 6. Existing pairings keep working, no re-pairing (library dm.8, by @davidcoulson).
 
-          Library: [darek-margas/tesla-ble](https://github.com/darek-margas/tesla-ble) `v5.2.0-dm.3` ([release notes](https://github.com/darek-margas/tesla-ble/releases/tag/v5.2.0-dm.3)).
+          ### Fixed
+          - **Crash (abort) after some minutes of running.** The library allocated memory on every loop just to check for incoming messages. Under BLE and Wi-Fi load an allocation eventually failed and the ESP32 restarted. It now allocates nothing while idle (dm.5).
+          - **Waking a car took 8 s, or failed after 25 s.** A waking car sent a burst of status updates and each one triggered another session request. Now one request is sent and repeated unchanged every second until the car answers, so the first poll after a wake succeeds as soon as the car is ready (dm.4, dm.6).
+          - **A command could run twice.** When the car's reply was lost, the command was sent again as a new message, so a toggle like play/pause or the trunk could run twice. A resend is now the same message, which the car ignores as a duplicate (dm.4).
+          - **Media player stuck on Playing on a parked car.** The car keeps reporting its last streaming app as playing with nothing loaded. That shows as Idle now; radio, which can play without a title, still shows Playing.
+
+          ### New
+          - **No MAC needed in YAML.** Leave out `ble_mac_address` and the car is found by its VIN: a 2-minute search at boot, or when you press the new **Find Car** button, and the MAC is saved on the device. A car that wasn't found is searched again every `discovery_retry_interval` (default 1 h). Diagnostic sensors **Discovery** and **BLE MAC**. With a MAC in YAML nothing changes, and it is also saved, so you can delete it from YAML later.
+          - **Key** sensor per car (diagnostic): *No key / Not verified / Waiting for approval / Paired / Not paired*, so pairing shows its progress in Home Assistant.
+          - **`exclude_entities`**: leave entities you don't use out of the firmware, per car. Only entities nothing else depends on can be left out; the config check lists them.
+          - **Smaller firmware**: library log messages above your ESPHome `logger:` level are no longer compiled in.
+          - **ESP32-C5** is supported and built by CI next to the classic ESP32, S3 and C6. The C5 firmware is about 1.75 MB, just over the app slot of a 4 MB layout: use a board with 8 MB flash (the C5 DevKitC-1 has 8 or 16 MB).
+
+          ### Docs
+          - Troubleshooting: a command that reports *Success* but does nothing the first time (the car was still waking; the Tesla app does the same).
+
+          ### Thanks
+          MAC discovery, the Key sensor, `exclude_entities`, the compile-time log level, ESP32-C5 and the response authentication are by @davidcoulson.
+
+          Library: [darek-margas/tesla-ble](https://github.com/darek-margas/tesla-ble) `v5.2.0-dm.8` ([release notes](https://github.com/darek-margas/tesla-ble/releases/tag/v5.2.0-dm.8)).
           EOF
 
           if gh release view "$TAG" >/dev/null 2>&1; then
