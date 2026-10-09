@@ -284,6 +284,10 @@ private:
     // been found yet, then go back to passive (only if we switched).
     static bool discovery_forced_active_scan_;
     static uint32_t discovery_checked_ms_;
+    // When the scanner was last seen running (0 = not yet), for the watchdog
+    // that restarts a scan which stayed stopped.
+    static uint32_t scan_seen_running_ms_;
+    static void check_scanner_(uint32_t now);
     // Runs the search windows and the scanner mode for all cars.
     static void update_discovery_(uint32_t now);
     int link_slot_{LinkScheduler::NONE};
@@ -378,6 +382,10 @@ private:
     // The window is timed from when the scanner is running (after boot it
     // may take a while), so discovery_until_ms_ is 0 until then.
     uint32_t discovery_until_ms_{0};
+    // Hard end of a search even if the scanner never ran in active mode, so a
+    // search can't stay "Searching" (window plus time for the scanner to start).
+    uint32_t discovery_deadline_ms_{0};
+    static constexpr uint32_t DISCOVERY_START_GRACE_MS = 60000;
     bool mac_mismatch_warned_{false};
     uint32_t discovery_retry_interval_ms_{3600000};
     uint32_t next_discovery_retry_ms_{0};  // 0 = none scheduled

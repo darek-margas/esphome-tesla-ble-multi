@@ -27,6 +27,7 @@ std::vector<TeslaBLEVehicle *> TeslaBLEVehicle::link_vehicles_;
 LinkScheduler TeslaBLEVehicle::link_scheduler_;
 bool TeslaBLEVehicle::discovery_forced_active_scan_ = false;
 uint32_t TeslaBLEVehicle::discovery_checked_ms_ = 0;
+uint32_t TeslaBLEVehicle::scan_seen_running_ms_ = 0;
 
 void tesla_ble_log_callback(TeslaBLE::LogLevel level, const char *tag, int line,
                             const char *format, va_list args) {
@@ -847,6 +848,7 @@ void TeslaBLEVehicle::find_car() {
 void TeslaBLEVehicle::start_discovery_(const char *why) {
   discovery_ = Discovery::DISC_SEARCHING;
   discovery_until_ms_ = 0;  // timed once the scanner runs (update_discovery_)
+  discovery_deadline_ms_ = (millis() + DISCOVERY_WINDOW_MS + DISCOVERY_START_GRACE_MS) | 1;
   ESP_LOGW(TAG, "[%s] Searching for advert %s (%s)", log_name(), advert_name_.c_str(), why);
   publish_discovery_();
 }
@@ -854,6 +856,7 @@ void TeslaBLEVehicle::start_discovery_(const char *why) {
 void TeslaBLEVehicle::finish_discovery_(Discovery result) {
   discovery_ = result;
   discovery_until_ms_ = 0;
+  discovery_deadline_ms_ = 0;
   next_discovery_retry_ms_ = 0;
   if (result == Discovery::DISC_NOT_FOUND) {
     if (!has_ble_address() && discovery_retry_interval_ms_ != 0) {
@@ -874,6 +877,7 @@ void TeslaBLEVehicle::update_discovery_(uint32_t now) {
   discovery_checked_ms_ = now;
   auto *tracker = esp32_ble_tracker::global_esp32_ble_tracker;
   if (tracker == nullptr) return;
+  check_scanner_(now);
 
   bool searching = false;
   for (auto *v : link_vehicles_) {
@@ -885,6 +889,18 @@ void TeslaBLEVehicle::update_discovery_(uint32_t now) {
       }
     }
     if (v->discovery_ != Discovery::DISC_SEARCHING) continue;
+    if (v->discovery_deadline_ms_ != 0 && static_cast<int32_t>(now - v->discovery_deadline_ms_) >= 0 &&
+        v->discovery_until_ms_ == 0) {
+      LogScope log_scope(v);
+      // The scanner never ran in active mode: end the search instead of
+      // staying "Searching". A known MAC is kept.
+      ESP_LOGW(TAG, "[%s] Search ended: the BLE scanner did not run in active mode (scanner state %d)",
+               v->log_name(), static_cast<int>(tracker->get_scanner_state()));
+      v->finish_discovery_(v->has_ble_address() ? (v->mac_from_config_ ? Discovery::DISC_CONFIGURED
+                                                                        : Discovery::DISC_FOUND)
+                                                 : Discovery::DISC_NOT_FOUND);
+      continue;
+    }
     if (v->discovery_until_ms_ == 0) {
       // Start the clock once the scanner is up, in the mode we asked for.
       if (tracker->scan_running() && tracker->get_scan_active())
@@ -915,6 +931,30 @@ void TeslaBLEVehicle::update_discovery_(uint32_t now) {
   tracker->set_scan_active(want_active);
   tracker->stop_scan();
   tracker->set_scan_continuous(true);
+}
+
+void TeslaBLEVehicle::check_scanner_(uint32_t now) {
+  // Every car is found and connected through the shared scanner: if it stays
+  // stopped, no car is heard, all go "not present" and nothing updates. The
+  // tracker restarts a continuous scan itself, but only while no client is
+  // connecting or waiting to connect, and switching the scan mode for a
+  // search was seen to leave it stopped. Restart it after a minute.
+  static constexpr uint32_t SCANNER_STOPPED_MS = 60000;
+  auto *tracker = esp32_ble_tracker::global_esp32_ble_tracker;
+  if (tracker == nullptr) return;
+  if (tracker->scan_running() || scan_seen_running_ms_ == 0) {
+    scan_seen_running_ms_ = now | 1;
+    return;
+  }
+  if (now - scan_seen_running_ms_ < SCANNER_STOPPED_MS) return;
+  scan_seen_running_ms_ = now | 1;  // at most one attempt per minute
+  const auto state = tracker->get_scanner_state();
+  ESP_LOGW(TAG, "BLE scanner stopped for over %u s (state %d) - restarting it",
+           (unsigned) (SCANNER_STOPPED_MS / 1000), static_cast<int>(state));
+  if (state == esp32_ble_tracker::ScannerState::IDLE) {
+    tracker->set_scan_continuous(true);
+    tracker->start_scan();
+  }
 }
 
 void TeslaBLEVehicle::on_advert_name_seen(uint64_t address) {
