@@ -5,19 +5,21 @@ the version in `VERSION`, and refreshes the notes of any other release listed he
 Earlier releases (up to 2026.10.8.2) have their notes on the
 [releases page](https://github.com/darek-margas/esphome-tesla-ble-multi/releases).
 
-## 2026.10.9.8 — Find Car can no longer leave the BLE scanner stopped
+## 2026.10.9.8 — BLE scanner watchdog: cars no longer go unheard for hours
 
 Firmware change: rebuild and flash. Same library,
 [darek-margas/tesla-ble](https://github.com/darek-margas/tesla-ble) `v5.2.0-dm.9`.
 
 ### Fixed
-- **After Find Car, no car was heard any more.** A search switches the shared BLE scanner
-  to active and back by stopping it; ESPHome only restarts the scan while no BLE client is
-  connecting or waiting to connect, and in one case it stayed stopped. With no scanning,
-  every car went "not present", took no BLE turns and stopped updating, and Discovery
-  stayed at *Searching*. Now:
-  - a watchdog restarts a scan that has been stopped for over a minute, and logs
-    `BLE scanner stopped for over 60 s (state …) - restarting it`;
+- **The BLE scanner could stay stopped, so no car was heard for hours.** Seen on a
+  two-car device: about 45 minutes after boot both cars went "not present" while parked
+  in range, took no BLE turns and stopped updating until a reboot. ESPHome restarts its
+  continuous scan only while no BLE client is connecting or waiting to connect, so a
+  client left waiting keeps it stopped; a search (Find Car) stops and restarts the scan
+  too, and then stayed at *Searching*. Now:
+  - a watchdog notices a scan stopped for over a minute, logs
+    `BLE scanner stopped for over 60 s (state …) - restarting it` with each car's BLE
+    client state, releases a client stuck waiting to connect, and restarts the scan;
   - a search always ends: if the scanner never runs in active mode, it ends after the
     2-minute window plus a minute's grace with
     `Search ended: the BLE scanner did not run in active mode`, keeping a known MAC.

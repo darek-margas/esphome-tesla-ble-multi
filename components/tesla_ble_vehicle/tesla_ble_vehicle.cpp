@@ -951,6 +951,18 @@ void TeslaBLEVehicle::check_scanner_(uint32_t now) {
   const auto state = tracker->get_scanner_state();
   ESP_LOGW(TAG, "BLE scanner stopped for over %u s (state %d) - restarting it",
            (unsigned) (SCANNER_STOPPED_MS / 1000), static_cast<int>(state));
+  // The tracker won't restart while a client waits to connect (DISCOVERED):
+  // one left there would keep every car unheard. Name each car's client state
+  // and release a waiting one; it connects again on its next turn.
+  for (auto *v : link_vehicles_) {
+    if (v->ble_client_ == nullptr) continue;
+    const auto client_state = v->ble_client_->state();
+    ESP_LOGW(TAG, "[%s] BLE client state %d", v->log_name(), static_cast<int>(client_state));
+    if (client_state == espbt::ClientState::DISCOVERED) {
+      ESP_LOGW(TAG, "[%s] Releasing a client stuck waiting to connect", v->log_name());
+      v->ble_client_->set_state(espbt::ClientState::IDLE);
+    }
+  }
   if (state == esp32_ble_tracker::ScannerState::IDLE) {
     tracker->set_scan_continuous(true);
     tracker->start_scan();
