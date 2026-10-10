@@ -267,7 +267,7 @@ esp32:
     components:
       - name: tesla-ble
         source: https://github.com/darek-margas/tesla-ble.git
-        ref: v5.2.0-dm.9  # our fork: v5.2.0 + low power, keep accessory power, guest mode, overheat temperature, scheduled departure, media, wake fix, crash fix, log level, verified responses (roll back: v5.2.0-dm.8)
+        ref: v5.2.0-dm.10  # our fork: v5.2.0 + low power, keep accessory power, guest mode, overheat temperature, scheduled departure, media, wake fix, crash fix, log level, verified responses, upstream session/buffer/key fixes (roll back: v5.2.0-dm.9)
 ```
 
 ### Tesla BLE library
@@ -280,7 +280,8 @@ The library is built from [darek-margas/tesla-ble](https://github.com/darek-marg
 
 | `ref` | Contents |
 |---|---|
-| `v5.2.0-dm.9` | current: everything below + a late reply from the car logs at DEBUG, not as a warning; tests also run against Mbed TLS 4 |
+| `v5.2.0-dm.10` | current: everything below + upstream fixes: a stuck session request completes its command once, message buffers sized for the largest message, last request kept per domain, Regenerate key drops old sessions |
+| `v5.2.0-dm.9` | everything below + a late reply from the car logs at DEBUG, not as a warning; tests also run against Mbed TLS 4 |
 | `v5.2.0-dm.8` | everything below + responses from the car are authenticated (their tag was never checked before), crypto on the PSA API (needs ESP-IDF 5.3+) |
 | `v5.2.0-dm.7` | everything below + compile-time log level (library messages above the ESPHome logger level take no flash) and the ESP32-C5 target |
 | `v5.2.0-dm.6` | everything below + an unanswered session request is resent every second (fixes the first command after a wake failing after 25 s, a dm.4 regression) |
@@ -291,7 +292,7 @@ The library is built from [darek-margas/tesla-ble](https://github.com/darek-marg
 | `v5.2.0-dm.1` | guest mode, overheat temperature, low power, keep accessory power |
 | `v5.2.0` | upstream release (the new controls fail to build with it) |
 
-**If your own YAML declares the `tesla-ble` component** (as in the example above), set `source` to the fork and `ref: v5.2.0-dm.9` (dm.3 to dm.8 still build, without the later fixes). With a ref older than dm.3 the build stops with an error at `set_media_state_callback` - that is the check telling you the library is too old. Upstream changes are synced into the fork deliberately, so a new upstream release cannot break this build unannounced.
+**If your own YAML declares the `tesla-ble` component** (as in the example above), set `source` to the fork and `ref: v5.2.0-dm.10` (dm.3 to dm.9 still build, without the later fixes). With a ref older than dm.3 the build stops with an error at `set_media_state_callback` - that is the check telling you the library is too old. Upstream changes are synced into the fork deliberately, so a new upstream release cannot break this build unannounced.
 
 The component enables the ESP-IDF GATT client cache (`CONFIG_BT_GATTC_CACHE_NVS_FLASH`) itself; nothing to add.
 

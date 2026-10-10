@@ -5,6 +5,30 @@ the version in `VERSION`, and refreshes the notes of any other release listed he
 Earlier releases (up to 2026.10.8.2) have their notes on the
 [releases page](https://github.com/darek-margas/esphome-tesla-ble-multi/releases).
 
+## 2026.10.10.2 — Library dm.10: upstream fixes for stuck sessions, buffers and keys
+
+Firmware change: rebuild and flash. Library
+[darek-margas/tesla-ble](https://github.com/darek-margas/tesla-ble) `v5.2.0-dm.10`
+(roll back: `v5.2.0-dm.9`). No re-pairing.
+
+Upstream (yoziru/tesla-ble) has merged our vehicle actions, the crash fix and the
+wake/session fix. The fork takes four of its fixes in return:
+
+### Fixed
+- **A session request the car doesn't answer** now fails its command once, not twice with
+  two different errors. A double failure could make a car look idle while one of its own
+  commands was still running, which ended its BLE turn early. Retries now wait their delay,
+  and the time limit escalates. With two cars a stuck car still hands over at the 60 s turn
+  limit.
+- **A late reply from the car** is checked against the last request to its own part of the
+  car (security or infotainment), not whichever was sent last, so it no longer fails the
+  authenticity check.
+- **Regenerate key** drops the sessions made with the old key, so the next command
+  authenticates with the new one.
+- **Outgoing messages** are built in buffers sized for the largest message the protocol
+  allows. They were 256 bytes, with nothing stopping a longer message from running past
+  them. Today's messages are under 200 bytes.
+
 ## 2026.10.10.1 — Recover a BLE link stuck opening or closing
 
 Firmware change: rebuild and flash. Same library,

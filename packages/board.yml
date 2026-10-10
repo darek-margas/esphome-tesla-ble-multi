@@ -8,4 +8,4 @@ esp32:
     components:
       - name: tesla-ble
         source: https://github.com/darek-margas/tesla-ble.git
-        ref: v5.2.0-dm.9  # our fork: v5.2.0 + low power, keep accessory power, guest mode, overheat temperature, scheduled departure, media, wake fix, crash fix, log level, verified responses (roll back: v5.2.0-dm.8)
+        ref: v5.2.0-dm.10  # our fork: v5.2.0 + low power, keep accessory power, guest mode, overheat temperature, scheduled departure, media, wake fix, crash fix, log level, verified responses, upstream session/buffer/key fixes (roll back: v5.2.0-dm.9)
