@@ -43,6 +43,9 @@ class LinkScheduler {
   // The owner gets this long to become ready (car out of range or asleep in
   // a way that never answers) before the turn moves on.
   static constexpr uint32_t CONNECT_TIMEOUT_MS = 30000;
+  // A yielded link normally closes within seconds (ESPHome forces a link
+  // stuck closing to idle after 10 s). Past this, see stalled_release().
+  static constexpr uint32_t RELEASE_TIMEOUT_MS = 30000;
 
   struct Input {
     bool wants{false};      // has work waiting (poll due, queued command, never connected)
@@ -66,6 +69,20 @@ class LinkScheduler {
 
   int owner() const { return owner_; }
   bool may_connect(int slot) const { return releasing_ == NONE && slot == owner_; }
+
+  // The slot whose link has been closing for RELEASE_TIMEOUT_MS without going
+  // down, or NONE. A disconnect requested while a connection is still opening
+  // only takes effect when the stack reports the open; if that report never
+  // comes, nobody else gets a turn, so the caller must recover the link (and
+  // call release_recovery_started()).
+  int stalled_release(uint32_t now_ms) const {
+    if (releasing_ == NONE || now_ms - release_started_ms_ < RELEASE_TIMEOUT_MS)
+      return NONE;
+    return releasing_;
+  }
+  // Recovery was started: allow it another RELEASE_TIMEOUT_MS before
+  // stalled_release() reports the slot again.
+  void release_recovery_started(uint32_t now_ms) { release_started_ms_ = now_ms; }
 
   // Call regularly. inputs must hold count() entries. Returns the slot that
   // must disconnect now (its turn is over), or NONE.
@@ -111,6 +128,7 @@ class LinkScheduler {
     last_owner_ = owner_;
     owner_ = NONE;
     releasing_ = inputs[released].link_idle ? NONE : released;
+    release_started_ms_ = now_ms;
     return released;
   }
 
@@ -145,6 +163,7 @@ class LinkScheduler {
   int last_owner_{NONE};
   uint32_t turn_start_ms_{0};
   uint32_t ready_since_ms_{0};
+  uint32_t release_started_ms_{0};
 };
 
 }  // namespace tesla_ble_vehicle

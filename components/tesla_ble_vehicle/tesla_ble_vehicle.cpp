@@ -28,6 +28,8 @@ LinkScheduler TeslaBLEVehicle::link_scheduler_;
 bool TeslaBLEVehicle::discovery_forced_active_scan_ = false;
 uint32_t TeslaBLEVehicle::discovery_checked_ms_ = 0;
 uint32_t TeslaBLEVehicle::scan_seen_running_ms_ = 0;
+uint8_t TeslaBLEVehicle::scanner_blocked_checks_ = 0;
+bool TeslaBLEVehicle::ble_restart_pending_ = false;
 
 void tesla_ble_log_callback(TeslaBLE::LogLevel level, const char *tag, int line,
                             const char *format, va_list args) {
@@ -354,6 +356,16 @@ void TeslaBLEVehicle::run_link_scheduler_(uint32_t now) {
   const int released = link_scheduler_.tick(now, inputs);
   if (released != LinkScheduler::NONE)
     link_vehicles_[released]->yield_link_();
+
+  const int stalled = link_scheduler_.stalled_release(now);
+  if (stalled != LinkScheduler::NONE) {
+    auto *v = link_vehicles_[stalled];
+    ESP_LOGW(TAG, "[%s] BLE link did not close within %u s (client state %d)", v->log_name(),
+             (unsigned) (LinkScheduler::RELEASE_TIMEOUT_MS / 1000),
+             v->ble_client_ != nullptr ? static_cast<int>(v->ble_client_->state()) : -1);
+    request_ble_restart_("a BLE link did not close");
+    link_scheduler_.release_recovery_started(now);
+  }
 
   const int owner = link_scheduler_.owner();
   if (owner != LinkScheduler::NONE && owner != previous_owner) {
@@ -942,7 +954,13 @@ void TeslaBLEVehicle::check_scanner_(uint32_t now) {
   static constexpr uint32_t SCANNER_STOPPED_MS = 60000;
   auto *tracker = esp32_ble_tracker::global_esp32_ble_tracker;
   if (tracker == nullptr) return;
+  if (ble_restart_pending_) {
+    finish_ble_restart_();
+    scan_seen_running_ms_ = now | 1;
+    return;
+  }
   if (tracker->scan_running() || scan_seen_running_ms_ == 0) {
+    scanner_blocked_checks_ = 0;
     scan_seen_running_ms_ = now | 1;
     return;
   }
@@ -954,6 +972,7 @@ void TeslaBLEVehicle::check_scanner_(uint32_t now) {
   // The tracker won't restart while a client waits to connect (DISCOVERED):
   // one left there would keep every car unheard. Name each car's client state
   // and release a waiting one; it connects again on its next turn.
+  bool transient = false;
   for (auto *v : link_vehicles_) {
     if (v->ble_client_ == nullptr) continue;
     const auto client_state = v->ble_client_->state();
@@ -961,12 +980,51 @@ void TeslaBLEVehicle::check_scanner_(uint32_t now) {
     if (client_state == espbt::ClientState::DISCOVERED) {
       ESP_LOGW(TAG, "[%s] Releasing a client stuck waiting to connect", v->log_name());
       v->ble_client_->set_state(espbt::ClientState::IDLE);
+    } else if (client_state == espbt::ClientState::CONNECTING ||
+               client_state == espbt::ClientState::DISCONNECTING) {
+      transient = true;
     }
   }
+  // Starting a scan while a connection opens or closes can wedge the
+  // scanner (ESPHome avoids it, esp-idf issue 6688). Wait one more minute
+  // for the stack to finish; still stuck, restart BLE.
+  if (transient) {
+    if (++scanner_blocked_checks_ >= 2) {
+      scanner_blocked_checks_ = 0;
+      request_ble_restart_("a BLE connection never finished");
+    }
+    return;
+  }
+  scanner_blocked_checks_ = 0;
   if (state == esp32_ble_tracker::ScannerState::IDLE) {
     tracker->set_scan_continuous(true);
     tracker->start_scan();
   }
+}
+
+void TeslaBLEVehicle::request_ble_restart_(const char *reason) {
+  auto *ble = esp32_ble::global_ble;
+  if (ble_restart_pending_ || ble == nullptr || !ble->is_active()) return;
+  ESP_LOGW(TAG, "Restarting the BLE stack: %s", reason);
+  ble_restart_pending_ = true;
+  // Torn down by ESP32BLE::loop() within one pass; switched back on by
+  // finish_ble_restart_() on the next watchdog check (a second later).
+  ble->disable();
+}
+
+bool TeslaBLEVehicle::finish_ble_restart_() {
+  auto *ble = esp32_ble::global_ble;
+  if (ble == nullptr) {
+    ble_restart_pending_ = false;
+    return false;
+  }
+  // Only once the teardown has run: enable() during it would cancel it.
+  if (ble->is_active()) return false;
+  ble->enable();
+  ble_restart_pending_ = false;
+  if (auto *tracker = esp32_ble_tracker::global_esp32_ble_tracker) tracker->set_scan_continuous(true);
+  ESP_LOGW(TAG, "BLE stack switched back on");
+  return true;
 }
 
 void TeslaBLEVehicle::on_advert_name_seen(uint64_t address) {

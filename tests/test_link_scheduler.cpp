@@ -119,6 +119,42 @@ static void test_owner_that_never_connects_loses_turn() {
   CHECK(s.tick(30000, two(connecting, wanting())) == 0);
 }
 
+static void test_link_that_never_closes_is_reported_for_recovery() {
+  // Car 0 was still connecting when its turn ended: ESPHome only schedules
+  // the disconnect, and if the stack never reports the open the link never
+  // goes down. Car 1 must not wait forever.
+  LinkScheduler s(2);
+  s.tick(0, two(wanting(), wanting()));
+  In connecting;
+  connecting.link_idle = false;
+  CHECK(s.tick(30000, two(connecting, wanting())) == 0);
+  CHECK(s.stalled_release(30000) == LinkScheduler::NONE);
+  CHECK(s.stalled_release(59999) == LinkScheduler::NONE);
+  CHECK(s.stalled_release(60000) == 0);
+  // Still nobody may connect while the link is up.
+  s.tick(60000, two(connecting, wanting()));
+  CHECK(!s.may_connect(1));
+  // Recovery started: not reported again until another timeout passes.
+  s.release_recovery_started(60000);
+  CHECK(s.stalled_release(89999) == LinkScheduler::NONE);
+  CHECK(s.stalled_release(90000) == 0);
+  // Recovery brought the link down: car 1's turn.
+  s.tick(61000, two(In{}, wanting()));
+  CHECK(s.owner() == 1);
+  CHECK(s.may_connect(1));
+  CHECK(s.stalled_release(200000) == LinkScheduler::NONE);
+}
+
+static void test_normal_release_is_never_reported_stalled() {
+  LinkScheduler s(2);
+  s.tick(0, two(wanting(), wanting()));
+  s.tick(1000, two(ready_quiet(0), wanting()));
+  CHECK(s.tick(5000, two(ready_quiet(0), wanting())) == 0);
+  CHECK(s.stalled_release(5000) == LinkScheduler::NONE);
+  s.tick(6000, two(In{}, wanting()));
+  CHECK(s.stalled_release(100000) == LinkScheduler::NONE);
+}
+
 static void test_unreachable_owner_without_link_hands_over_immediately() {
   LinkScheduler s(2);
   s.tick(0, two(wanting(), wanting()));
@@ -167,6 +203,8 @@ int main() {
   test_busy_owner_keeps_link_up_to_cap();
   test_next_car_waits_for_link_down();
   test_owner_that_never_connects_loses_turn();
+  test_link_that_never_closes_is_reported_for_recovery();
+  test_normal_release_is_never_reported_stalled();
   test_unreachable_owner_without_link_hands_over_immediately();
   test_turns_rotate_round_robin();
   test_empty_scheduler_is_inert();

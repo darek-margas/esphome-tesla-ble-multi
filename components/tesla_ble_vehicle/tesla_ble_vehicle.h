@@ -6,6 +6,7 @@
 #include <functional>
 #include <deque>
 #include <esphome/components/esp32_ble_client/ble_client_base.h>
+#include <esphome/components/esp32_ble/ble.h>
 #include <esphome/components/esp32_ble_tracker/esp32_ble_tracker.h>
 #include <esphome/components/binary_sensor/binary_sensor.h>
 #include <esphome/components/sensor/sensor.h>
@@ -287,7 +288,17 @@ private:
     // When the scanner was last seen running (0 = not yet), for the watchdog
     // that restarts a scan which stayed stopped.
     static uint32_t scan_seen_running_ms_;
+    // Consecutive watchdog checks that found the scan stopped while a client
+    // was connecting or disconnecting (no scan may start then).
+    static uint8_t scanner_blocked_checks_;
     static void check_scanner_(uint32_t now);
+    // Last resort for a BLE link that never finishes opening or closing:
+    // switch the BLE stack off and on. ESPHome then settles every client
+    // itself, and events of the old stack are dropped, so no late connection
+    // event can arrive. Both cars lose their link for a moment.
+    static bool ble_restart_pending_;
+    static void request_ble_restart_(const char *reason);
+    static bool finish_ble_restart_();
     // Runs the search windows and the scanner mode for all cars.
     static void update_discovery_(uint32_t now);
     int link_slot_{LinkScheduler::NONE};
