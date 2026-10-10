@@ -297,6 +297,10 @@ private:
     // itself, and events of the old stack are dropped, so no late connection
     // event can arrive. Both cars lose their link for a moment.
     static bool ble_restart_pending_;
+    // Back-off for restarts that don't help (see request_ble_restart_).
+    static uint32_t ble_restart_window_start_ms_;
+    static uint8_t ble_restarts_in_window_;
+    static uint32_t ble_restart_pause_until_ms_;  // 0 = not paused
     static void request_ble_restart_(const char *reason);
     static bool finish_ble_restart_();
     // Runs the search windows and the scanner mode for all cars.

@@ -30,6 +30,9 @@ uint32_t TeslaBLEVehicle::discovery_checked_ms_ = 0;
 uint32_t TeslaBLEVehicle::scan_seen_running_ms_ = 0;
 uint8_t TeslaBLEVehicle::scanner_blocked_checks_ = 0;
 bool TeslaBLEVehicle::ble_restart_pending_ = false;
+uint32_t TeslaBLEVehicle::ble_restart_window_start_ms_ = 0;
+uint8_t TeslaBLEVehicle::ble_restarts_in_window_ = 0;
+uint32_t TeslaBLEVehicle::ble_restart_pause_until_ms_ = 0;
 
 void tesla_ble_log_callback(TeslaBLE::LogLevel level, const char *tag, int line,
                             const char *format, va_list args) {
@@ -959,6 +962,14 @@ void TeslaBLEVehicle::check_scanner_(uint32_t now) {
     scan_seen_running_ms_ = now | 1;
     return;
   }
+  // Bluetooth switched off on purpose (e.g. a "BLE Radio" switch): no scan is
+  // expected, so nothing to watch or restart.
+  auto *ble = esp32_ble::global_ble;
+  if (ble != nullptr && !ble->is_active()) {
+    scanner_blocked_checks_ = 0;
+    scan_seen_running_ms_ = now | 1;
+    return;
+  }
   if (tracker->scan_running() || scan_seen_running_ms_ == 0) {
     scanner_blocked_checks_ = 0;
     scan_seen_running_ms_ = now | 1;
@@ -1005,6 +1016,30 @@ void TeslaBLEVehicle::check_scanner_(uint32_t now) {
 void TeslaBLEVehicle::request_ble_restart_(const char *reason) {
   auto *ble = esp32_ble::global_ble;
   if (ble_restart_pending_ || ble == nullptr || !ble->is_active()) return;
+  // Back off if restarts don't help (a radio that stays wedged): at most
+  // BLE_RESTARTS_PER_WINDOW in BLE_RESTART_WINDOW_MS, then pause, since each
+  // restart drops both cars' links.
+  static constexpr uint8_t BLE_RESTARTS_PER_WINDOW = 3;
+  static constexpr uint32_t BLE_RESTART_WINDOW_MS = 10 * 60 * 1000;
+  static constexpr uint32_t BLE_RESTART_PAUSE_MS = 30 * 60 * 1000;
+  const uint32_t now = millis();
+  if (ble_restart_pause_until_ms_ != 0) {
+    if (static_cast<int32_t>(now - ble_restart_pause_until_ms_) < 0) return;
+    ble_restart_pause_until_ms_ = 0;
+    ble_restarts_in_window_ = 0;
+  }
+  if (ble_restarts_in_window_ == 0 || now - ble_restart_window_start_ms_ >= BLE_RESTART_WINDOW_MS) {
+    ble_restart_window_start_ms_ = now;
+    ble_restarts_in_window_ = 0;
+  }
+  if (ble_restarts_in_window_ >= BLE_RESTARTS_PER_WINDOW) {
+    ble_restart_pause_until_ms_ = (now + BLE_RESTART_PAUSE_MS) | 1;
+    ESP_LOGW(TAG, "BLE stack restarted %u times in %u min without help - pausing restarts for %u min (%s)",
+             (unsigned) BLE_RESTARTS_PER_WINDOW, (unsigned) (BLE_RESTART_WINDOW_MS / 60000),
+             (unsigned) (BLE_RESTART_PAUSE_MS / 60000), reason);
+    return;
+  }
+  ble_restarts_in_window_++;
   ESP_LOGW(TAG, "Restarting the BLE stack: %s", reason);
   ble_restart_pending_ = true;
   // Torn down by ESP32BLE::loop() within one pass; switched back on by

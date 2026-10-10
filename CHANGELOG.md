@@ -5,6 +5,29 @@ the version in `VERSION`, and refreshes the notes of any other release listed he
 Earlier releases (up to 2026.10.8.2) have their notes on the
 [releases page](https://github.com/darek-margas/esphome-tesla-ble-multi/releases).
 
+## 2026.10.10.1 — Recover a BLE link stuck opening or closing
+
+Firmware change: rebuild and flash. Same library,
+[darek-margas/tesla-ble](https://github.com/darek-margas/tesla-ble) `v5.2.0-dm.9`.
+
+### Fixed
+- **A car's link that never finished opening or closing stopped the hand-over.** A
+  disconnect requested while ESPHome is still opening a connection only takes effect when
+  the open completes; if it never did, the other car never got a turn again. A link that
+  hasn't closed 30 s after its turn ended is now logged
+  (`BLE link did not close within 30 s (client state …)`) and the BLE stack is restarted.
+- **The scanner watchdog no longer starts a scan while a car is connecting or
+  disconnecting**, which ESPHome avoids because it can wedge the scanner. If that state
+  lasts through two watchdog checks (about two minutes), the BLE stack is restarted
+  instead: switched off, and back on once the teardown has finished. Both cars lose their
+  link for a moment.
+- **Bluetooth switched off on purpose is left alone:** with BLE disabled (for example by a
+  "BLE Radio" switch) the watchdog no longer warns that the scanner stopped, tries to start
+  it, or restarts the stack.
+- **Restarts back off:** after 3 BLE stack restarts within 10 minutes, restarts pause for
+  30 minutes (`pausing restarts for 30 min`), so a radio that stays wedged isn't torn down
+  every couple of minutes.
+
 ## 2026.10.9.8 — BLE scanner watchdog: cars no longer go unheard for hours
 
 Firmware change: rebuild and flash. Same library,
