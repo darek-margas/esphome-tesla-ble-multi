@@ -483,7 +483,7 @@ void VehicleStateManager::update_charge_state(const CarServer_ChargeState& charg
         if (max_amps > 0 && max_amps <= 100) {
             publish_sensor("vehicle_max_charge_current", static_cast<float>(max_amps));
             if (max_amps != charging_amps_max_) {
-                ESP_LOGI(STATE_MANAGER_TAG, "Received new max charging amps: %" PRId32 " A", max_amps);
+                ESP_LOGD(STATE_MANAGER_TAG, "Received new max charging amps: %" PRId32 " A", max_amps);
                 update_charging_amps_max(max_amps);
             }
         }
@@ -1176,25 +1176,32 @@ void VehicleStateManager::update_charging_amps_max(int32_t new_max) {
         return;
     }
 
+    // Requests are clamped to this, the car's latest limit (set_charging_amps).
     charging_amps_max_ = new_max;
 
-    if (parent_) {
-        parent_->save_charging_amps_max_(new_max);
-    }
-
-    if (charging_amps_number_) {
+    // The slider only ever grows to the highest limit seen. ESPHome sends number
+    // traits only during API entity discovery, so changing them means dropping
+    // every API client (Home Assistant, log viewers). Some cars report a limit
+    // that moves by an ampere or two (seen 31 <-> 32 A while plugged in), which
+    // used to disconnect Home Assistant on every charge poll; a lower limit is
+    // already enforced by the clamp, so only a higher one needs the slider.
+    // Written as !(max >= new) so an unset (NaN) limit counts as lower.
+    if (charging_amps_number_ && !(charging_amps_number_->traits.get_max_value() >= static_cast<float>(new_max))) {
         charging_amps_number_->traits.set_max_value(static_cast<float>(new_max));
+        if (parent_) {
+            parent_->save_charging_amps_max_(new_max);
+        }
 #ifdef USE_API
         if (api::global_api_server != nullptr) {
-            // ESPHome sends number traits only during API entity discovery.
-            ESP_LOGI(STATE_MANAGER_TAG, "Reconnecting API clients to refresh charging amps limit");
+            ESP_LOGI(STATE_MANAGER_TAG, "Reconnecting API clients to raise the charging amps limit to %" PRId32 " A",
+                     new_max);
             for (const auto &client : api::global_api_server->active_clients()) {
                 client->on_fatal_error();
             }
         }
 #endif
     }
-    ESP_LOGI(STATE_MANAGER_TAG, "Updated max charging amps to %" PRId32 " A", new_max);
+    ESP_LOGD(STATE_MANAGER_TAG, "Max charging amps now %" PRId32 " A", new_max);
 }
 
 // =============================================================================

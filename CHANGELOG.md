@@ -5,6 +5,20 @@ the version in `VERSION`, and refreshes the notes of any other release listed he
 Earlier releases (up to 2026.10.8.2) have their notes on the
 [releases page](https://github.com/darek-margas/esphome-tesla-ble-multi/releases).
 
+## 2026.10.11.1 — Home Assistant no longer disconnects when the car's charging limit moves
+
+Firmware change: rebuild and flash. Same library, `v5.2.0-dm.10`.
+
+### Fixed
+- **Home Assistant (and the log viewer) kept disconnecting** while a car reported a
+  maximum charging current that moved by an ampere or two (seen 31 ↔ 32 A while plugged
+  in). Every change dropped all API connections, so that Home Assistant would pick up the
+  new **Charging Amps** slider limit. Now only a *higher* limit than the slider already
+  has reconnects, so in practice once. A lower limit is still enforced: a request above
+  the car's current maximum is clamped to it, as before. The **Charging Amps** slider
+  therefore keeps the highest limit the car has reported. The per-poll log line is now at
+  DEBUG.
+
 ## 2026.10.10.2 — Library dm.10: upstream fixes for stuck sessions, buffers and keys
 
 Firmware change: rebuild and flash. Library
