@@ -138,7 +138,7 @@ Per car, under `tesla_ble_vehicle:`:
 | `ble_mac_address` | - | Car's BLE MAC address. Optional: without it the car is searched for by the advert name derived from its VIN, and the MAC is saved in NVS (see [Finding the car](#finding-the-car)) |
 | `device_id` | - | Home Assistant sub-device for this car's entities |
 | `role` | `DRIVER` | `DRIVER` (all controls) or `CHARGING_MANAGER` (charging + basic controls) |
-| `charging_amps_max` | `32` | Upper limit of the charging amps control |
+| `charging_amps_max` | `32` | Starting upper limit of the **Charging Amps** slider. It rises by itself to the highest maximum the car reports (saved across reboots), never falls; see [Charging Amps](#a-car-in-home-assistant) |
 | `vcsec_poll_interval` | `10` s | VCSEC status poll. Never wakes the car. With several cars this is also how often the car asks for a BLE turn: use 30-60 s |
 | `infotainment_poll_interval_awake` | `30` s | Infotainment data while awake and idle |
 | `infotainment_poll_interval_active` | `10` s | Infotainment data while charging, in sentry mode or with climate on |
@@ -475,6 +475,7 @@ The Restart and BLE Radio controls above remain on the parent ESPHome device.
 
 Controls: locks, covers, charging, climate (preset and Bioweapon fan mode are read back from the car), scheduled charging start time, sentry mode and buttons:
 
+- **Charging Amps** (number): the charging current to ask the car for. Its value can be set as often as you like, for example by a solar automation; setting it never disconnects Home Assistant. Its range grows to the highest maximum the car has reported and never shrinks. A request above what the car accepts right now is capped to that, and the log says so (`exceeds maximum, clamping`). The live limits are sensors: **Car Max Acceptable** is what the car accepts now (it follows a PWM-controlled charger), **Charger Max** the charger's PWM limit, **Requested Current** what the car asks the charger for, **Charger Current** and **Charger Power** what flows. For solar charging through Home Assistant, set Charging Amps to the smaller of your target and Car Max Acceptable.
 - **Cabin Overheat Protection**: *Off / Fan Only / On 30 °C / On 35 °C / On 40 °C* - the activation temperature only applies to *On* (A/C), as in the Tesla app.
 - **Scheduled Charging** (switch) + **Scheduled Charging Start** (time): start charging at a time.
 - **Scheduled Departure** (switch), **Scheduled Departure Time** (time), **Departure Preconditioning** and **Departure Off-Peak Charging** (*Off / All Week / Weekdays*), **Off-Peak End Time** (time): depart by a time. Setting a time also turns its schedule on; start-at and depart-by are alternatives in the car. All read back from the car.
