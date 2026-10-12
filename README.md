@@ -398,11 +398,13 @@ If you regenerate a key, that car needs to be paired again.
 
 ## Finding the car
 
-There is nothing to look up: the VIN is enough. A Tesla's Bluetooth advert carries a name derived from its VIN (`S` + 16 hex characters + `C`), so the component listens for that name, takes the car's BLE MAC from it and saves it on the ESP32. Leave `ble_mac_address` out.
+There is nothing to look up: the VIN is enough. A Tesla's Bluetooth advert carries a name derived from its VIN, so the component listens for that name, takes the car's BLE MAC from it and saves it on the ESP32. Leave `ble_mac_address` out.
+
+The name is `S` + 16 hex characters + `C` (from a hash of the VIN), or on cars from 2023 on `Tesla ` + the last 6 characters of the VIN (for example `Tesla 317000`). Both are recognised; the search log line names both.
 
 - **Where the MAC comes from**, in this order: `ble_mac_address` in YAML (always wins), the MAC saved in NVS by an earlier search, otherwise none.
 - **A search** runs once at boot when there is no MAC, whenever you press the car's **Find Car** button, and again every `discovery_retry_interval` (default 1 h) while a car without a MAC has not been found. Teslas send their advert name in the scan response, so for the search window (2 minutes, counted from when the scanner is running) the scanner is switched to active, then back to passive.
-- **Diagnostic entities per car:** *Discovery* (`Searching` / `Found` / `Not found` / `Configured` for a YAML MAC) and *BLE MAC*. The log shows `[Car One] Found car: BLE MAC AA:BB:CC:DD:EE:FF (advert S...C)`, and the MAC is saved in NVS. A search that does not see the car ends as `Not found` (check the VIN, or press Find Car with the car nearby); a previously saved MAC is kept.
+- **Diagnostic entities per car:** *Discovery* (`Searching` / `Found` / `Not found` / `Configured` for a YAML MAC) and *BLE MAC*. The log shows `[Car One] Found car: BLE MAC AA:BB:CC:DD:EE:FF (advert S...C or Tesla ......)`, and the MAC is saved in NVS. A search that does not see the car ends as `Not found` (check the VIN, or press Find Car with the car nearby); a previously saved MAC is kept.
 - **A car without a MAC** takes no BLE turns, and its commands fail right away (`No BLE MAC - '...' not sent (press Find Car)`) instead of waiting in the queue.
 - **With `ble_mac_address` set** nothing changes, except that the MAC is also saved in NVS (only when it differs), so you can later delete it from YAML and carry on without a search. If this VIN's advert is seen from a different address than the configured one, the log warns once (likely a typo or swapped cars); the YAML MAC is never overridden.
 

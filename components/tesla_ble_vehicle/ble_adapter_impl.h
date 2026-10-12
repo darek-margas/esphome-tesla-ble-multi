@@ -58,6 +58,11 @@ private:
     CongestionGate congestion_gate_;
     TxMessageTracker tx_tracker_;
 
+    // The last message queued (its fragments are at the queue's tail while
+    // any are left), to skip a resend of it that would wait behind itself.
+    std::vector<uint8_t> last_message_;
+    uint32_t last_message_seq_{0};
+
     // Earliest time the next fragment may be submitted on this link. Only one
     // car is connected at a time, so write state is per link: one fragment in
     // flight (write_in_flight_) and a short gap between fragments.

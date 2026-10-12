@@ -5,6 +5,25 @@ the version in `VERSION`, and refreshes the notes of any other release listed he
 Earlier releases (up to 2026.10.8.2) have their notes on the
 [releases page](https://github.com/darek-margas/esphome-tesla-ble-multi/releases).
 
+## 2026.10.12.1 — Find Car recognises 2023+ cars; bounded BLE send queue
+
+Firmware change: rebuild and flash. Same library, `v5.2.0-dm.10`.
+
+### Fixed
+- **Find Car didn't find cars from 2023 on.** Newer cars advertise as
+  `Tesla <last 6 characters of the VIN>` (for example `Tesla 317000`) instead of
+  `S<16 hex>C`. The VIN search only knew the older name, so such a car was never found
+  without a `ble_mac_address`. Both names are recognised now, and the search log line names
+  both. Only the car's centre beacon is taken (`…C`), not its rear or side beacons, which
+  have their own MACs.
+- **The BLE send queue is bounded.** While a link stalls, the library keeps resending.
+  Those resends used to pile up in RAM until the link dropped: about 40 KB in a stalled
+  60 s turn, on an ESP32 with less than 90 KB free. Now:
+  - a resend that would wait behind an unsent copy of itself is skipped, because the car gets
+    the first copy anyway;
+  - the queue holds at most 256 fragments (about 4.6 KB). A message that doesn't fit is
+    refused whole (`TX queue full … refused`), never sent in part.
+
 ## 2026.10.11.1 — Home Assistant no longer disconnects when the car's charging limit moves
 
 Firmware change: rebuild and flash. Same library, `v5.2.0-dm.10`.

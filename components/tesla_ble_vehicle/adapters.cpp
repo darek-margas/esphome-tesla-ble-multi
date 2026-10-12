@@ -30,6 +30,23 @@ bool BleAdapterImpl::write(const std::vector<uint8_t>& data) {
     ESP_LOGV(ADAPTER_TAG, "[%s] BLE TX: %s", parent_->log_name(),
              TeslaBLE::format_hex(data.data(), data.size()).c_str());
     
+    const size_t needed = (data.size() + BLOCK_LENGTH - 1) / BLOCK_LENGTH;
+    switch (admit_tx_message(data == last_message_, write_queue_.size(), needed)) {
+        case TxAdmission::DUPLICATE:
+            // The copy still in the queue reaches the car; a second one
+            // would only delay what comes after it.
+            ESP_LOGD(ADAPTER_TAG, "[%s] TX resend skipped: identical to msg #%u, still being sent (%u bytes)",
+                     parent_->log_name(), (unsigned) last_message_seq_, (unsigned) data.size());
+            parent_->note_link_activity();
+            return true;
+        case TxAdmission::FULL:
+            ESP_LOGW(ADAPTER_TAG, "[%s] TX queue full (%u fragments waiting) - message of %u bytes refused",
+                     parent_->log_name(), (unsigned) write_queue_.size(), (unsigned) data.size());
+            return false;
+        case TxAdmission::QUEUE:
+            break;
+    }
+
     // Fragment message
     size_t fragments = 0;
     for (size_t i = 0; i < data.size(); i += BLOCK_LENGTH) {
@@ -42,6 +59,8 @@ bool BleAdapterImpl::write(const std::vector<uint8_t>& data) {
 
     parent_->note_link_activity();
     const auto queued = tx_tracker_.on_message_queued(millis(), data.size(), fragments);
+    last_message_ = data;
+    last_message_seq_ = queued.seq;
     if (queued.messages_ahead > 0) {
         // A new message while an earlier one is still being transmitted is
         // usually the library resending a command it thinks timed out.
@@ -195,6 +214,7 @@ void BleAdapterImpl::clear_queues() {
     write_retry_policy_.reset();
     congestion_gate_.reset();
     tx_tracker_.clear();
+    last_message_.clear();
 }
 
 // --- StorageAdapterImpl ---

@@ -121,7 +121,31 @@ static void test_clear_forgets_messages() {
   CHECK(t.on_message_queued(20, 10, 1).seq == 2);
 }
 
+static void test_resend_behind_unsent_copy_is_skipped() {
+  // The library resent while the first copy (11 fragments) is still queued.
+  CHECK(admit_tx_message(true, 11, 11) == TxAdmission::DUPLICATE);
+  CHECK(admit_tx_message(true, 1, 11) == TxAdmission::DUPLICATE);
+  // First copy fully sent: a resend is a real resend.
+  CHECK(admit_tx_message(true, 0, 11) == TxAdmission::QUEUE);
+  // A different message behind an unsent one is queued normally.
+  CHECK(admit_tx_message(false, 11, 11) == TxAdmission::QUEUE);
+}
+
+static void test_queue_is_bounded_by_whole_messages() {
+  CHECK(admit_tx_message(false, 0, MAX_QUEUED_FRAGMENTS) == TxAdmission::QUEUE);
+  CHECK(admit_tx_message(false, MAX_QUEUED_FRAGMENTS - 11, 11) == TxAdmission::QUEUE);
+  // One fragment short of room: refused whole, not split.
+  CHECK(admit_tx_message(false, MAX_QUEUED_FRAGMENTS - 10, 11) == TxAdmission::FULL);
+  CHECK(admit_tx_message(false, MAX_QUEUED_FRAGMENTS, 1) == TxAdmission::FULL);
+  // A single message larger than the whole queue can never fit.
+  CHECK(admit_tx_message(false, 0, MAX_QUEUED_FRAGMENTS + 1) == TxAdmission::FULL);
+  // A duplicate is skipped even when the queue is full.
+  CHECK(admit_tx_message(true, MAX_QUEUED_FRAGMENTS, 11) == TxAdmission::DUPLICATE);
+}
+
 int main() {
+  test_resend_behind_unsent_copy_is_skipped();
+  test_queue_is_bounded_by_whole_messages();
   test_congested_status_means_sent();
   test_congested_link_waits_for_clear_event();
   test_repeated_congestion_keeps_first_timestamp();

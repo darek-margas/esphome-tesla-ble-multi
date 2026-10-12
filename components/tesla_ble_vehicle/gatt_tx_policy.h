@@ -67,6 +67,34 @@ class CongestionGate {
   uint32_t since_ms_{0};
 };
 
+// Whether a new Tesla message may join the link's TX queue.
+//
+// The queue lives in RAM until the link drops. When fragments stop draining
+// (congested or failing link), the library keeps resending: its resends are
+// the identical bytes, so one waiting behind an unsent copy of itself adds
+// nothing - the car gets the first copy anyway. Beyond that the queue is
+// bounded, and a message is refused whole, never split, so a half-queued
+// message can never reach the car.
+enum class TxAdmission {
+  QUEUE,      // queue it
+  DUPLICATE,  // the same bytes are still waiting: report sent, queue nothing
+  FULL,       // no room for all of its fragments: report a failed write
+};
+
+// About 4.6 KB of payload (18-byte fragments), over 20 typical messages.
+static constexpr size_t MAX_QUEUED_FRAGMENTS = 256;
+
+// same_as_last_message: the bytes equal the last message queued on this link.
+// unsent_fragments: fragments still in the queue (the last message's tail is
+// among them while any are left).
+inline TxAdmission admit_tx_message(bool same_as_last_message, size_t unsent_fragments, size_t new_fragments) {
+  if (same_as_last_message && unsent_fragments > 0)
+    return TxAdmission::DUPLICATE;
+  if (new_fragments > MAX_QUEUED_FRAGMENTS || unsent_fragments > MAX_QUEUED_FRAGMENTS - new_fragments)
+    return TxAdmission::FULL;
+  return TxAdmission::QUEUE;
+}
+
 // Tracks how long each Tesla message takes to leave the ESP32, fragment by
 // fragment. The tesla-ble library resends a command when no response arrives
 // within 1 s of handing it to the adapter, so a message that needs longer than

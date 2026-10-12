@@ -24,6 +24,7 @@
 #include <esphome/core/automation.h>
 #include <esphome/core/preferences.h>
 
+#include "advert_name.h"
 #include "ble_adapter_impl.h"
 #include "control_state_policy.h"
 #include "polling_policy.h"
@@ -237,11 +238,12 @@ public:
     // so a search scans actively for DISCOVERY_WINDOW_MS, then goes back to
     // passive. A car without a MAC takes no BLE turns and refuses commands.
     void set_mac_from_config(bool from_config) { mac_from_config_ = from_config; }
+    // "S<16 hex>C" or, on cars from 2023 on, "Tesla <last 6 of VIN>" (advert_name.h).
     bool advert_name_matches(const std::string &name) const {
-      return !advert_name_.empty() && name == advert_name_;
+      return advert_name_matches_vin(name, advert_name_, vin_);
     }
-    // This car's advert name was seen from `address`.
-    void on_advert_name_seen(uint64_t address);
+    // This car's advert `name` was seen from `address`.
+    void on_advert_name_seen(uint64_t address, const std::string &name);
     // Find Car button: search for this car's MAC now.
     void find_car();
     bool discovery_searching() const { return discovery_ == Discovery::DISC_SEARCHING; }
@@ -390,7 +392,8 @@ private:
     // Configuration
     std::string vin_;
     std::string debug_name_;
-    std::string advert_name_;  // "S<16 hex>C", from the VIN
+    std::string advert_name_;       // "S<16 hex>C", from the VIN
+    std::string advert_name_2023_;  // "Tesla <last 6 of VIN>", for log lines
     bool mac_from_config_{false};
     enum class Discovery : uint8_t { DISC_NONE, DISC_SEARCHING, DISC_FOUND, DISC_NOT_FOUND, DISC_CONFIGURED };
     Discovery discovery_{Discovery::DISC_NONE};
@@ -408,7 +411,7 @@ private:
     void start_discovery_(const char *why);
     void finish_discovery_(Discovery result);
     void publish_discovery_();
-    void adopt_address_(uint64_t address);
+    void adopt_address_(uint64_t address, const std::string &name);
     std::string role_;
     
     // Polling intervals

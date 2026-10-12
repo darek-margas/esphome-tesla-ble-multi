@@ -98,6 +98,7 @@ void TeslaBLEVehicle::setup() {
   publish_key_status_();
 
   advert_name_ = TeslaBLE::get_vin_advertisement_name(vin_);
+  advert_name_2023_ = tesla_advert_name_2023(vin_);
   restore_ble_mac_();
 
   link_slot_ = static_cast<int>(link_vehicles_.size());
@@ -864,7 +865,8 @@ void TeslaBLEVehicle::start_discovery_(const char *why) {
   discovery_ = Discovery::DISC_SEARCHING;
   discovery_until_ms_ = 0;  // timed once the scanner runs (update_discovery_)
   discovery_deadline_ms_ = (millis() + DISCOVERY_WINDOW_MS + DISCOVERY_START_GRACE_MS) | 1;
-  ESP_LOGW(TAG, "[%s] Searching for advert %s (%s)", log_name(), advert_name_.c_str(), why);
+  ESP_LOGW(TAG, "[%s] Searching for advert %s or '%s' (%s)", log_name(), advert_name_.c_str(),
+           advert_name_2023_.c_str(), why);
   publish_discovery_();
 }
 
@@ -1062,7 +1064,7 @@ bool TeslaBLEVehicle::finish_ble_restart_() {
   return true;
 }
 
-void TeslaBLEVehicle::on_advert_name_seen(uint64_t address) {
+void TeslaBLEVehicle::on_advert_name_seen(uint64_t address, const std::string &name) {
   if (ble_client_ == nullptr || address == 0) return;
   const uint64_t current = ble_client_->get_address();
   char mac[18];
@@ -1075,7 +1077,7 @@ void TeslaBLEVehicle::on_advert_name_seen(uint64_t address) {
       char configured[18];
       format_ble_mac(current, configured);
       ESP_LOGW(TAG, "[%s] This car's advert %s comes from %s, but ble_mac_address is %s - typo or swapped cars?",
-               log_name(), advert_name_.c_str(), mac, configured);
+               log_name(), name.c_str(), mac, configured);
     }
     if (discovery_ == Discovery::DISC_SEARCHING) finish_discovery_(Discovery::DISC_CONFIGURED);
     return;
@@ -1094,15 +1096,15 @@ void TeslaBLEVehicle::on_advert_name_seen(uint64_t address) {
   // Changing the address under a live or opening link would confuse the
   // client; the next advert (the search is still running) retries.
   if (current != 0 && ble_client_->state() != espbt::ClientState::IDLE) return;
-  adopt_address_(address);
+  adopt_address_(address, name);
 }
 
-void TeslaBLEVehicle::adopt_address_(uint64_t address) {
+void TeslaBLEVehicle::adopt_address_(uint64_t address, const std::string &name) {
   char mac[18];
   format_ble_mac(address, mac);
   const uint64_t current = ble_client_->get_address();
   if (current == 0) {
-    ESP_LOGW(TAG, "[%s] Found car: BLE MAC %s (advert %s)", log_name(), mac, advert_name_.c_str());
+    ESP_LOGW(TAG, "[%s] Found car: BLE MAC %s (advert %s)", log_name(), mac, name.c_str());
   } else {
     char old_mac[18];
     format_ble_mac(current, old_mac);
@@ -2514,7 +2516,7 @@ bool TeslaBLEClient::parse_device(const espbt::ESPBTDevice &device) {
   // its known address the name only matters while searching (to confirm it).
   if (vehicle_ != nullptr && (device.address_uint64() != tesla_address_ || vehicle_->discovery_searching()) &&
       vehicle_->advert_name_matches(device.get_name()))
-    vehicle_->on_advert_name_seen(device.address_uint64());
+    vehicle_->on_advert_name_seen(device.address_uint64(), device.get_name());
   if (vehicle_ != nullptr && tesla_address_ != 0 && device.address_uint64() == tesla_address_)
     vehicle_->note_advert_seen(device.get_rssi());
   if (vehicle_ != nullptr && !vehicle_->link_turn_allows_connect())

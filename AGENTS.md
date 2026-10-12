@@ -45,6 +45,10 @@ Error handling: Check pointers before use. Return bool for success/failure helpe
 - Multi-car: only one Tesla BLE link is connected at a time; cars take turns. Turn logic lives in
   components/tesla_ble_vehicle/link_scheduler.h (dependency-free, tests/test_link_scheduler.cpp);
   TeslaBLEClient::parse_device gates connecting, commands for a disconnected car are queued
+- VIN -> BLE advert name match (old "S<16 hex>C" and 2023+ "Tesla <last 6 of VIN>") lives in
+  components/tesla_ble_vehicle/advert_name.h (dependency-free, tests/test_advert_name.cpp)
+- The per-link BLE TX queue is bounded and skips a resend still queued behind its own copy
+  (admit_tx_message in gatt_tx_policy.h, tests/test_gatt_tx_policy.cpp)
 - Sensors defined in __init__.py SENSORS/BINARY_SENSORS/TEXT_SENSORS lists
 - Sensor values published in vehicle_state_manager.cpp update methods
 - Commands use TeslaBLEVehicle::send_command() with Command tracking
