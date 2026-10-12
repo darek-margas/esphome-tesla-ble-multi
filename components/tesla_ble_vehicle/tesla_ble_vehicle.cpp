@@ -343,7 +343,11 @@ LinkScheduler::Input TeslaBLEVehicle::link_input_(uint32_t now) const {
                        static_cast<uint32_t>(now - pairing_started_ms_) < PAIRING_POLL_PAUSE_MS;
   in.busy = user_commands_in_flight_ > 0 || poll_batch_in_progress_ || infotainment_check_pending_ ||
             !pending_commands_.empty() || pairing || (ble_adapter_ && !ble_adapter_->tx_idle()) ||
-            (user_command_seen_ && now - last_user_command_ms_ < USER_COMMAND_HOLD_MS);
+            (user_command_seen_ && now - last_user_command_ms_ < USER_COMMAND_HOLD_MS) ||
+            // A library command still waiting for its reply (a VCSEC poll on a
+            // weak link): ending the turn now would leave it to fail after the
+            // hand-over. LinkScheduler::MAX_TURN_MS still caps the turn.
+            (vehicle_ && vehicle_->pending_command_count() > 0);
   const auto state = ble_client_ != nullptr ? ble_client_->state() : espbt::ClientState::IDLE;
   in.link_idle = state == espbt::ClientState::IDLE || state == espbt::ClientState::INIT;
   in.last_activity_ms = last_link_activity_ms_;

@@ -267,20 +267,21 @@ esp32:
     components:
       - name: tesla-ble
         source: https://github.com/darek-margas/tesla-ble.git
-        ref: v5.2.0-dm.10  # our fork: v5.2.0 + low power, keep accessory power, guest mode, overheat temperature, scheduled departure, media, wake fix, crash fix, log level, verified responses, upstream session/buffer/key fixes (roll back: v5.2.0-dm.9)
+        ref: v2026.10.12  # our library: v5.2.0 + low power, keep accessory power, guest mode, overheat temperature, scheduled departure, media, wake fix, crash fix, log level, verified responses, upstream session/buffer/key fixes, pending command count (roll back: v5.2.0-dm.10)
 ```
 
 ### Tesla BLE library
 
-The library is built from [darek-margas/tesla-ble](https://github.com/darek-margas/tesla-ble), a fork of [yoziru/tesla-ble](https://github.com/yoziru/tesla-ble):
+The library is built from [darek-margas/tesla-ble](https://github.com/darek-margas/tesla-ble), an independent library derived from [yoziru/tesla-ble](https://github.com/yoziru/tesla-ble) v5.2.0. It keeps the v5 API with PSA crypto and takes upstream fixes selectively (upstream moved to a new v6 API):
 
 - branch `main` mirrors upstream (synced with GitHub's *Sync fork*);
 - branch `multicar` (default) = `main` + the commands this component needs that upstream does not have yet: guest mode, cabin overheat protection temperature, scheduled departure, media volume and the media state read (low power mode and keep accessory power come from upstream `main`);
-- tags `v5.2.0-dm.N` are created by the fork's release workflow after its tests pass.
+- releases are tagged by date (`v2026.10.12` on), created by its release workflow after its tests pass; before that they were `v5.2.0-dm.1` to `v5.2.0-dm.10`.
 
 | `ref` | Contents |
 |---|---|
-| `v5.2.0-dm.10` | current: everything below + upstream fixes: a stuck session request completes its command once, message buffers sized for the largest message, last request kept per domain, Regenerate key drops old sessions |
+| `v2026.10.12` | current: everything below + `pending_command_count()`, so a car keeps its BLE turn while a command still waits for its reply; releases now tagged by date |
+| `v5.2.0-dm.10` | everything below + upstream fixes: a stuck session request completes its command once, message buffers sized for the largest message, last request kept per domain, Regenerate key drops old sessions |
 | `v5.2.0-dm.9` | everything below + a late reply from the car logs at DEBUG, not as a warning; tests also run against Mbed TLS 4 |
 | `v5.2.0-dm.8` | everything below + responses from the car are authenticated (their tag was never checked before), crypto on the PSA API (needs ESP-IDF 5.3+) |
 | `v5.2.0-dm.7` | everything below + compile-time log level (library messages above the ESPHome logger level take no flash) and the ESP32-C5 target |
@@ -292,7 +293,7 @@ The library is built from [darek-margas/tesla-ble](https://github.com/darek-marg
 | `v5.2.0-dm.1` | guest mode, overheat temperature, low power, keep accessory power |
 | `v5.2.0` | upstream release (the new controls fail to build with it) |
 
-**If your own YAML declares the `tesla-ble` component** (as in the example above), set `source` to the fork and `ref: v5.2.0-dm.10` (dm.3 to dm.9 still build, without the later fixes). With a ref older than dm.3 the build stops with an error at `set_media_state_callback` - that is the check telling you the library is too old. Upstream changes are synced into the fork deliberately, so a new upstream release cannot break this build unannounced.
+**If your own YAML declares the `tesla-ble` component** (as in the example above), set `source` to the library and `ref: v2026.10.12` (dm.3 to dm.10 still build, without the later fixes; the component itself needs v2026.10.12 since 2026.10.12.2). With a ref older than dm.3 the build stops with an error at `set_media_state_callback` - that is the check telling you the library is too old. Upstream changes are synced into the fork deliberately, so a new upstream release cannot break this build unannounced.
 
 The component enables the ESP-IDF GATT client cache (`CONFIG_BT_GATTC_CACHE_NVS_FLASH`) itself; nothing to add.
 

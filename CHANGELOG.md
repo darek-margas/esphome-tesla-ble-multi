@@ -5,6 +5,27 @@ the version in `VERSION`, and refreshes the notes of any other release listed he
 Earlier releases (up to 2026.10.8.2) have their notes on the
 [releases page](https://github.com/darek-margas/esphome-tesla-ble-multi/releases).
 
+## 2026.10.12.2 — A car keeps its BLE turn until its command is answered
+
+Firmware change: rebuild and flash. Library
+[darek-margas/tesla-ble](https://github.com/darek-margas/tesla-ble) **`v2026.10.12`**
+(roll back: `v5.2.0-dm.10` with component 2026.10.12.1). No re-pairing.
+
+### Fixed
+- **A turn could end while the car's command was still waiting for its reply.** On a weak
+  link, a VCSEC poll could still be waiting for an answer when the turn logic considered
+  the car quiet, and the turn passed to the other car. The poll then failed after the
+  hand-over, with the confusing error `Failed to build BLE write failed command`. A car now
+  keeps its turn while the library still has a command pending, up to the existing 60 s
+  turn limit, so the other car is never held up for longer than before.
+
+### Changed
+- **The library's releases are now tagged by date** (`v2026.10.12`). It is an independent
+  library derived from yoziru/tesla-ble v5.2.0: it keeps the v5 API with PSA crypto, while
+  upstream moved to a new v6 API. The old `v5.2.0-dm.*` tags stay. If you declare the
+  library in your own YAML, set `ref: v2026.10.12`: this component release needs it
+  (`pending_command_count()`), and older refs no longer build.
+
 ## 2026.10.12.1 — Find Car recognises 2023+ cars; bounded BLE send queue
 
 Firmware change: rebuild and flash. Same library, `v5.2.0-dm.10`.
