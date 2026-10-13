@@ -5,6 +5,26 @@ the version in `VERSION`, and refreshes the notes of any other release listed he
 Earlier releases (up to 2026.10.8.2) have their notes on the
 [releases page](https://github.com/darek-margas/esphome-tesla-ble-multi/releases).
 
+## 2026.10.13.1 — Library v2026.10.13: stricter session handling
+
+Firmware change: rebuild and flash. Library
+[darek-margas/tesla-ble](https://github.com/darek-margas/tesla-ble) `v2026.10.13`
+(roll back: `v2026.10.12`). No component code change, and no re-pairing.
+
+### Fixed (in the library)
+- **Stale session answers are ignored.** A session answer arriving more than 4 s after
+  its request carries an out-of-date car clock, which could make later commands fail with
+  TIME_EXPIRED. Such answers are now ignored, and a session request still unanswered after
+  4 s is asked again with a new id. On a weak link (Bluey at −90 dBm) this replaces a
+  failure later on with a quick retry.
+- **The car's late answer during a retry wait is no longer lost:**
+  - an expired-session fault makes the command rebuild under a new session, instead of
+    resending its old bytes;
+  - a refusal fails the command at once, instead of after more retries;
+  - a late answer completes the command.
+- **Replies from a dropped link are discarded:** when a link drops (as Bluey's did with
+  `status 133`), nothing received on it is handled after the reconnect.
+
 ## 2026.10.12.2 — A car keeps its BLE turn until its command is answered
 
 Firmware change: rebuild and flash. Library
