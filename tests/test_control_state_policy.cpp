@@ -10,20 +10,27 @@ static void test_failed_commands_do_not_change_control_state() {
                              ControlStateCommand::SET_AMPS,
                              ControlStateCommand::SET_LIMIT,
                              ControlStateCommand::SET_STEERING_WHEEL_HEAT,
-                             ControlStateCommand::SET_SENTRY_MODE}) {
+                             ControlStateCommand::SET_SENTRY_MODE,
+                             ControlStateCommand::SET_CLIMATE}) {
     const auto decision = control_state_decision(command, false);
     CHECK(!decision.publish_requested_state);
     CHECK(decision.refresh == ControlStateRefresh::NONE);
   }
 }
 
-static void test_failed_number_commands_republish_the_last_confirmed_state() {
+static void test_failed_commands_shown_at_once_republish_the_last_confirmed_state() {
   CHECK(!control_state_decision(ControlStateCommand::CHARGING_STATE, false)
-             .republish_confirmed_number_state);
+             .republish_confirmed_state);
   CHECK(control_state_decision(ControlStateCommand::SET_AMPS, false)
-            .republish_confirmed_number_state);
+            .republish_confirmed_state);
   CHECK(control_state_decision(ControlStateCommand::SET_LIMIT, false)
-            .republish_confirmed_number_state);
+            .republish_confirmed_state);
+  // The climate entity shows the requested mode / preset at once (ESPHome does not
+  // apply the call itself), so a failed command must put the confirmed one back.
+  CHECK(control_state_decision(ControlStateCommand::SET_CLIMATE, false)
+            .republish_confirmed_state);
+  CHECK(!control_state_decision(ControlStateCommand::SET_SENTRY_MODE, false)
+             .republish_confirmed_state);
 }
 
 static void test_successful_commands_publish_and_refresh_authoritative_state() {
@@ -36,19 +43,20 @@ static void test_successful_commands_publish_and_refresh_authoritative_state() {
       {ControlStateCommand::SET_LIMIT, ControlStateRefresh::CHARGE_STATE},
       {ControlStateCommand::SET_STEERING_WHEEL_HEAT, ControlStateRefresh::CLIMATE_STATE},
       {ControlStateCommand::SET_SENTRY_MODE, ControlStateRefresh::CLOSURES_STATE},
+      {ControlStateCommand::SET_CLIMATE, ControlStateRefresh::CLIMATE_STATE},
   };
 
   for (const auto &test : cases) {
     const auto decision = control_state_decision(test.command, true);
     CHECK(decision.publish_requested_state);
-    CHECK(!decision.republish_confirmed_number_state);
+    CHECK(!decision.republish_confirmed_state);
     CHECK(decision.refresh == test.refresh);
   }
 }
 
 int main() {
   test_failed_commands_do_not_change_control_state();
-  test_failed_number_commands_republish_the_last_confirmed_state();
+  test_failed_commands_shown_at_once_republish_the_last_confirmed_state();
   test_successful_commands_publish_and_refresh_authoritative_state();
 
   return test_summary();

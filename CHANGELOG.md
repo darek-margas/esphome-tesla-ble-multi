@@ -5,6 +5,19 @@ the version in `VERSION`, and refreshes the notes of any other release listed he
 Earlier releases (up to 2026.10.8.2) have their notes on the
 [releases page](https://github.com/darek-margas/esphome-tesla-ble-multi/releases).
 
+## 2026.10.13.4 — A failed climate command shows the car's state again
+
+Firmware change: rebuild and flash. Same library, `v2026.10.14`.
+
+### Fixed
+- **A climate change that failed kept showing as done.** Since 2026.10.13.2 the climate
+  entity shows the requested mode, preset or fan mode at once. If the command then failed
+  (car out of reach, refused), that request stayed visible until the next successful climate
+  poll. That could take a long time while the car was away. Now a failed climate command
+  (on/off, temperature, preset, fan mode) puts back what the car last reported, as the
+  **Charging Amps** and **Charging Limit** sliders already do. A successful one triggers a
+  prompt climate read-back. Before the car has reported anything, nothing changes.
+
 ## 2026.10.13.3 — Library v2026.10.14: late session answers can't fail the new request
 
 Firmware change: rebuild and flash. Library

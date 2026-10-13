@@ -2,6 +2,7 @@
 
 #include <memory>
 #include <map>
+#include <cmath>
 #include <string>
 #include <functional>
 #include <deque>
@@ -563,6 +564,7 @@ private:
     // Command tracking
     void handle_command_result(const std::string &name, TeslaBLE::OperationResult result);
     void schedule_state_refresh_(ControlStateRefresh refresh);
+    std::function<void(bool)> climate_result_();
     void settle_lock_(bool charge_port, bool succeeded);
     void send_command_with_tracking(
         UniversalMessage_Domain domain,
@@ -825,6 +827,17 @@ public:
     // nullptr leaves the current value unchanged.
     void update_state(bool is_on, float current_temp, float target_temp,
                       const char *preset = nullptr, const char *fan_mode = nullptr);
+    // A climate command failed: show what the car last reported again instead
+    // of the request control() already published.
+    void republish_confirmed();
+
+protected:
+    // What the car last reported (update_state); empty / NaN until then.
+    bool confirmed_known_{false};
+    climate::ClimateMode confirmed_mode_{climate::CLIMATE_MODE_OFF};
+    float confirmed_target_{NAN};
+    std::string confirmed_preset_;
+    std::string confirmed_fan_mode_;
 };
 
 // =============================================================================

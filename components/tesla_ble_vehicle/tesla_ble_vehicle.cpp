@@ -1771,7 +1771,7 @@ int TeslaBLEVehicle::set_charging_amps(int amps) {
       [this, clamped](bool succeeded) {
         const auto decision = control_state_decision(ControlStateCommand::SET_AMPS, succeeded);
         if (decision.publish_requested_state && state_manager_) state_manager_->update_charging_amps(static_cast<float>(clamped));
-        if (decision.republish_confirmed_number_state && state_manager_) state_manager_->republish_charging_amps();
+        if (decision.republish_confirmed_state && state_manager_) state_manager_->republish_charging_amps();
         schedule_state_refresh_(decision.refresh);
       });
   return clamped;
@@ -1794,7 +1794,7 @@ int TeslaBLEVehicle::set_charging_limit(int limit) {
       [this, limit](bool succeeded) {
         const auto decision = control_state_decision(ControlStateCommand::SET_LIMIT, succeeded);
         if (decision.publish_requested_state && state_manager_) state_manager_->update_charging_limit(static_cast<float>(limit));
-        if (decision.republish_confirmed_number_state && state_manager_) state_manager_->republish_charging_limit();
+        if (decision.republish_confirmed_state && state_manager_) state_manager_->republish_charging_limit();
         schedule_state_refresh_(decision.refresh);
       });
   return 0;
@@ -1942,6 +1942,19 @@ void TeslaBLEVehicle::unlatch_driver_door() {
 // HVAC controls (Infotainment)
 // =============================================================================
 
+// Result of a climate command (the climate entity already shows the request):
+// on failure show what the car last confirmed again, on success read it back.
+std::function<void(bool)> TeslaBLEVehicle::climate_result_() {
+  return [this](bool succeeded) {
+    const auto decision = control_state_decision(ControlStateCommand::SET_CLIMATE, succeeded);
+    if (decision.republish_confirmed_state && state_manager_) {
+      if (auto *climate = static_cast<TeslaClimate *>(state_manager_->get_climate()))
+        climate->republish_confirmed();
+    }
+    schedule_state_refresh_(decision.refresh);
+  };
+}
+
 void TeslaBLEVehicle::set_climate_on(bool enable) {
   ESP_LOGI(TAG, "Climate %s requested", enable ? "ON" : "OFF");
   send_command_with_tracking(
@@ -1950,7 +1963,7 @@ void TeslaBLEVehicle::set_climate_on(bool enable) {
       [enable](TeslaBLE::Client *client, uint8_t *buff, size_t *len) {
         return client->build_car_server_vehicle_action_message(
             buff, len, CarServer_VehicleAction_hvacAutoAction_tag, &enable);
-      });
+      }, TeslaBLE::WakePolicy::WAKE_IF_NEEDED, climate_result_());
 }
 
 void TeslaBLEVehicle::set_climate_temp(float temp) {
@@ -1960,7 +1973,7 @@ void TeslaBLEVehicle::set_climate_temp(float temp) {
       [temp](TeslaBLE::Client *client, uint8_t *buff, size_t *len) {
         return client->build_car_server_vehicle_action_message(
             buff, len, CarServer_VehicleAction_hvacTemperatureAdjustmentAction_tag, &temp);
-      });
+      }, TeslaBLE::WakePolicy::WAKE_IF_NEEDED, climate_result_());
 }
 
 void TeslaBLEVehicle::set_climate_keeper(int mode) {
@@ -1972,7 +1985,7 @@ void TeslaBLEVehicle::set_climate_keeper(int mode) {
       [mode](TeslaBLE::Client *client, uint8_t *buff, size_t *len) {
         return client->build_car_server_vehicle_action_message(
             buff, len, CarServer_VehicleAction_hvacClimateKeeperAction_tag, &mode);
-      });
+      }, TeslaBLE::WakePolicy::WAKE_IF_NEEDED, climate_result_());
 }
 
 void TeslaBLEVehicle::set_bioweapon_mode(bool enable) {
@@ -1983,7 +1996,7 @@ void TeslaBLEVehicle::set_bioweapon_mode(bool enable) {
       [enable](TeslaBLE::Client *client, uint8_t *buff, size_t *len) {
         return client->build_car_server_vehicle_action_message(
             buff, len, CarServer_VehicleAction_hvacBioweaponModeAction_tag, &enable);
-      });
+      }, TeslaBLE::WakePolicy::WAKE_IF_NEEDED, climate_result_());
 }
 
 void TeslaBLEVehicle::set_preconditioning_max(bool enable) {
@@ -1995,7 +2008,7 @@ void TeslaBLEVehicle::set_preconditioning_max(bool enable) {
       [enable](TeslaBLE::Client *client, uint8_t *buff, size_t *len) {
         return client->build_car_server_vehicle_action_message(
             buff, len, CarServer_VehicleAction_hvacSetPreconditioningMaxAction_tag, &enable);
-      });
+      }, TeslaBLE::WakePolicy::WAKE_IF_NEEDED, climate_result_());
 }
 
 void TeslaBLEVehicle::set_scheduled_charging(bool enabled) {
@@ -3047,6 +3060,28 @@ void TeslaClimate::update_state(bool is_on, float current_temp,
     this->set_custom_fan_mode_(fan_mode);
   }
 
+  confirmed_known_ = true;
+  confirmed_mode_ = this->mode;
+  confirmed_target_ = this->target_temperature;
+  if (preset != nullptr)
+    confirmed_preset_ = preset;
+  if (fan_mode != nullptr)
+    confirmed_fan_mode_ = fan_mode;
+
+  this->publish_state();
+}
+
+void TeslaClimate::republish_confirmed() {
+  // Nothing reported yet: the entity keeps what it shows; the next poll sets it.
+  if (!confirmed_known_)
+    return;
+  this->mode = confirmed_mode_;
+  if (!std::isnan(confirmed_target_))
+    this->target_temperature = confirmed_target_;
+  if (!confirmed_preset_.empty())
+    this->set_custom_preset_(confirmed_preset_.c_str());
+  if (!confirmed_fan_mode_.empty())
+    this->set_custom_fan_mode_(confirmed_fan_mode_.c_str());
   this->publish_state();
 }
 
