@@ -267,7 +267,7 @@ esp32:
     components:
       - name: tesla-ble
         source: https://github.com/darek-margas/tesla-ble.git
-        ref: v2026.10.13  # our library: v5.2.0 + low power, keep accessory power, guest mode, overheat temperature, scheduled departure, media, wake fix, crash fix, log level, verified responses, upstream session/buffer/key fixes, pending command count, stricter sessions (roll back: v2026.10.12)
+        ref: v2026.10.14  # our library: v5.2.0 + low power, keep accessory power, guest mode, overheat temperature, scheduled departure, media, wake fix, crash fix, log level, verified responses, upstream session/buffer/key fixes, pending command count, stricter sessions (roll back: v2026.10.13)
 ```
 
 ### Tesla BLE library
@@ -276,11 +276,12 @@ The library is built from [darek-margas/tesla-ble](https://github.com/darek-marg
 
 - branch `main` mirrors upstream (synced with GitHub's *Sync fork*);
 - branch `multicar` (default) = `main` + the commands this component needs that upstream does not have yet: guest mode, cabin overheat protection temperature, scheduled departure, media volume and the media state read (low power mode and keep accessory power come from upstream `main`);
-- releases are tagged by date (`v2026.10.12` on), created by its release workflow after its tests pass; before that they were `v5.2.0-dm.1` to `v5.2.0-dm.10`.
+- releases are tagged `vYYYY.M.N` (year, month, a counting release number; `v2026.10.12` on), created by its release workflow after its tests pass; before that they were `v5.2.0-dm.1` to `v5.2.0-dm.10`.
 
 | `ref` | Contents |
 |---|---|
-| `v2026.10.13` | current: everything below + stricter session handling (stale session answers ignored, request renewed), late faults during the retry backoff handled, decoded replies dropped on disconnect |
+| `v2026.10.14` | current: everything below + a late answer to a superseded session request is ignored instead of failing the new one |
+| `v2026.10.13` | everything below + stricter session handling (stale session answers ignored, request renewed), late faults during the retry backoff handled, decoded replies dropped on disconnect |
 | `v2026.10.12` | everything below + `pending_command_count()`, so a car keeps its BLE turn while a command still waits for its reply; releases now tagged by date |
 | `v5.2.0-dm.10` | everything below + upstream fixes: a stuck session request completes its command once, message buffers sized for the largest message, last request kept per domain, Regenerate key drops old sessions |
 | `v5.2.0-dm.9` | everything below + a late reply from the car logs at DEBUG, not as a warning; tests also run against Mbed TLS 4 |
@@ -294,7 +295,7 @@ The library is built from [darek-margas/tesla-ble](https://github.com/darek-marg
 | `v5.2.0-dm.1` | guest mode, overheat temperature, low power, keep accessory power |
 | `v5.2.0` | upstream release (the new controls fail to build with it) |
 
-**If your own YAML declares the `tesla-ble` component** (as in the example above), set `source` to the library and `ref: v2026.10.13` (v2026.10.12 also builds, without the session fixes; the component needs v2026.10.12 or newer since 2026.10.12.2). With a ref older than dm.3 the build stops with an error at `set_media_state_callback` - that is the check telling you the library is too old. Upstream changes are synced into the fork deliberately, so a new upstream release cannot break this build unannounced.
+**If your own YAML declares the `tesla-ble` component** (as in the example above), set `source` to the library and `ref: v2026.10.14` (v2026.10.12 and v2026.10.13 also build, without the later fixes; the component needs v2026.10.12 or newer since 2026.10.12.2). With a ref older than dm.3 the build stops with an error at `set_media_state_callback` - that is the check telling you the library is too old. Upstream changes are synced into the fork deliberately, so a new upstream release cannot break this build unannounced.
 
 The component enables the ESP-IDF GATT client cache (`CONFIG_BT_GATTC_CACHE_NVS_FLASH`) itself; nothing to add.
 

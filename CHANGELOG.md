@@ -5,6 +5,18 @@ the version in `VERSION`, and refreshes the notes of any other release listed he
 Earlier releases (up to 2026.10.8.2) have their notes on the
 [releases page](https://github.com/darek-margas/esphome-tesla-ble-multi/releases).
 
+## 2026.10.13.3 — Library v2026.10.14: late session answers can't fail the new request
+
+Firmware change: rebuild and flash. Library
+[darek-margas/tesla-ble](https://github.com/darek-margas/tesla-ble) `v2026.10.14`
+(roll back: `v2026.10.13`). No component code change, no re-pairing.
+
+### Fixed (in the library)
+- **On a weak link, a session request renewed after 4 s could be failed by the late answer
+  to the request it replaced.** That answer is now recognised by the request id it carries
+  and ignored, and the answer to the current request sets up the session. This came with
+  library v2026.10.13 (component 2026.10.13.1), so 2026.10.13.1 and .2 have it.
+
 ## 2026.10.13.2 — Wake works right after boot; climate changes show at once
 
 Firmware change: rebuild and flash. Same library, `v2026.10.13`. Both fixes follow
