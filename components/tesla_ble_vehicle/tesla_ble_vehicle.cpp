@@ -2965,13 +2965,19 @@ climate::ClimateTraits TeslaClimate::traits() {
 void TeslaClimate::control(const climate::ClimateCall &call) {
   if (!parent_)
     return;
+  // ESPHome does not apply the call to the entity before control(): set what
+  // was asked before publishing, or Home Assistant shows the old mode / preset
+  // until the next poll (as upstream #258). The next climate poll reads all
+  // three back from the car, so a command that failed is corrected then.
 
   if (call.get_mode().has_value()) {
     auto mode = call.get_mode().value();
     if (mode == climate::CLIMATE_MODE_OFF) {
       parent_->set_climate_on(false);
+      this->mode = mode;
     } else if (mode == climate::CLIMATE_MODE_HEAT_COOL) {
       parent_->set_climate_on(true);
+      this->mode = mode;
     }
   }
 
@@ -2993,6 +2999,9 @@ void TeslaClimate::control(const climate::ClimateCall &call) {
       parent_->set_preconditioning_max(false);
       parent_->set_climate_keeper(3);
     }
+    if (custom == "Normal" || custom == "Defrost" || custom == "Keep On" || custom == "Dog Mode" ||
+        custom == "Camp Mode")
+      this->set_custom_preset_(custom);
   }
 
   // Handle custom fan modes
@@ -3003,6 +3012,8 @@ void TeslaClimate::control(const climate::ClimateCall &call) {
     } else if (fan == "Bioweapon Mode") {
       parent_->set_bioweapon_mode(true);
     }
+    if (fan == "Normal" || fan == "Bioweapon Mode")
+      this->set_custom_fan_mode_(fan);
   }
 
   if (call.get_target_temperature().has_value()) {

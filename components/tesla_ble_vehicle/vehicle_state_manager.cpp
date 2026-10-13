@@ -1143,7 +1143,10 @@ void VehicleStateManager::reset_all_states() {
 // =============================================================================
 
 bool VehicleStateManager::is_asleep() const {
-    return asleep_;
+    // Unknown (no VCSEC status since boot yet) counts as asleep: a wake request
+    // must then send the wake action, not a status poll that cannot wake the
+    // car, and polling must not be the thing that wakes it (as upstream #256).
+    return !asleep_known_ || asleep_;
 }
 
 bool VehicleStateManager::is_sentry_mode() const {

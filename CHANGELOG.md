@@ -5,6 +5,26 @@ the version in `VERSION`, and refreshes the notes of any other release listed he
 Earlier releases (up to 2026.10.8.2) have their notes on the
 [releases page](https://github.com/darek-margas/esphome-tesla-ble-multi/releases).
 
+## 2026.10.13.2 — Wake works right after boot; climate changes show at once
+
+Firmware change: rebuild and flash. Same library, `v2026.10.13`. Both fixes follow
+upstream esphome-tesla-ble (#256, #258).
+
+### Fixed
+- **Wake right after a boot or reconnect sent a status poll instead of waking the car.**
+  Until the first VCSEC reply, the sleep state is unknown, and it counted as awake. It now
+  counts as asleep:
+  - **Wake** sends the real wake action;
+  - polling uses "don't wake" until the car has reported its state;
+  - media isn't polled, and media commands aren't sent.
+  An infotainment command in that first moment wakes the car first. That costs the usual
+  8 s if the car was awake after all.
+- **Changing climate mode, preset or fan mode briefly snapped back in Home Assistant.**
+  ESPHome doesn't apply the request to the entity before handing it over, so the old values
+  were published until the next poll. Now what you asked for is shown straight away. The
+  next climate poll reads all three back from the car, so a command that failed is still
+  corrected.
+
 ## 2026.10.13.1 — Library v2026.10.13: stricter session handling
 
 Firmware change: rebuild and flash. Library
