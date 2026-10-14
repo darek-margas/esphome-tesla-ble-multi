@@ -854,6 +854,8 @@ void TeslaBLEVehicle::publish_discovery_() {
     mac_text = mac;
   }
   state_manager_->update_discovery(text, mac_text);
+  // Published with the discovery state, which every boot path publishes.
+  state_manager_->update_car_id(advert_name_);
 }
 
 void TeslaBLEVehicle::find_car() {

@@ -287,6 +287,9 @@ TEXT_SENSORS = [
     # Does the car accept our key: No key / Not verified / Waiting for approval / Paired / Not paired
     {"id": "key_status", "name": "Key", "icon": "mdi:key-chain", "entity_category": "diagnostic"},
     {"id": "ble_mac", "name": "BLE MAC", "icon": "mdi:bluetooth", "entity_category": "diagnostic"},
+    # Stable id of this car across ESP32s (Tesla BLE Fleet): the "S<16 hex>C" advert name
+    # derived from the VIN, which the car broadcasts anyway - not the VIN itself
+    {"id": "car_id", "name": "Car ID", "icon": "mdi:identifier", "entity_category": "diagnostic"},
 ]
 
 BUTTONS = [
