@@ -5,7 +5,26 @@ the version in `VERSION`, and refreshes the notes of any other release listed he
 Earlier releases (up to 2026.10.8.2) have their notes on the
 [releases page](https://github.com/darek-margas/esphome-tesla-ble-multi/releases).
 
+## 2026.10.21.3 — M5Stack NanoC6 fits its flash (for real)
+
+Firmware change for the **M5Stack NanoC6** only. Rebuild and flash; OTA works as usual.
+Other boards are unchanged. Same library, `v2026.10.14`.
+
+### Fixed
+- **The NanoC6 still failed to build with ESPHome 2026.10** (`All app partitions are too
+  small`, 3.5 KB over). The 2026.10.21.2 fix had no effect: ESPHome already builds for size
+  and sets the compiler optimization itself, overriding `sdkconfig_options`. The NanoC6
+  board config now leaves out the **captive portal**, which brings a whole web server. The
+  fallback hotspot still comes up when Wi-Fi fails, and the ESPHome API and OTA answer on
+  it; first-time Wi-Fi setup is over USB (Improv), as before. The partition table stays, so
+  OTA keeps working.
+- If you added `CONFIG_COMPILER_OPTIMIZATION_SIZE` / `_PERF` to your own YAML after
+  2026.10.21.2, remove them: they do nothing. A 4 MB board that overflows can drop
+  `captive_portal:` the same way.
+
 ## 2026.10.21.2 — M5Stack NanoC6 fits its flash again with ESPHome 2026.10
+
+> **Correction:** this release did not fix the build; see 2026.10.21.3.
 
 Firmware change for the **M5Stack NanoC6** only. Rebuild and flash; OTA works as usual.
 Other boards are unchanged.
