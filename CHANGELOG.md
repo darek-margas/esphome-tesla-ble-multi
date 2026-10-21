@@ -5,6 +5,25 @@ the version in `VERSION`, and refreshes the notes of any other release listed he
 Earlier releases (up to 2026.10.8.2) have their notes on the
 [releases page](https://github.com/darek-margas/esphome-tesla-ble-multi/releases).
 
+## 2026.10.21.1 — Builds with ESPHome 2026.10; Car ID sensor
+
+Firmware change: rebuild and flash. Same library, `v2026.10.14`. No re-pairing.
+
+### Fixed
+- **The build failed with ESPHome 2026.10** (ESP-IDF 5.5.6):
+  `'mbedtls_pk_write_key_pem' was not declared in this scope`. ESPHome 2026.10 builds
+  Mbed TLS without PEM support to save flash, but each car's private key is stored as PEM.
+  The component now turns PEM writing and reading back on. Reading matters most: without
+  it the stored key couldn't be loaded at boot, a new key would be created, and every car
+  would need pairing again.
+- CI now builds every board with ESPHome 2026.10.0.
+
+### Added
+- **Car ID** (diagnostic, per car): the `S…C` advert name derived from the VIN, not the
+  VIN itself. The car broadcasts this name anyway. It's the same on every ESP32 that knows
+  the car, for tools that combine several ESP32s, such as
+  [Tesla BLE Fleet](https://github.com/darek-margas/tesla-ble-fleet).
+
 ## 2026.10.13.4 — A failed climate command shows the car's state again
 
 Firmware change: rebuild and flash. Same library, `v2026.10.14`.
