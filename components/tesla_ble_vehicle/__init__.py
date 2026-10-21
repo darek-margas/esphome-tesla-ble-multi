@@ -237,7 +237,9 @@ SENSORS = [
     {"id": "charger_power_estimated", "name": "Charger Power Estimated", "icon": "mdi:flash", "device_class": "power", "unit": "kW", "accuracy_decimals": 2, "state_class": "measurement"},
     {"id": "charging_rate", "name": "Charging Rate", "icon": "mdi:speedometer", "device_class": "speed", "unit": "km/h", "accuracy_decimals": 1, "state_class": "measurement"},
     {"id": "range_added", "name": "Range Added", "icon": "mdi:map-marker-plus", "device_class": "distance", "unit": "km", "accuracy_decimals": 0},
-    {"id": "energy_added", "name": "Energy Added", "icon": "mdi:battery-charging", "device_class": "energy", "unit": "kWh", "accuracy_decimals": 1, "state_class": "total_increasing"},
+    # "total", not "total_increasing": the car itself sometimes lowers it a little
+    # (seen 6.26 -> 6.24 kWh after a charge), and a new session starts again at 0.
+    {"id": "energy_added", "name": "Energy Added", "icon": "mdi:battery-charging", "device_class": "energy", "unit": "kWh", "accuracy_decimals": 1, "state_class": "total"},
     # Powershare: the car powering a load or the home (only cars that support it report it)
     {"id": "powershare_power", "name": "Powershare Power", "icon": "mdi:transmission-tower-export", "device_class": "power", "unit": "kW", "accuracy_decimals": 2, "state_class": "measurement"},
     {"id": "powershare_hours_left", "name": "Powershare Time Left", "icon": "mdi:timer-sand", "device_class": "duration", "unit": "h", "state_class": "measurement"},

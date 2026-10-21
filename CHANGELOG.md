@@ -5,6 +5,17 @@ the version in `VERSION`, and refreshes the notes of any other release listed he
 Earlier releases (up to 2026.10.8.2) have their notes on the
 [releases page](https://github.com/darek-margas/esphome-tesla-ble-multi/releases).
 
+## 2026.10.22.1 — Energy Added may go down
+
+Firmware change: rebuild and flash. Same library, `v2026.10.14`.
+
+### Changed
+- **Energy Added is a `total`, not `total_increasing`.** The car itself sometimes lowers
+  it a little after a charge (seen 6.26 → 6.24 kWh, the same in TeslaMate's data), and a
+  new charging session starts again at 0. With `total_increasing` Home Assistant logged
+  "state is not strictly increasing" and recorded each drop as a meter reset; now it
+  records the value as the car reports it. It is still not updated while powersharing.
+
 ## 2026.10.21.3 — M5Stack NanoC6 fits its flash (for real)
 
 Firmware change for the **M5Stack NanoC6** only. Rebuild and flash; OTA works as usual.

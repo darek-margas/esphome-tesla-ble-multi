@@ -426,8 +426,8 @@ void VehicleStateManager::update_charge_state(const CarServer_ChargeState& charg
         }
     }
 
-    // Update energy added (kWh). Not while powersharing: it is a total_increasing
-    // charging counter, and a value going down would be read as a meter reset.
+    // Update energy added (kWh). Not while powersharing: it is the charging
+    // session's counter, and the car lowers it while sharing power.
     if (charge_state.which_optional_charge_energy_added && !powersharing) {
         const float energy = charge_state.optional_charge_energy_added.charge_energy_added;
         if (energy >= 0.0f && std::isfinite(energy)) {
