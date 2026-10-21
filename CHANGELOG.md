@@ -5,6 +5,20 @@ the version in `VERSION`, and refreshes the notes of any other release listed he
 Earlier releases (up to 2026.10.8.2) have their notes on the
 [releases page](https://github.com/darek-margas/esphome-tesla-ble-multi/releases).
 
+## 2026.10.21.2 — M5Stack NanoC6 fits its flash again with ESPHome 2026.10
+
+Firmware change for the **M5Stack NanoC6** only. Rebuild and flash; OTA works as usual.
+Other boards are unchanged.
+
+### Fixed
+- **The NanoC6 build failed with ESPHome 2026.10:** `All app partitions are too small`,
+  3.5 KB over. ESPHome 2026.10 compiles for speed (`-O3`), and a 4 MB chip leaves 1.75 MB
+  per OTA slot. The NanoC6 board config now optimizes for size, which fits with room to
+  spare. A bigger partition can't be installed over the air, so this keeps OTA updates
+  working. If your own YAML for a 4 MB board hits the same error, add under
+  `esp32: framework: sdkconfig_options:`:
+  `CONFIG_COMPILER_OPTIMIZATION_SIZE: y` and `CONFIG_COMPILER_OPTIMIZATION_PERF: n`.
+
 ## 2026.10.21.1 — Builds with ESPHome 2026.10; Car ID sensor
 
 Firmware change: rebuild and flash. Same library, `v2026.10.14`. No re-pairing.

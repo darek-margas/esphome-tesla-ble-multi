@@ -10,6 +10,12 @@ esp32:
       CONFIG_ENABLE_WIFI_STATION: y
       CONFIG_USE_MINIMAL_MDNS: y
       CONFIG_ESPTOOLPY_FLASHSIZE_4MB: y
+      # 4 MB flash leaves 1.75 MB per OTA slot. ESPHome 2026.10 builds for speed
+      # (-O3) and the firmware outgrew the slot by 3.5 KB; optimizing for size
+      # fits with room to spare. The partition table can't grow without a USB
+      # flash, so this is the fix that keeps OTA updates working.
+      CONFIG_COMPILER_OPTIMIZATION_SIZE: y
+      CONFIG_COMPILER_OPTIMIZATION_PERF: n
 
 light:
   - platform: status_led
