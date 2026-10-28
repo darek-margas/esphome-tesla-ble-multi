@@ -747,6 +747,10 @@ async def to_code(config):
     # "hcif disc complete" as warnings. esp32_ble keeps HCI as a required logger,
     # so it never sets this level itself.
     add_idf_sdkconfig_option("CONFIG_BT_LOG_HCI_TRACE_LEVEL_ERROR", True)
+    # Same for BTM: each hand-over logs "BT_BTM: Deleting unpaired device" (cars
+    # never bond; our pairing is the stored key). ESPHome 2026.10 forwards these
+    # ESP-IDF lines to the device log. BTM is a required logger too.
+    add_idf_sdkconfig_option("CONFIG_BT_LOG_BTM_TRACE_LEVEL_ERROR", True)
     # Each car's private key is stored as PEM. ESPHome 2026.10 builds Mbed TLS
     # without PEM to save flash: writing then fails to compile, and reading
     # would fail at boot, making the library create a new key - every car would

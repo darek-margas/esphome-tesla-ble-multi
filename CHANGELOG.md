@@ -5,6 +5,18 @@ the version in `VERSION`, and refreshes the notes of any other release listed he
 Earlier releases (up to 2026.10.8.2) have their notes on the
 [releases page](https://github.com/darek-margas/esphome-tesla-ble-multi/releases).
 
+## 2026.10.28.1 — No "Deleting unpaired device" at every hand-over
+
+Firmware change: rebuild and flash. Same library, `v2026.10.14`.
+
+### Changed
+- **Quieter log:** every hand-over between cars logged
+  `BT_BTM: Deleting unpaired device <MAC>` as a warning. It's harmless: the Bluetooth stack
+  forgets the link record of a device that never bonded, and Teslas never bond (the car
+  pairing is the key stored on the ESP32). ESPHome 2026.10 started forwarding these ESP-IDF
+  lines to the device log. The component now sets that Bluetooth layer to errors only, as it
+  already did for the HCI layer. Real Bluetooth errors still show.
+
 ## 2026.10.22.1 — Energy Added may go down
 
 Firmware change: rebuild and flash. Same library, `v2026.10.14`.
