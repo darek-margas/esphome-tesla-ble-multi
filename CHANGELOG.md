@@ -5,6 +5,14 @@ the version in `VERSION`, and refreshes the notes of any other release listed he
 Earlier releases (up to 2026.10.8.2) have their notes on the
 [releases page](https://github.com/darek-margas/esphome-tesla-ble-multi/releases).
 
+## 2026.11.20.2 — CI builds with ESPHome 2026.11.0
+
+No firmware change: nothing to flash.
+
+### Changed
+- **CI and the `make` / Docker builds use ESPHome 2026.11.0** (was 2026.10.0), pinned in
+  `requirements.txt`. 2026.10 still builds the component; your own YAML can use either.
+
 ## 2026.11.20.1 — Builds cleanly on ESPHome 2026.11
 
 Firmware change: rebuild and flash only if you want the warnings gone. Behaviour is the
