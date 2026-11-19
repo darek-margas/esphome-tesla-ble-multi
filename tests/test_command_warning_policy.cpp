@@ -9,7 +9,7 @@ struct FakeWarningStatus {
   bool timeout_armed = false;
   bool persistent_warning = false;
 
-  void status_momentary_warning(const char *) {
+  void set_command_warning() {
     warning_active = true;
     persistent_warning = false;
     timeout_armed = true;

@@ -5,6 +5,19 @@ the version in `VERSION`, and refreshes the notes of any other release listed he
 Earlier releases (up to 2026.10.8.2) have their notes on the
 [releases page](https://github.com/darek-margas/esphome-tesla-ble-multi/releases).
 
+## 2026.11.20.1 — Builds cleanly on ESPHome 2026.11
+
+Firmware change: rebuild and flash only if you want the warnings gone. Behaviour is the
+same. Same library, `v2026.10.14`.
+
+### Changed
+- **No deprecation warnings on ESPHome 2026.11.** The component used two calls that 2026.11
+  deprecates and 2027.5 removes: `get_name()` for the lock and cover log lines, and the named
+  `status_momentary_warning()` for the 5 s warning after a failed command. The log lines now
+  use `get_log_name()` on 2026.11 and later, and `get_name()` before that. The command warning
+  sets and clears itself with the same named timeout as before, so a later successful command
+  still clears it early. Built without warnings on 2026.11.0 and 2026.10.1.
+
 ## 2026.10.28.1 — No "Deleting unpaired device" at every hand-over
 
 Firmware change: rebuild and flash. Same library, `v2026.10.14`.

@@ -13,7 +13,7 @@ template <typename WarningSink, typename CancelTimeout>
 void apply_command_warning(WarningSink &sink, CommandOutcome outcome,
                            CancelTimeout cancel_timeout) {
   if (outcome == CommandOutcome::FAILED) {
-    sink.status_momentary_warning(COMMAND_WARNING_TIMEOUT);
+    sink.set_command_warning();
     return;
   }
 

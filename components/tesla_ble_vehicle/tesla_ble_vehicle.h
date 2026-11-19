@@ -78,6 +78,11 @@ public:
     void update() override;
     void dump_config() override;
 
+    // Warning flag that clears itself after 5 s, keyed by COMMAND_WARNING_TIMEOUT
+    // so a later success can cancel it. Same as the named
+    // status_momentary_warning(), which ESPHome 2026.11 deprecates.
+    void set_command_warning();
+
     // BLE event handling
     void gattc_event_handler(esp_gattc_cb_event_t event, esp_gatt_if_t gattc_if,
                            esp_ble_gattc_cb_param_t *param);

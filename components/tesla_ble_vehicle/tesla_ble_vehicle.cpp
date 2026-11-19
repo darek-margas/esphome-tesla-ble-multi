@@ -8,6 +8,7 @@
 #include <defs.h>
 #include <esp_log.h>
 #include <esphome/core/helpers.h>
+#include <esphome/core/version.h>
 #include <tb_utils.h>
 #include <vin_utils.h>
 
@@ -21,6 +22,21 @@ static_assert(std::is_member_function_pointer<decltype(&TeslaBLE::Vehicle::set_m
 
 namespace esphome {
 namespace tesla_ble_vehicle {
+
+// Entity name for log lines. ESPHome 2026.11 deprecates get_name() in favour of
+// get_log_name(), which 2026.10 doesn't have.
+template <typename Entity> static const char *entity_log_name(const Entity *e) {
+#if ESPHOME_VERSION_CODE >= VERSION_CODE(2026, 11, 0)
+  return LOG_STR_ARG(e->get_log_name());
+#else
+  return e->get_name().c_str();
+#endif
+}
+
+void TeslaBLEVehicle::set_command_warning() {
+  this->status_set_warning();
+  this->set_timeout(COMMAND_WARNING_TIMEOUT, 5000, [this]() { this->status_clear_warning(); });
+}
 
 const char *TeslaBLEVehicle::log_context_ = nullptr;
 std::vector<TeslaBLEVehicle *> TeslaBLEVehicle::link_vehicles_;
@@ -247,7 +263,7 @@ void TeslaBLEVehicle::configure_pending_sensors() {
     lck->add_on_state_callback([this, lck, last](lock::LockState state) {
       if (state == *last) return;
       *last = state;
-      ESP_LOGI(TAG, "[%s] %s: %s", log_name(), lck->get_name().c_str(), LOG_STR_ARG(lock::lock_state_to_string(state)));
+      ESP_LOGI(TAG, "[%s] %s: %s", log_name(), entity_log_name(lck), LOG_STR_ARG(lock::lock_state_to_string(state)));
     });
   }
   for (cover::Cover *cvr : {pending_trunk_cover_, pending_frunk_cover_, pending_windows_cover_,
@@ -257,7 +273,7 @@ void TeslaBLEVehicle::configure_pending_sensors() {
     cvr->add_on_state_callback([this, cvr, last]() {
       if (cvr->position == *last) return;
       *last = cvr->position;
-      ESP_LOGI(TAG, "[%s] %s: %s", log_name(), cvr->get_name().c_str(),
+      ESP_LOGI(TAG, "[%s] %s: %s", log_name(), entity_log_name(cvr),
                cvr->position == cover::COVER_OPEN ? "OPEN" : "CLOSED");
     });
   }
